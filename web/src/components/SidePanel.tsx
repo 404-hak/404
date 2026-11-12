@@ -114,6 +114,12 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
           Звук мотора совпал с катером <span className="font-mono text-primary">{a.match.vessel_id}</span> на {pct(a.match.similarity)}
         </p>
       )}
+      {a.audio_sha256 && (
+        <div className="enter mt-3" style={{ animationDelay: '240ms' }}>
+          <div className="mb-1 text-[11px] text-muted">Звук-улика с гидрофона · распознала нейросеть</div>
+          <audio controls preload="none" src={`/api/alerts/${a.id}/audio`} className="h-8 w-full" aria-label="Звук-улика" />
+        </div>
+      )}
 
       <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
         {!intercept && (

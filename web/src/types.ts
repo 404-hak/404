@@ -14,11 +14,13 @@ export interface Alert {
   lat: number; lon: number; confidence: number; status: AlertStatus; message: string;
   distance_km: number | null; match: Match | null; prev_hash: string; hash: string;
   intercept_at: string | null; resolved_at: string | null; synthetic: boolean;
+  /** SHA-256 звукового клипа-улики (есть, если тревогу подняла нейросеть по звуку буя) */
+  audio_sha256?: string | null; probs?: Record<string, number> | null; source?: 'audio' | 'manual' | 'system';
 }
 export interface Forecast {
   ts: string; moon_phase: string; moon_illumination: number; weekday: string; water_temp: number;
   wind_ms: number; risk: number; level: 'low' | 'elevated' | 'high'; hot_sectors: number[];
-  message: string; demo: boolean;
+  message: string; demo: boolean; weather?: 'open-meteo' | 'seasonal';
 }
 export interface Sector { n: number; south: number; west: number; north: number; east: number }
 export interface State {
@@ -33,6 +35,6 @@ export interface Stats {
 }
 export interface NightForecast {
   date: string; weekday: string; moon_phase: string; moon_illumination: number; water_temp: number;
-  risk: number; level: 'low' | 'elevated' | 'high';
+  risk: number; level: 'low' | 'elevated' | 'high'; wind_ms?: number; weather?: 'open-meteo' | 'seasonal';
 }
-export interface ChainCheck { ok: boolean; checked: number; broken_at: string | null }
+export interface ChainCheck { ok: boolean; checked: number; broken_at: string | null; audio_checked?: number; reason?: string | null }

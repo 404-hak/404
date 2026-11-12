@@ -2,6 +2,8 @@
 
 Демо по плану: спокойная карта → «безлунная ночь, пятница, вода +12°, риск 91 %» →
 буй Камышовый-4 слышит мотор того же катера, что 5 мая → перехват → закрытие.
+Мотор в демо — настоящий путь звука: клип синтезируется (мотор катера boat-A у буя, ночная
+природа вокруг), нейросеть его распознаёт и снимает отпечаток, архив узнаёт катер.
 Переходы «Перехват» и «Закрыть» делает инспектор кнопками в интерфейсе.
 """
 from __future__ import annotations
@@ -11,12 +13,17 @@ import os
 import random
 from typing import Awaitable, Callable
 
+import numpy as np
+
 from . import forecast as fc
+from .audio import dsp, synth
 from .models import AlertIn
-from .world import World
+from .world import ARCHIVE_VESSELS, World
 
 TICK_S = float(os.getenv("SIM_TICK_S", "5"))
 AMBIENT = os.getenv("SIM_AMBIENT", "0") == "1"
+HEARTBEAT = os.getenv("SIM_HEARTBEAT", "1") != "0"
+DEMO_CLIP_SEED = 4404
 DEMO_NIGHT = fc.Conditions(illumination=0.02, phase="новолуние", weekday=4, water_temp=12.0, wind_ms=3.0)
 
 
@@ -30,7 +37,8 @@ class Sim:
     async def run(self) -> None:
         while True:
             await asyncio.sleep(TICK_S)
-            self.world.tick(self.rnd)
+            self.world.tick(self.rnd, heartbeat=HEARTBEAT)
+            self.world.watch()
             if AMBIENT and self.rnd.random() < 0.03:
                 b = self.rnd.choice(list(self.world.buoys))
                 kind = self.rnd.choice(["silence", "motor", "shot"])
@@ -53,6 +61,19 @@ class Sim:
         w.override = DEMO_NIGHT                   # ⚡ настороженность: риск 91 %, сектор 7
         await self.publish()
         await asyncio.sleep(warn_s)
-        fp = w.fingerprint_like("boat-A", 0.89)   # 🚨 тревога: тот же катер, что 5 мая
-        w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.94, fingerprint=fp))
+        if w.model:                               # 🚨 тревога: буй слышит мотор того же катера, что 5 мая
+            await asyncio.to_thread(w.ingest, "b04", demo_clip(0))   # мотор слышно — ждём второго клипа
+            await self.publish()
+            await asyncio.sleep(2)
+            await asyncio.to_thread(w.ingest, "b04", demo_clip(1))
+        else:
+            fp = w.fingerprint_like("boat-A", 0.89)
+            w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.94, fingerprint=fp))
         await self.publish()
+
+
+def demo_clip(k: int = 0) -> bytes:
+    """Клип демо: мотор катера boat-A у буя Камышовый-4 на фоне ночной природы (воспроизводимо)."""
+    r = np.random.default_rng(DEMO_CLIP_SEED + k)
+    x, _ = synth.scene(r, "motor", v=synth.vessel(ARCHIVE_VESSELS["boat-A"]), activity=0.7, snr_db=12)
+    return dsp.write_wav(x)

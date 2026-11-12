@@ -45,10 +45,11 @@ def test_forecast_recommends_hot_sector():
 
 def test_motor_alert_recognises_vessel():
     w = world_at()
-    fp = w.fingerprint_like("boat-A", 0.89)
+    sim = round(min(0.99, w.match_threshold + 0.03), 2)
+    fp = w.fingerprint_like("boat-A", sim)
     a = w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.94, fingerprint=fp))
-    assert a.match and a.match.vessel_id == "boat-A" and a.match.similarity == 0.89
-    assert a.message.startswith("Буй Камышовый-4 услышал мотор. Похоже на тот же катер, что был здесь 5 мая (89\u00a0%).")
+    assert a.match and a.match.vessel_id == "boat-A" and a.match.similarity == sim
+    assert a.message.startswith(f"Буй Камышовый-4 услышал мотор. Похоже на тот же катер, что был здесь 5 мая ({round(sim * 100)}\u00a0%).")
     assert a.message.endswith("\u00a0км от вас.")
     assert w.mode() == "alarm"
     w.patch_alert(a.id, "intercept")
@@ -57,7 +58,8 @@ def test_motor_alert_recognises_vessel():
 
 def test_unknown_vessel_is_registered():
     w = world_at()
-    a = w.add_alert(AlertIn(buoy_id="b06", kind="motor", confidence=0.8, fingerprint=[1.0] + [0.0] * 15))
+    dim = len(w.vessels["boat-A"]["vector"])
+    a = w.add_alert(AlertIn(buoy_id="b06", kind="motor", confidence=0.8, fingerprint=[-1.0] * dim))
     assert a.match is None
     assert "Катер раньше не встречался" in a.message
 

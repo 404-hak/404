@@ -49,6 +49,9 @@ class Alert(BaseModel):
     intercept_at: datetime | None = Field(default=None, description="Когда начат перехват (в хэш не входит: это обработка, не улика)")
     resolved_at: datetime | None = Field(default=None, description="Когда событие закрыто")
     synthetic: bool = Field(default=False, description="Сгенерированная демо-история, не реальное событие")
+    audio_sha256: str | None = Field(default=None, description="SHA-256 звукового клипа-улики (входит в хэш алерта)")
+    probs: dict[str, float] | None = Field(default=None, description="Ответ нейросети по классам для этого клипа")
+    source: Literal["audio", "manual", "system"] = Field(default="manual", description="audio — нейросеть по звуку буя; system — связь, тишина")
 
 
 class AlertIn(BaseModel):
@@ -75,6 +78,7 @@ class Forecast(BaseModel):
     hot_sectors: list[int]
     message: str
     demo: bool = False
+    weather: Literal["open-meteo", "seasonal"] = Field(default="seasonal", description="Откуда ветер и вода: измерения/прогноз или сезонная модель")
 
 
 class Sector(BaseModel):
@@ -101,6 +105,40 @@ class ChainCheck(BaseModel):
     ok: bool
     checked: int
     broken_at: str | None = None
+    audio_checked: int = Field(default=0, description="Сколько звуковых улик сверено с их SHA-256")
+    reason: str | None = None
+
+
+class ClipResult(BaseModel):
+    """Что нейросеть услышала в клипе буя и что из этого вышло."""
+    sha256: str
+    buoy_id: str
+    ts: datetime
+    event: Literal["background", "motor", "shot"]
+    confidence: float
+    probs: dict[str, float]
+    activity: float = Field(description="Живость природы 0–1 (лягушки, птицы, насекомые)")
+    level_db: float
+    f0_hz: float | None = Field(default=None, description="Частота вращения мотора по гармоникам")
+    alert: Alert | None = None
+    note: str = Field(description="Почему создан или не создан алерт")
+
+
+class Heartbeat(BaseModel):
+    battery: int | None = Field(default=None, ge=0, le=100)
+    temp_c: float | None = None
+
+
+class ModelInfo(BaseModel):
+    available: bool
+    meta: dict | None = None
+
+
+class Weather(BaseModel):
+    source: Literal["open-meteo", "seasonal"]
+    fetched_at: datetime | None
+    wind_ms: float
+    water_temp: float
 
 
 class NightStat(BaseModel):
@@ -130,3 +168,5 @@ class NightForecast(BaseModel):
     water_temp: float
     risk: float
     level: Literal["low", "elevated", "high"]
+    wind_ms: float = 4.0
+    weather: Literal["open-meteo", "seasonal"] = "seasonal"

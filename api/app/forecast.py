@@ -75,6 +75,8 @@ def message(c: Conditions, r: float, hot: list[int]) -> str:
     return f"{base} Риск {round(r * 100)}\u00a0%.{tail}"
 
 
-def conditions_for(dt_local: datetime, wind_ms: float = 4.0) -> Conditions:
+def conditions_for(dt_local: datetime, wind_ms: float = 4.0, water: float | None = None) -> Conditions:
+    """Условия ночи; вода — измеренная (Open-Meteo), иначе сезонная модель."""
     _, illum, phase = moon(dt_local.astimezone(timezone.utc))
-    return Conditions(illum, phase, dt_local.weekday(), water_temp(dt_local.date()), wind_ms)
+    w = round(water, 1) if water is not None else water_temp(dt_local.date())
+    return Conditions(illum, phase, dt_local.weekday(), w, round(wind_ms, 1))

@@ -30,7 +30,9 @@ export default function ForecastPage() {
 
   return (
     <Page cap="Аналитика" title="Прогноз ночей"
-      lead="Риск выхода браконьеров на 14 ночей вперёд: настоящий лунный календарь, сезонная температура воды и день недели. Ветер пока средний сезонный — до подключения погодных данных.">
+      lead={nights?.[0]?.weather === 'open-meteo'
+        ? 'Риск выхода браконьеров на 14 ночей вперёд: настоящий лунный календарь, ветер и температура воды по данным Open-Meteo, день недели.'
+        : 'Риск выхода браконьеров на 14 ночей вперёд: настоящий лунный календарь, сезонная температура воды и день недели. Погода сейчас по сезонной модели — Open-Meteo недоступен.'}>
       {!nights ? <Loading /> : !nights.length ? <p className="text-muted">Прогноз недоступен.</p> : (
         <>
           {worst && (
@@ -61,7 +63,7 @@ export default function ForecastPage() {
                   <div className="mt-0.5 text-[13px]">{d.d} {d.m.slice(0, 3)}</div>
                   <div className={`mt-2 font-light tabular-nums text-[28px] leading-8 ${lv.text}`}>{Math.round(n.risk * 100)}<span className="text-[14px]"> %</span></div>
                   <div className="mt-1 h-1 rounded-full bg-white/10"><div className={`h-full rounded-full ${n.level === 'low' ? 'bg-accent' : 'bg-warn'}`} style={{ width: `${n.risk * 100}%` }} /></div>
-                  <div className="mt-2 text-[11px] text-muted">луна {pct(n.moon_illumination)} · {n.water_temp > 0 ? '+' : ''}{Math.round(n.water_temp)}°</div>
+                  <div className="mt-2 text-[11px] text-muted">луна {pct(n.moon_illumination)} · {n.water_temp > 0 ? '+' : ''}{Math.round(n.water_temp)}°{n.weather === 'open-meteo' && n.wind_ms != null ? ` · ${Math.round(n.wind_ms)} м/с` : ''}</div>
                   {isTop && <span className="absolute -top-2 right-2 rounded-full bg-warn px-1.5 py-px text-[9px] font-bold uppercase tracking-[.06em] text-bg">патруль</span>}
                 </article>
               );

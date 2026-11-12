@@ -43,7 +43,7 @@ export default function EvidencePage({ state }: { state: State }) {
   const shown = chain?.slice(0, 24) ?? [];
   return (
     <Page cap="Сеть" title="Доказательства"
-      lead="Каждое событие записывается с отпечатком SHA-256, и в него входит отпечаток предыдущей записи. Поменять задним числом время, буй или уверенность нельзя: сломается вся цепочка дальше. Для суда это доказательство, что запись не трогали."
+      lead="Каждое событие записывается с отпечатком SHA-256, и в него входит отпечаток предыдущей записи и звука, который услышал буй. Поменять задним числом время, буй, уверенность или подменить запись звука нельзя: сломается вся цепочка дальше. Для суда это доказательство, что улику не трогали."
       aside={
         <button type="button" onClick={verify} disabled={!chain || scan >= 0}
           className="btn-shine ink-host h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-bg hover:bg-white disabled:opacity-60">
@@ -53,7 +53,9 @@ export default function EvidencePage({ state }: { state: State }) {
       {check && (
         <div className={`enter mb-4 flex items-center gap-3 rounded-[14px] border px-4 py-3 text-[14px] ${check.ok ? 'border-accent/50 bg-accent/10' : 'border-alert/60 bg-alert/10'}`} role="status">
           <span className={`grid h-7 w-7 place-items-center rounded-full text-[14px] font-bold text-bg ${check.ok ? 'bg-accent' : 'bg-alert'}`}>{check.ok ? '✓' : '!'}</span>
-          {check.ok ? <>Цепочка цела: проверено {check.checked} записей, ни одна не изменена.</> : <>Цепочка нарушена на записи {check.broken_at}: она или запись перед ней была изменена.</>}
+          {check.ok
+            ? <>Цепочка цела: проверено {check.checked} записей{check.audio_checked ? <> и {check.audio_checked} звуковых улик</> : null}, ни одна не изменена.</>
+            : <>Цепочка нарушена на записи {check.broken_at}: {check.reason ?? 'она или запись перед ней была изменена'}.</>}
         </div>
       )}
       {!chain ? <Loading /> : (
@@ -74,6 +76,12 @@ export default function EvidencePage({ state }: { state: State }) {
                     <div className="mt-1.5 grid gap-x-4 gap-y-0.5 font-mono text-[11px] sm:grid-cols-2">
                       <span className="truncate" title={a.hash}><span className="text-muted">хэш</span> {short(a.hash)}</span>
                       <span className="truncate" title={a.prev_hash}><span className="text-muted">предыдущий</span> {short(a.prev_hash)}</span>
+                      {a.audio_sha256 && (
+                        <span className="flex items-center gap-2 truncate sm:col-span-2" title={`SHA-256 звука: ${a.audio_sha256}`}>
+                          <span className="text-muted">звук</span> {short(a.audio_sha256)}
+                          <audio controls preload="none" src={`/api/alerts/${a.id}/audio`} className="h-7 max-w-[260px] flex-1" aria-label="Звук-улика" />
+                        </span>
+                      )}
                     </div>
                   </div>
                 </li>
