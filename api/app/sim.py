@@ -75,5 +75,5 @@ class Sim:
 def demo_clip(k: int = 0) -> bytes:
     """Клип демо: мотор катера boat-A у буя Камышовый-4 на фоне ночной природы (воспроизводимо)."""
     r = np.random.default_rng(DEMO_CLIP_SEED + k)
-    x, _ = synth.scene(r, "motor", v=synth.vessel(ARCHIVE_VESSELS["boat-A"]), activity=0.7, snr_db=12)
+    x, _ = synth.scene(r, "motor", v=synth.vessel(ARCHIVE_VESSELS["boat-A"]), activity=0.7, snr_db=16)
     return dsp.write_wav(x)

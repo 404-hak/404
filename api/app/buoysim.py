@@ -4,10 +4,11 @@
     .venv/bin/python -m app.buoysim --every 3 --events 0.08     # чаще и с событиями чаще
     .venv/bin/python -m app.buoysim --token SECRET              # если на сервере задан BUOY_TOKEN
 
-Каждый буй слышит ночную природу своей живости. Иногда мимо проходит катер — громко у одного
-буя и тише у соседей (тот же мотор, тот же отпечаток); иногда — выстрел; иногда у одного буя
-надолго стихают лягушки и птицы (человек в камышах). Катера — из архива (boat-A, B, C: сервер
-должен их узнать) и новые. Сервер решает сам: симулятор только «издаёт звук».
+Гидрофоны под водой: каждый буй слышит подводную природу своей живости. Иногда мимо проходит катер —
+громко у одного буя и тише у соседей (тот же мотор, тот же отпечаток); иногда — выстрел; иногда у
+одного буя надолго стихает природа (человек в камышах); иногда рядом разговаривают люди — сервер
+узнаёт голоса и тревогу не поднимает. Катера — из архива (boat-A, B, C: сервер должен их узнать)
+и новые. Сервер решает сам: симулятор только «издаёт звук».
 """
 from __future__ import annotations
 
@@ -62,6 +63,7 @@ def main() -> None:
         shot_at = buoys[int(r.integers(len(buoys)))] if r.random() < a.events / 3 else None
         if not quiet and r.random() < a.events / 2:
             quiet[buoys[int(r.integers(len(buoys)))].id] = int(r.integers(4, 8))
+        talk = buoys[int(r.integers(len(buoys)))] if r.random() < a.events / 2 else None    # люди говорят у буя
         # звук доходит сначала до ближайшего буя: он и поднимает тревогу, соседи её подтверждают
         src = boat[1] if boat else shot_at
         order = sorted(buoys, key=lambda b: km(src, b)) if src else buoys
@@ -74,7 +76,9 @@ def main() -> None:
                     event, v, snr = "motor", boat[0], 16 - 3.2 * d
             if shot_at and km(shot_at, b) < 6:
                 event, snr = "shot", 18 - 3 * km(shot_at, b)
-            x, _ = synth.scene(r, event, v=v, activity=min(1, act), snr_db=snr)
+            if talk is b and event == "background":
+                event, snr = "voice", float(r.uniform(6, 16))
+            x, _ = synth.scene(r, event, v=v, activity=min(1, act), snr_db=snr, medium="water")
             try:
                 res = post(a.api, f"/api/buoys/{b.id}/audio", dsp.write_wav(x), "audio/wav", a.token)
                 if res.get("alert"):

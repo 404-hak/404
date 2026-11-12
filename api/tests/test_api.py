@@ -45,7 +45,7 @@ def test_forecast_recommends_hot_sector():
 
 def test_motor_alert_recognises_vessel():
     w = world_at()
-    sim = round(min(0.99, w.match_threshold + 0.03), 2)
+    sim = round(min(0.99, w.vessel_cut(w.vessels["boat-A"]) + 0.03), 2)       # чуть выше порога этого катера
     fp = w.fingerprint_like("boat-A", sim)
     a = w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.94, fingerprint=fp))
     assert a.match and a.match.vessel_id == "boat-A" and a.match.similarity == sim

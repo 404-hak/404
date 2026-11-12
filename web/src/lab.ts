@@ -1,7 +1,8 @@
 // Лаборатория нейросети: типы ответа /api/lab/*, запросы, перекодировка звука в WAV 16 кГц
 import type { BuoyStatus } from './types';
 
-export type LabEvent = 'background' | 'motor' | 'shot';
+export type LabEvent = 'background' | 'motor' | 'shot' | 'voice';
+export type Medium = 'water' | 'air';
 export type LabAlert = 'motor' | 'shot' | 'silence' | null;
 
 export interface LabClip {
@@ -12,12 +13,12 @@ export interface LabFeature { key: string; label: string; unit: string; hint: st
 export interface LabMotor {
   window_start: number; probability: number; f0_hz: number; rpm_if_crank: number; harmonicity: number;
   psd: { hz_step: number; db: number[] }; harmonics: { k: number; hz: number; db: number }[];
-  fingerprint: number[]; matches: { vessel_id: string; similarity: number; last_seen: string; seen: number }[];
+  fingerprint: number[]; matches: { vessel_id: string; similarity: number; threshold?: number; last_seen: string; seen: number }[];
   match_threshold: number; verdict: string;
 }
 export interface LabResult {
   id: string; source: 'scene' | 'upload' | 'buoy'; title: string; truth: string | null;
-  marks: { start: number; end: number; label: string }[]; vessel?: string | null; sha256?: string; ts?: string | null;
+  marks: { start: number; end: number; label: string }[]; vessel?: string | null; sha256?: string; ts?: string | null; medium?: Medium;
   duration_s: number; sr: number; level_db: number; peak: number; classes: LabEvent[];
   thresholds: { motor: number; shot: number };
   wave: { min: number[]; max: number[] };
@@ -25,24 +26,26 @@ export interface LabResult {
   timeline: ({ t: number; start: number; activity: number } & Record<LabEvent, number>)[];
   clips: LabClip[]; main_clip: number; features: LabFeature[];
   motor: LabMotor | null;
-  impulse: { t: number; crest_db: number; rise_ms: number; centroid_khz: number; shot_probability: number; shot_window_start: number;
+  impulse: { t: number; crest_db: number; rise_ms: number; centroid_khz: number; width_ms: number; low_share: number; shot_probability: number; shot_window_start: number;
     zoom: { t0: number; t1: number; y: number[] } };
   nature: { activity: number; bio_curve: number[]; frame_s: number; band_hz: [number, number] };
   verdict: { alerts: { kind: Exclude<LabAlert, null>; clip: number; confidence: number }[]; event: LabEvent; confidence: number };
 }
-export type Preset = 'motor-archive' | 'motor-new' | 'shot' | 'night' | 'silence' | 'airplane' | 'oar' | 'fish' | 'thunder' | 'rain';
-export interface SceneParams { preset: Preset; vessel: 'boat-A' | 'boat-B' | 'boat-C'; duration_s: number; snr_db: number; activity: number; seed: number }
+export type Preset = 'motor-archive' | 'motor-new' | 'shot' | 'night' | 'silence' | 'voices' | 'imitation' | 'thunder' | 'wave' | 'airplane' | 'oar' | 'fish' | 'rain';
+export interface SceneParams { preset: Preset; vessel: 'boat-A' | 'boat-B' | 'boat-C'; duration_s: number; snr_db: number; activity: number; seed: number; medium: Medium }
 
 export interface ModelMeta {
   version: string; classes: LabEvent[]; embedding_dim: number;
   trained_on: { synthetic_event_clips: number; synthetic_vessel_clips: number; real_event_clips: number; real_vessel_clips: number; train_vessels: number };
   thresholds: { motor: number; shot: number; match: number };
   metrics: {
-    events: { accuracy: number; recall_motor: number; recall_shot: number; false_alarm_background: number; motor_recall_by_snr: Record<string, number>; confusion: number[][] };
+    events: { accuracy: number; recall_motor: number; recall_shot: number; false_alarm_background: number; motor_recall_by_snr: Record<string, number>; confusion: number[][];
+      accuracy_by_medium?: Record<Medium, number> };
     bio: { mae: number; r2: number };
-    vessels_held_out: { auc: number; eer: number; tpr_at_far1: number; identification_rank1: number; vessels: number; same_mean: number; diff_mean: number };
+    vessels_held_out: { auc: number; eer: number; tpr_at_far1: number; identification_rank1: number; vessels: number; same_mean: number; diff_mean: number; tpr_template_far1?: number };
     calibration?: { background_clips: number; false_motor_per_clip: number; false_motor_two_in_row: number; false_shot_per_clip: number;
-      motor_recall_per_clip: number; motor_recall_by_snr: Record<string, number>; shot_recall: number };
+      motor_recall_per_clip: number; motor_recall_by_snr: Record<string, number>; shot_recall: number;
+      false_shot_on_mouth_imitation?: number; mouth_imitations?: number; voice_recognised?: number; shot_recall_underwater?: number };
   };
 }
 export interface ClipRec { sha256: string; buoy_id: string; ts: string; event: LabEvent; confidence: number; activity: number; note: string; alert_id: string | null }
@@ -100,7 +103,9 @@ function encodeWav(x: Float32Array): Blob {
   return new Blob([b], { type: 'audio/wav' });
 }
 
-export const EVENT_RU: Record<LabEvent, string> = { background: 'Фон', motor: 'Мотор', shot: 'Выстрел' };
+export const EVENT_RU: Record<LabEvent, string> = { background: 'Фон', motor: 'Мотор', shot: 'Выстрел', voice: 'Голоса людей' };
+/** Голоса людей — свой цвет: не угроза, но и не фон */
+export const VOICE = '#7FB2E5';
 export const ALERT_RU: Record<Exclude<LabAlert, null>, string> = { motor: 'мотор', shot: 'выстрел', silence: 'тишина' };
 export const fmtS = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 export const pct0 = (v: number) => `${Math.round(v * 100)} %`;

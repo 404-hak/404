@@ -11,7 +11,7 @@ const Big = ({ label, value, note, tone = '' }: { label: string; value: string; 
     <div className="text-[11px] leading-[14px] text-muted">{note}</div>
   </div>
 );
-const RU = ['фон', 'мотор', 'выстрел'];
+const RU = ['фон', 'мотор', 'выстрел', 'голоса'];
 
 export default function ModelCard({ meta }: { meta: ModelMeta }) {
   const e = meta.metrics.events, v = meta.metrics.vessels_held_out, c = meta.metrics.calibration, t = meta.trained_on;
@@ -24,15 +24,23 @@ export default function ModelCard({ meta }: { meta: ModelMeta }) {
         <Big label="мотор: ложных тревог" value={c ? `${num(c.false_motor_two_in_row * 100, 3)} %` : '—'}
           note={c ? `${num(c.false_motor_per_clip * 100, 1)} % на клип, но нужно два подряд` : ''} tone="text-warn" />
         <Big label="выстрел: ловим" value={c ? pct0(c.shot_recall) : pct0(e.recall_shot)} note={c ? `при ${num(c.false_shot_per_clip * 100, 2)} % ложных на клип фона` : ''} tone="text-alert" />
-        <Big label="узнаём катер" value={pct0(v.identification_rank1)} note={`среди ${v.vessels} новых катеров по 3 проходам; AUC ${num(v.auc, 3)}`} />
+        {v.tpr_template_far1 != null
+          ? <Big label="узнаём катер из архива" value={pct0(v.tpr_template_far1)} note={`по одному клипу под водой; чужой за архивный — не чаще 1 % сверок. Первым в списке — ${pct0(v.identification_rank1)}`} />
+          : <Big label="узнаём катер" value={pct0(v.identification_rank1)} note={`среди ${v.vessels} новых катеров по 3 проходам; AUC ${num(v.auc, 3)}`} />}
+        {c?.false_shot_on_mouth_imitation != null && (
+          <Big label="«выстрел» ртом за выстрел" value={`${num(c.false_shot_on_mouth_imitation * 100, 1)} %`} note={`из ${c.mouth_imitations} имитаций: «пф», «бах», «тыщ», щелчок`} tone="text-[#7FB2E5]" />
+        )}
+        {c?.voice_recognised != null && <Big label="голоса людей узнаны" value={pct0(c.voice_recognised)} note="разговор, крик, смех, звуки ртом — тревогу не поднимают" tone="text-[#7FB2E5]" />}
+        {c?.shot_recall_underwater != null && <Big label="выстрел под водой: ловим" value={pct0(c.shot_recall_underwater)} note="через поверхность, с отражениями мелководья" tone="text-alert" />}
+        {e.accuracy_by_medium && <Big label="по средам" value={`${pct0(e.accuracy_by_medium.water)} · ${pct0(e.accuracy_by_medium.air)}`} note="верных ответов: под водой · в воздухе" />}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1fr_1.1fr]">
         <div>
           <div className="mb-2 text-[12px] text-muted">Матрица ошибок: строки — что было, столбцы — что ответила сеть</div>
-          <div className="grid grid-cols-[64px_repeat(3,1fr)] gap-[3px] text-center text-[11px]">
+          <div className="grid gap-[3px] text-center text-[11px]" style={{ gridTemplateColumns: `64px repeat(${cm.length}, 1fr)` }}>
             <span />
-            {RU.map((x) => <span key={x} className="text-muted">{x}</span>)}
+            {RU.slice(0, cm.length).map((x) => <span key={x} className="text-muted">{x}</span>)}
             {cm.map((row, i) => (
               <Fragment key={i}>
                 <span className="self-center text-left text-muted">{RU[i]}</span>
@@ -62,7 +70,8 @@ export default function ModelCard({ meta }: { meta: ModelMeta }) {
           <div className="mb-1 font-medium text-primary">На чём училась</div>
           {t.synthetic_event_clips.toLocaleString('ru-RU')} клипов событий и {t.synthetic_vessel_clips.toLocaleString('ru-RU')} проходов {t.train_vessels} катеров,
           синтезированных по физике источников: моторы со своей «подписью» (цилиндры, винт, резонансы корпуса), выстрелы с эхом,
-          лягушки, птицы, сверчки, ветер, дождь и помехи — самолёт, всплеск рыбы, удар весла, гром.
+          голоса людей и «выстрелы» ртом, природа под водой и в воздухе, помехи — гром, волна о буй, самолёт, всплеск рыбы, удар весла, дождь.
+          Под водой — как у гидрофона буя: звук из воздуха глухой, мелководье даёт отражения от поверхности и дна.
           {t.real_event_clips + t.real_vessel_clips > 0 ? ` Плюс ${t.real_event_clips + t.real_vessel_clips} настоящих записей.` : ' Настоящих записей заповедника пока нет.'}
           <div className="mt-2">Проверка — на том, чего сеть не видела: новые клипы, {v.vessels} новых катеров, отдельные {c ? c.background_clips.toLocaleString('ru-RU') : '—'} клипов фона для порогов.
             На настоящей воде цифры будут другими — сеть дообучается на записях: <span className="font-mono text-primary">tools/ml/train.py --data</span>.</div>

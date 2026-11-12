@@ -114,7 +114,7 @@ class ClipResult(BaseModel):
     sha256: str
     buoy_id: str
     ts: datetime
-    event: Literal["background", "motor", "shot"]
+    event: Literal["background", "motor", "shot", "voice"]
     confidence: float
     probs: dict[str, float]
     activity: float = Field(description="Живость природы 0–1 (лягушки, птицы, насекомые)")

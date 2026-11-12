@@ -42,7 +42,7 @@ def heard_motor(w, clock, buoy, clips):
 
 def test_model_card_is_honest():
     m = MODEL.meta
-    assert m["classes"] == ["background", "motor", "shot"]
+    assert m["classes"] == ["background", "motor", "shot", "voice"]
     ev = m["metrics"]["events"]
     assert ev["accuracy"] > 0.9 and ev["false_alarm_background"] <= 0.03
     assert m["metrics"]["vessels_held_out"]["auc"] > 0.85      # на катерах, которых не было в обучении
@@ -187,11 +187,11 @@ def test_lab_scenes_are_heard_right():
         n = len(main.world.alerts)
         boat = c.post("/api/lab/scene", json={"preset": "motor-archive", "vessel": "boat-A", "duration_s": 12}).json()
         assert [a["kind"] for a in boat["verdict"]["alerts"]] == ["motor"]          # одна тревога — со второго клипа
-        assert boat["motor"]["verdict"] == "узнан: boat-A"
+        assert boat["motor"]["matches"][0]["vessel_id"] == "boat-A"                 # первым в архиве — нужный катер
         assert boat["spec"]["bands"] == 64 and len(boat["wave"]["min"]) == 1200 and boat["timeline"]
         silence = c.post("/api/lab/scene", json={"preset": "silence", "duration_s": 28}).json()
         assert "silence" in [a["kind"] for a in silence["verdict"]["alerts"]]
-        for quiet in ("night", "oar", "airplane"):
+        for quiet in ("night", "oar", "airplane", "thunder", "wave"):
             assert c.post("/api/lab/scene", json={"preset": quiet}).json()["verdict"]["alerts"] == [], quiet
         shot = c.post("/api/lab/scene", json={"preset": "shot", "snr_db": 12}).json()
         assert "shot" in [a["kind"] for a in shot["verdict"]["alerts"]]
@@ -207,3 +207,41 @@ def test_lab_upload_and_buoy_clip():
         sha = c.post("/api/buoys/b03/audio", content=wav("background", 78, activity=0.6)).json()["sha256"]
         clip = c.post(f"/api/lab/clip/{sha}").json()
         assert clip["source"] == "buoy" and clip["sha256"] == sha and "Тростниковый-3" in clip["title"]
+
+
+
+# ---------- голоса и подводная среда ----------
+def test_voices_are_recognised_but_never_alarm():
+    clock = Clock()
+    w = World(clock=clock)
+    n = len(w.alerts)
+    events = []
+    for i, imitation in enumerate([False, False, True, True, True]):
+        r = w.ingest("b05", wav("voice", 300 + i, imitation=imitation, snr_db=16, medium="air"))
+        events.append(r.event)
+        assert r.alert is None
+        clock.t += timedelta(seconds=6)
+    assert events.count("voice") >= 4, events
+    assert len(w.alerts) == n
+
+
+def test_mouth_shot_is_not_a_gun():
+    """«Пф» в микрофон — не выстрел (раньше сеть ставила на выстрел 100 %)."""
+    from app.audio.synth import mouth_shot
+    for k, kind in enumerate(("пф", "бах", "тыщ", "пах")):
+        x = np.zeros(synth.N)
+        s = mouth_shot(np.random.default_rng(40 + k), kind)
+        x[8000:8000 + len(s)] += s
+        x += np.random.default_rng(k).normal(0, 0.003, len(x))
+        a = MODEL.analyze(x / np.abs(x).max() * 0.8)
+        assert a.event != "shot" or a.confidence < MODEL.meta["thresholds"]["shot"], (kind, a.probs)
+
+
+def test_underwater_shot_and_thunder():
+    with TestClient(main.app) as c:
+        shot = c.post("/api/lab/scene", json={"preset": "shot", "medium": "water", "snr_db": 12}).json()
+        assert "shot" in [a["kind"] for a in shot["verdict"]["alerts"]]
+        thunder = c.post("/api/lab/scene", json={"preset": "thunder", "medium": "water", "snr_db": 14}).json()
+        assert thunder["verdict"]["alerts"] == []
+        voices = c.post("/api/lab/scene", json={"preset": "imitation", "medium": "air", "snr_db": 18}).json()
+        assert voices["verdict"]["alerts"] == [] and any(cl["event"] == "voice" for cl in voices["clips"])

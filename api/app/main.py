@@ -186,7 +186,8 @@ LAB: OrderedDict[str, bytes] = OrderedDict()            # последние р�
 
 
 class LabScene(BaseModel):
-    preset: Literal["motor-archive", "motor-new", "shot", "night", "silence", "airplane", "oar", "fish", "thunder", "rain"]
+    preset: Literal["motor-archive", "motor-new", "shot", "night", "silence", "voices", "imitation", "thunder", "wave", "airplane", "oar", "fish", "rain"]
+    medium: Literal["water", "air"] = Field(default="water", description="Где микрофон: гидрофон буя под водой или в воздухе")
     vessel: Literal["boat-A", "boat-B", "boat-C"] = "boat-A"
     duration_s: float = Field(default=12, ge=4, le=30)
     snr_db: float = Field(default=10, ge=-10, le=30, description="Громкость события над фоном")
@@ -210,7 +211,7 @@ def _lab_keep(wav: bytes) -> str:
 
 def _lab_run(x: np.ndarray, wav: bytes, extra: dict) -> dict:
     m = _need_model()
-    res = lab.analyze(m, x, world.thresholds, world.vessels, world.match_threshold)
+    res = lab.analyze(m, x, world.thresholds, world.vessels, world.match_threshold, world.vessel_cut)
     return {"id": _lab_keep(wav), **extra, **res}
 
 
@@ -226,9 +227,10 @@ async def lab_scene(p: LabScene) -> dict:
 
     def run():
         sc = lab.scene(p.preset, vessel_seed=ARCHIVE_VESSELS[p.vessel] if p.preset == "motor-archive" else None,
-                       duration=p.duration_s, snr_db=p.snr_db, activity=p.activity, seed=p.seed)
+                       duration=p.duration_s, snr_db=p.snr_db, activity=p.activity, seed=p.seed, medium=p.medium)
         return _lab_run(sc.x, dsp.write_wav(sc.x), {"source": "scene", "title": sc.title, "truth": sc.truth, "marks": sc.marks,
-                                                     "vessel": p.vessel if p.preset == "motor-archive" else None})
+                                                     "vessel": p.vessel if p.preset == "motor-archive" else None,
+                                                     "medium": p.medium})
     return await asyncio.to_thread(run)
 
 

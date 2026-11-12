@@ -64,6 +64,9 @@ class Store:
     def save_vessel(self, vid: str, v: dict) -> None:
         self._w("INSERT OR REPLACE INTO vessels (id, data) VALUES (?, ?)", (vid, json.dumps(v, default=str)))
 
+    def clear_vessels(self) -> None:
+        self._w("DELETE FROM vessels")
+
     def load_vessels(self) -> dict[str, dict]:
         return {i: json.loads(d) for i, d in self._r("SELECT id, data FROM vessels")}
 

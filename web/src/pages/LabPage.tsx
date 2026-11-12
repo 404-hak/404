@@ -14,20 +14,24 @@ import { Card, Page } from './common';
  * Здесь ничего не меняется в системе: тревоги не поднимаются, архив катеров не трогается.
  */
 
-const PRESETS: { id: Preset; title: string; text: string; expect: string; glyph: string }[] = [
-  { id: 'motor-archive', title: 'Катер из архива', text: 'Мотор знакомого катера проходит мимо буя', expect: 'тревога со 2-го клипа, катер узнан', glyph: '⛵' },
+const PRESETS: { id: Preset; title: string; text: string; expect: string; glyph: string; water?: boolean }[] = [
+  { id: 'motor-archive', title: 'Катер из архива', text: 'Мотор знакомого катера: под водой слышнее всего винт и выхлоп', expect: 'тревога со 2-го клипа, катер узнан', glyph: '⛵' },
   { id: 'motor-new', title: 'Новый катер', text: 'Мотор, которого сеть никогда не слышала', expect: 'тревога, в архиве его нет', glyph: '🚤' },
-  { id: 'shot', title: 'Выстрел', text: 'Резкий удар с эхом от берега', expect: 'тревога «выстрел»', glyph: '✳' },
-  { id: 'night', title: 'Тихая ночь', text: 'Лягушки, птицы, сверчки, ветер', expect: 'тревоги нет', glyph: '☾' },
+  { id: 'shot', title: 'Выстрел', text: 'Под водой — глухой и смазанный, иногда с ударом пули о воду', expect: 'тревога «выстрел»', glyph: '✳' },
+  { id: 'voices', title: 'Голоса людей', text: 'Разговор в лодке: инспекторы или прохожие', expect: 'сеть узнаёт голоса, тревоги нет', glyph: '🗣' },
+  { id: 'imitation', title: 'Выстрел голосом', text: '«Пф», «бах», «тыщ», щелчок языком', expect: 'голоса, а не выстрел — тревоги нет', glyph: '💬' },
+  { id: 'night', title: 'Тихая ночь', text: 'Водные насекомые, рыбы, лягушки сверху', expect: 'тревоги нет', glyph: '☾' },
   { id: 'silence', title: 'Тишина как улика', text: 'Природа живёт — и вдруг стихает', expect: 'тревога «тишина»', glyph: '◌' },
+  { id: 'thunder', title: 'Гром', text: 'Медленный низкий раскат — не выстрел', expect: 'помеха — тревоги нет', glyph: '⚡' },
+  { id: 'wave', title: 'Волна о буй', text: 'Глухие удары по корпусу буя', expect: 'помеха — тревоги нет', glyph: '〰', water: true },
+  { id: 'oar', title: 'Удар весла', text: 'Стук о борт — резкий, как выстрел', expect: 'помеха — тревоги нет', glyph: '⌇' },
   { id: 'airplane', title: 'Самолёт вдали', text: 'Гул с доплером — похож на мотор', expect: 'помеха — тревоги нет', glyph: '✈' },
-  { id: 'oar', title: 'Удар весла', text: 'Глухой стук о борт — похож на выстрел', expect: 'помеха — тревоги нет', glyph: '⌇' },
   { id: 'fish', title: 'Всплеск рыбы', text: 'Мягкий всплеск у поверхности', expect: 'помеха — тревоги нет', glyph: '≈' },
-  { id: 'thunder', title: 'Далёкий гром', text: 'Долгий низкий раскат', expect: 'помеха — тревоги нет', glyph: '⚡' },
-  { id: 'rain', title: 'Дождь', text: 'Россыпь щелчков по воде', expect: 'помеха — тревоги нет', glyph: '⁘' },
+  { id: 'rain', title: 'Дождь', text: 'Шипение и щелчки капель по воде', expect: 'помеха — тревоги нет', glyph: '⁘' },
 ];
-const EXPECT: Record<string, string | null> = { 'мотор': 'motor', 'выстрел': 'shot', 'тишина': 'silence', 'фон': null, 'фон (помеха)': null };
-const EVENT_TONE: Record<string, string> = { background: 'text-primary', motor: 'text-warn', shot: 'text-alert' };
+const EXPECT: Record<string, string | null> = { 'мотор': 'motor', 'выстрел': 'shot', 'тишина': 'silence', 'фон': null, 'фон (помеха)': null, 'голоса': null };
+const EVENT_TONE: Record<string, string> = { background: 'text-primary', motor: 'text-warn', shot: 'text-alert', voice: 'text-[#7FB2E5]' };
+const BAR: Record<string, string> = { background: 'bg-[var(--c-bar)]', motor: 'bg-warn', shot: 'bg-alert', voice: 'bg-[#7FB2E5]' };
 
 type Tab = 'scene' | 'own' | 'buoy';
 
@@ -83,7 +87,7 @@ function usePlayer(r: LabResult | null) {
 
 export default function LabPage({ state }: { state: State }) {
   const [tab, setTab] = useState<Tab>('scene');
-  const [p, setP] = useState<SceneParams>({ preset: 'motor-archive', vessel: 'boat-A', duration_s: 12, snr_db: 10, activity: 0.7, seed: 1 });
+  const [p, setP] = useState<SceneParams>({ preset: 'motor-archive', vessel: 'boat-A', duration_s: 12, snr_db: 10, activity: 0.7, seed: 1, medium: 'water' });
   const [res, setRes] = useState<LabResult | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -122,7 +126,8 @@ export default function LabPage({ state }: { state: State }) {
   useEffect(() => { if (tab === 'buoy') labApi.clips(14).then(setClips).catch(() => setClips([])); }, [tab, state.alerts.length]);
 
   const pick = (preset: Preset) => {
-    const q = { ...p, preset, duration_s: preset === 'silence' ? Math.max(24, p.duration_s) : p.duration_s };
+    const q: SceneParams = { ...p, preset, duration_s: preset === 'silence' ? Math.max(24, p.duration_s) : p.duration_s,
+      medium: PRESETS.find((x) => x.id === preset)?.water ? 'water' : p.medium };
     setP(q);
     void runScene(q);
   };
@@ -173,7 +178,7 @@ export default function LabPage({ state }: { state: State }) {
   };
 
   const cur = PRESETS.find((x) => x.id === p.preset)!;
-  const event = p.preset !== 'night' && p.preset !== 'silence' && p.preset !== 'rain';
+  const event = !['night', 'silence', 'rain'].includes(p.preset);
 
   return (
     <Page cap="Сеть" title="Нейросеть"
@@ -183,8 +188,15 @@ export default function LabPage({ state }: { state: State }) {
       <Card className="mb-4" title="Звук для проверки" note={<Seg value={tab} set={setTab} items={[['scene', 'Сценарий'], ['own', 'Свой звук'], ['buoy', 'С буя']]} />}>
         {tab === 'scene' && (
           <>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <Seg value={p.medium} set={(m) => { const q = { ...p, medium: m, preset: m === 'air' && p.preset === 'wave' ? 'oar' as Preset : p.preset }; setP(q); void runScene(q); }}
+                items={[['water', 'Гидрофон под водой'], ['air', 'Микрофон в воздухе']]} />
+              <span className="text-[12px] leading-4 text-muted">
+                {p.medium === 'water' ? 'Как на буе: звук из воздуха доходит глухо, мелководье даёт отражения от поверхности и дна.' : 'Как при проверке микрофоном ноутбука или телефона.'}
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {PRESETS.map((x) => (
+              {PRESETS.filter((x) => !(x.water && p.medium === 'air')).map((x) => (
                 <button key={x.id} type="button" onClick={() => pick(x.id)} disabled={!!busy}
                   className={`group rounded-[12px] border p-3 text-left transition-colors ${p.preset === x.id ? 'border-primary/60 bg-white/[.06]' : 'border-line hover:border-primary/30 hover:bg-white/[.03]'} disabled:opacity-60`}>
                   <div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-white/[.06] text-[13px]">{x.glyph}</span><span className="text-[13px] font-semibold">{x.title}</span></div>
@@ -302,7 +314,7 @@ function Result({ r, player }: { r: LabResult; player: ReturnType<typeof usePlay
         <div>
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
             <span className="cap">{r.source === 'scene' ? 'сценарий' : r.source === 'buoy' ? 'клип буя' : 'ваш звук'}</span>
-            <span>· {r.title}{r.vessel ? ` · ${r.vessel}` : ''}</span>
+            <span>· {r.title}{r.vessel ? ` · ${r.vessel}` : ''}{r.medium ? ` · ${r.medium === 'water' ? 'под водой' : 'в воздухе'}` : ''}</span>
             <span>· {num(r.duration_s, 1)} с · {num(r.level_db, 0)} дБ</span>
             {r.truth && <span className="rounded-[6px] border border-line px-1.5">в звуке: {r.truth}</span>}
           </div>
@@ -313,7 +325,9 @@ function Result({ r, player }: { r: LabResult; player: ReturnType<typeof usePlay
           <p className="mt-2 text-[14px] leading-[21px]">{alertLine}</p>
           {right != null && (
             <p className={`mt-2 text-[13px] font-medium ${right ? 'text-accent' : 'text-alert'}`}>
-              {right ? (want ? '✓ Совпадает с тем, что на самом деле в звуке.' : '✓ Помеха не обманула сеть — ложной тревоги нет.')
+              {right ? (want ? '✓ Совпадает с тем, что на самом деле в звуке.'
+                : r.truth === 'голоса' ? (r.clips.some((c) => c.event === 'voice') ? '✓ Сеть узнала голоса людей и тревогу не подняла.' : '✓ Тревоги нет, хотя голоса сеть не выделила.')
+                  : '✓ Помеха не обманула сеть — ложной тревоги нет.')
                 : `✗ Сеть ошиблась: в звуке ${r.truth}, а ${got.length ? `тревога «${got.map((g) => ALERT_RU[g]).join(', ')}»` : 'тревоги нет'}. Так выглядят её слабые места.`}
             </p>
           )}
@@ -339,7 +353,7 @@ function Result({ r, player }: { r: LabResult; player: ReturnType<typeof usePlay
                 <li key={c}>
                   <div className="flex justify-between text-[13px]"><span className={c === main.event ? 'font-semibold' : ''}>{EVENT_RU[c]}</span><span className="font-mono">{num(v * 100, 1)} %</span></div>
                   <div className="relative mt-1 h-2.5 rounded-full bg-white/[.06]">
-                    <div className={`bar-grow-x h-full rounded-full ${c === 'motor' ? 'bg-warn' : c === 'shot' ? 'bg-alert' : 'bg-[var(--c-bar)]'}`} style={{ width: `${Math.max(1, v * 100)}%` }} />
+                    <div className={`bar-grow-x h-full rounded-full ${BAR[c]}`} style={{ width: `${Math.max(1, v * 100)}%` }} />
                     {thr != null && <span className="absolute -inset-y-1 w-[2px] rounded bg-primary" style={{ left: `${thr * 100}%` }} title={`порог ${num(thr * 100, 1)} %`} />}
                   </div>
                 </li>
@@ -350,7 +364,7 @@ function Result({ r, player }: { r: LabResult; player: ReturnType<typeof usePlay
               <div className="mt-1 h-2.5 rounded-full bg-white/[.06]"><div className="bar-grow-x h-full rounded-full bg-accent" style={{ width: `${Math.max(1, main.activity * 100)}%` }} /></div>
             </li>
           </ul>
-          <p className="mt-3 text-[11px] leading-[15px] text-muted">Черта — порог тревоги. Мотор должен быть выше порога два клипа подряд, выстрел — один раз: его порог строже.</p>
+          <p className="mt-3 text-[11px] leading-[15px] text-muted">Черта — порог тревоги. Мотор должен быть выше порога два клипа подряд, выстрел — один раз: его порог строже. Голоса людей тревогу не поднимают никогда.</p>
         </div>
       </section>
 

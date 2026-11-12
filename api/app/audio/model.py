@@ -2,13 +2,14 @@
 
 Обучение — tools/ml/train.py (scikit-learn); сюда приходят только веса (model.npz), поэтому
 API не тянет тяжёлых библиотек и отвечает за миллисекунды. Три сети:
-  events — что в клипе: фон, мотор или выстрел (softmax);
+  events — что в клипе: фон, мотор, выстрел или голоса людей (softmax);
   bio    — живость природы 0…1 (лягушки, птицы, насекомые): из неё индекс здоровья и «тишина как улика»;
   vessel — отпечаток катера: последний скрытый слой сети, обученной различать катера,
            нормированный вектор; один катер — близкие векторы (косинус), разные — далёкие.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -28,6 +29,7 @@ class MLP:
     weights: list[np.ndarray]
     biases: list[np.ndarray]
     out: str                      # softmax | logistic | identity
+    center: np.ndarray | None = None   # общий центр отпечатков: вычитаем, чтобы сходство различало катера
 
     def _hidden(self, x: np.ndarray) -> list[np.ndarray]:
         h = (np.atleast_2d(x) - self.mean) / self.scale
@@ -48,8 +50,10 @@ class MLP:
         return z
 
     def embed(self, x: np.ndarray) -> np.ndarray:
-        """Последний скрытый слой, нормированный: отпечаток."""
+        """Последний скрытый слой без общего центра, нормированный: отпечаток."""
         h = self._hidden(x)[-1]
+        if self.center is not None:
+            h = h - self.center
         return h / (np.linalg.norm(h, axis=1, keepdims=True) + 1e-9)
 
 
@@ -65,13 +69,14 @@ def pack(prefix: str, scaler, net, out: str) -> dict:
 
 def unpack(z, prefix: str) -> MLP:
     n = sum(1 for k in z.files if k.startswith(f"{prefix}_W"))
+    center = z[f"{prefix}_center"] if f"{prefix}_center" in z.files else None
     return MLP(z[f"{prefix}_mean"], z[f"{prefix}_scale"], [z[f"{prefix}_W{i}"] for i in range(n)],
-               [z[f"{prefix}_b{i}"] for i in range(n)], str(z[f"{prefix}_out"]))
+               [z[f"{prefix}_b{i}"] for i in range(n)], str(z[f"{prefix}_out"]), center)
 
 
 @dataclass
 class Analysis:
-    event: str                    # background | motor | shot
+    event: str                    # background | motor | shot | voice
     confidence: float             # вероятность этого события
     probs: dict[str, float]
     activity: float               # живость природы 0…1
@@ -86,6 +91,14 @@ class Acoustic:
     bio: MLP
     vessel: MLP
     meta: dict = field(default_factory=dict)
+    cohort: np.ndarray | None = None      # отпечатки случайных чужих катеров — для порога каждого образа (Z-норма)
+
+    def znorm(self, vec) -> tuple[float, float]:
+        """Насколько на этот образ похожи случайные чужие катера: (среднее, разброс) сходства."""
+        if self.cohort is None:
+            return 0.0, 1.0
+        s = self.cohort @ np.asarray(vec, dtype=np.float32)
+        return float(s.mean()), float(s.std() + 1e-6)
 
     @property
     def classes(self) -> list[str]:
@@ -118,4 +131,8 @@ def load(path: str | None = None) -> Acoustic | None:
         return None
     with np.load(p, allow_pickle=False) as z:
         meta = json.loads(str(z["meta"]))
-        return Acoustic(unpack(z, "events"), unpack(z, "bio"), unpack(z, "vessel"), meta)
+        v = unpack(z, "vessel")
+        # отпечаток сети отпечатков: если веса сменились, старые векторы архива несравнимы с новыми
+        meta["vessel_model"] = hashlib.sha1(b"".join(w.tobytes() for w in v.weights[:2])).hexdigest()[:12]
+        cohort = z["vessel_cohort"] if "vessel_cohort" in z.files else None
+        return Acoustic(unpack(z, "events"), unpack(z, "bio"), v, meta, cohort)

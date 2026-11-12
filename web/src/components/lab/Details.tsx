@@ -19,7 +19,7 @@ export function MotorDetail({ r }: { r: LabResult }) {
     return (
       <div className="grid h-full place-items-center py-8 text-center text-[13px] text-muted">
         <div>Мотора не слышно.<br />Самая высокая вероятность мотора за запись — {pct0(best)}.<br />
-          Отпечаток снимается, когда сеть слышит мотор хотя бы на 25 %.</div>
+          Отпечаток снимается, когда сеть слышит мотор хотя бы на 50 %.</div>
       </div>
     );
   }
@@ -29,7 +29,7 @@ export function MotorDetail({ r }: { r: LabResult }) {
   const fy = (v: number) => H - 4 - ((v - lo) / (hi - lo + 1e-9)) * (H - 14);
   const line = db.map((v, i) => `${i ? 'L' : 'M'}${fx(i * m.psd.hz_step).toFixed(1)} ${fy(v).toFixed(1)}`).join(' ');
   const fpMax = Math.max(...m.fingerprint, 1e-6);
-  const known = m.matches[0] && m.matches[0].similarity >= m.match_threshold;
+  const known = m.matches[0] && m.matches[0].similarity >= (m.matches[0].threshold ?? m.match_threshold);
   return (
     <div>
       <div className="grid grid-cols-3 gap-2">
@@ -68,21 +68,22 @@ export function MotorDetail({ r }: { r: LabResult }) {
       </div>
       <ul className="mt-2 space-y-1.5">
         {m.matches.map((x) => {
-          const pass = x.similarity >= m.match_threshold;
-          const w = Math.max(0, (x.similarity - 0.5) / 0.5);
+          const cut = x.threshold ?? m.match_threshold;
+          const pass = x.similarity >= cut;
+          const lo = -0.2, w = Math.max(0, (x.similarity - lo) / (1 - lo));
           return (
             <li key={x.vessel_id} className="grid grid-cols-[72px_1fr_56px] items-center gap-2 text-[12px]">
               <span className={`font-mono ${pass ? 'text-warn' : 'text-muted'}`}>{x.vessel_id}</span>
               <span className="relative h-2 rounded-full bg-white/[.06]">
                 <span className={`bar-grow-x absolute inset-y-0 left-0 rounded-full ${pass ? 'bg-warn' : 'bg-[var(--c-bar)]'}`} style={{ width: `${w * 100}%` }} />
-                <span className="absolute -inset-y-1 w-px bg-primary/70" style={{ left: `${((m.match_threshold - 0.5) / 0.5) * 100}%` }} title="порог «тот же катер»" />
+                <span className="absolute -inset-y-1 w-px bg-primary/70" style={{ left: `${Math.max(0, Math.min(1, (cut - lo) / (1 - lo))) * 100}%` }} title={`порог «тот же катер» для ${x.vessel_id}: ${num(cut * 100, 1)} %`} />
               </span>
               <span className="text-right font-mono">{num(x.similarity * 100, 1)} %</span>
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-[11px] leading-[15px] text-muted">Шкала от 50 %; черта — порог «тот же катер» ({num(m.match_threshold * 100, 1)} %): ниже него не больше 1 % чужих катеров. Здесь архив не меняется — в работе узнанный катер уточняет свой образ.</p>
+      <p className="mt-2 text-[11px] leading-[15px] text-muted">Черта — порог «тот же катер» у каждого катера свой: на катера с «типичным» мотором похожи многие чужие, и порог у них строже (Z-норма по когорте случайных катеров). Чужой катер выдаётся за архивный не чаще 1 % сверок. Похожий мотор того же типа может совпасть — это улика «тот же звук мотора», а не номер катера. Здесь архив не меняется — в работе узнанный катер уточняет свой образ.</p>
     </div>
   );
 }
@@ -108,12 +109,16 @@ export function ImpulseDetail({ r }: { r: LabResult }) {
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
         <Metric label="пик к среднему" value={`${num(im.crest_db, 1)} дБ`} note="выстрел — обычно 30+" tone={im.crest_db > 28 ? 'text-alert' : ''} />
-        <Metric label="фронт удара" value={`${num(im.rise_ms, im.rise_ms < 10 ? 2 : 0)} мс`} note="выстрел — около 1 мс" tone={im.rise_ms < 2 ? 'text-alert' : ''} />
+        <Metric label="фронт удара" value={`${num(im.rise_ms, im.rise_ms < 10 ? 2 : 0)} мс`} note="выстрел — около 1 мс, «пф» ртом — дольше" tone={im.rise_ms < 2 ? 'text-alert' : ''} />
         <Metric label="центр спектра" value={`${num(im.centroid_khz, 2)} кГц`} note="весло — низкий, выстрел — шире" />
+        <Metric label="длительность вспышки" value={`${num(im.width_ms ?? 0, 1)} мс`} note="шипение «пф» тянется дольше" />
+        <Metric label="низы в ударе" value={pct0(im.low_share ?? 0)} note="у ружья мощный низ, у рта — почти нет" />
+        <Metric label="голоса в записи" value={pct0(Math.max(...r.timeline.map((p) => p.voice ?? 0)))} note="если высоко — это рот, а не ружьё" />
       </div>
       <p className="mt-3 text-[12px] leading-[17px] text-muted">
-        Выстрел сеть узнаёт по сочетанию: резкий фронт за доли миллисекунды, высокий пик над фоном, быстрый спад и эхо.
-        Удар весла и всплеск рыбы нарастают медленнее и звучат ниже. Здесь вероятность выстрела в лучшем окне —{' '}
+        Выстрел сеть узнаёт по сочетанию: резкий фронт за доли миллисекунды, высокий пик над фоном с мощным низом, быстрый спад и эхо.
+        Под водой он глуше и смазан отражениями от поверхности и дна. Удар весла, волна о буй и гром нарастают медленнее и звучат ниже;
+        «пф» ртом — без низов, с долгим шипением и голосом рядом. Здесь вероятность выстрела в лучшем окне —{' '}
         <b className={im.shot_probability >= r.thresholds.shot ? 'text-alert' : 'text-primary'}>{pct0(im.shot_probability)}</b>
         {' '}(порог {num(r.thresholds.shot * 100, 1)} %){shotLike ? '; по фронту и пику удар похож на выстрел' : ''}.
       </p>
@@ -153,6 +158,7 @@ export function NatureDetail({ r }: { r: LabResult }) {
 const RANGE: Record<string, [number, number, boolean?]> = {
   onset: [0, 40], crest: [0, 40], decay: [0, 40], harm: [0, 12], log_f0: [15, 420, true], low: [-3, 0], flat: [0, 1],
   aci: [0, 1.2], bio_act: [0, 14], mod: [0, 3], imp_crest: [0, 45], imp_rise: [0.1, 100, true], imp_centroid: [0, 4],
+  imp_width: [0.1, 500, true], imp_low: [0, 1], voiced: [0, 1], f0_drift: [0, 8], syllables: [0, 1],
 };
 const fmtVal = (f: LabFeature) => (Math.abs(f.value) >= 100 ? Math.round(f.value).toString() : num(f.value, Math.abs(f.value) < 1 ? 3 : 1));
 
@@ -162,7 +168,7 @@ export function FeaturesDetail({ r }: { r: LabResult }) {
     <div>
       <p className="mb-3 text-[12px] leading-[17px] text-muted">
         Клип {clip.i} ({num(clip.start, 0)}–{num(clip.end, 0)} с) — {clip.alert ? 'на нём ухо буя подняло тревогу' : 'самый «подозрительный» в записи'}.
-        Кроме этих 13 чисел сеть смотрит на спектр по 64 полосам: среднее, разброс, пики над шумовым полом и форму — всего 269 признаков.
+        Кроме этих {r.features.length} чисел сеть смотрит на спектр по 64 полосам: среднее, разброс, пики над шумовым полом и форму — всего {256 + r.features.length} признаков.
       </p>
       <ul className="grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
         {r.features.map((f) => {

@@ -1,5 +1,5 @@
 import type { LabClip, LabResult } from '../../lab';
-import { ALERT_RU, EVENT_RU, fmtS, num, pct0 } from '../../lab';
+import { ALERT_RU, EVENT_RU, VOICE, fmtS, num, pct0 } from '../../lab';
 
 /**
  * Ход по времени: вероятности мотора и выстрела (окно 4 с, шаг 0,5 с), живость природы,
@@ -11,6 +11,7 @@ const W = 1000, H = 190;
 
 function chip(c: LabClip) {
   if (c.alert) return { text: `Тревога: ${ALERT_RU[c.alert]}`, cls: 'border-alert bg-alert text-bg font-semibold' };
+  if (c.event === 'voice') return { text: 'голоса · не тревога', cls: 'border-[#7FB2E5]/70 text-[#7FB2E5]' };
   if (c.note.includes('подтверждения')) return { text: 'мотор? ждём 2-й клип', cls: 'border-warn text-warn' };
   if (c.note.includes('продолжение')) return { text: `${c.event === 'shot' ? 'выстрел' : 'мотор'} · та же тревога`, cls: 'border-warn/60 text-warn' };
   if (c.note.includes('ниже порога')) return { text: 'похоже, но ниже порога', cls: 'border-line text-muted' };
@@ -24,7 +25,7 @@ export default function Timeline({ r }: { r: LabResult }) {
   const x = (t: number) => (t / dur) * W;
   const y = (v: number) => H - 8 - v * (H - 16);
   const pts = r.timeline;
-  const path = (key: 'motor' | 'shot' | 'activity' | 'background') =>
+  const path = (key: 'motor' | 'shot' | 'activity' | 'background' | 'voice') =>
     pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
   const area = `${path('activity')} L${x(pts[pts.length - 1].t)} ${H - 8} L${x(pts[0].t)} ${H - 8} Z`;
   // обычная живость и порог тишины — ступенькой по клипам (что знает ухо к началу клипа)
@@ -36,6 +37,7 @@ export default function Timeline({ r }: { r: LabResult }) {
       <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded bg-warn" />мотор</span>
         <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded bg-alert" />выстрел</span>
+        <span className="flex items-center gap-1.5"><i className="h-0.5 w-4 rounded" style={{ background: VOICE }} />голоса людей</span>
         <span className="flex items-center gap-1.5"><i className="h-2.5 w-4 rounded-[3px] bg-accent/35" />живость природы</span>
         <span className="flex items-center gap-1.5"><i className="w-4 border-t border-dashed border-primary/70" />обычная живость и порог тишины</span>
         <span className="flex items-center gap-1.5"><i className="w-4 border-t border-dashed border-warn/70" />пороги тревоги</span>
@@ -57,6 +59,7 @@ export default function Timeline({ r }: { r: LabResult }) {
           {lines.map(([k, , v]) => <line key={k} x1={0} x2={W} y1={y(v)} y2={y(v)} strokeDasharray="6 5" style={{ stroke: k === 'shot' ? 'rgb(var(--rgb-alert) / .55)' : 'rgb(var(--rgb-warn) / .6)' }} vectorEffect="non-scaling-stroke" />)}
           <path d={path('motor')} fill="none" style={{ stroke: 'var(--c-warn)' }} strokeWidth={2.2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" pathLength={1} className="line-draw" />
           <path d={path('shot')} fill="none" style={{ stroke: 'var(--c-alert)' }} strokeWidth={2.2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" pathLength={1} className="line-draw" />
+          {r.classes.includes('voice') && <path d={path('voice')} fill="none" style={{ stroke: VOICE }} strokeWidth={1.8} strokeDasharray="5 3" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />}
           {pts.length === 1 && (['motor', 'shot', 'activity'] as const).map((k) => (
             <circle key={k} cx={x(pts[0].t)} cy={y(pts[0][k])} r={4} style={{ fill: k === 'motor' ? 'var(--c-warn)' : k === 'shot' ? 'var(--c-alert)' : 'var(--c-accent)' }} />
           ))}
@@ -92,7 +95,7 @@ export default function Timeline({ r }: { r: LabResult }) {
             <thead className="text-muted">
               <tr className="border-b border-line">
                 <th className="py-1.5 pr-3 font-medium">№</th><th className="pr-3 font-medium">время</th><th className="pr-3 font-medium">сеть слышит</th>
-                <th className="pr-3 font-medium">фон · мотор · выстрел</th><th className="pr-3 font-medium">живость</th><th className="pr-3 font-medium">обычная</th>
+                <th className="pr-3 font-medium">фон · мотор · выстрел · голоса</th><th className="pr-3 font-medium">живость</th><th className="pr-3 font-medium">обычная</th>
                 <th className="font-medium">решение уха буя</th>
               </tr>
             </thead>
@@ -102,7 +105,7 @@ export default function Timeline({ r }: { r: LabResult }) {
                   <td className="py-1.5 pr-3 font-mono">{c.i}</td>
                   <td className="pr-3 font-mono text-muted">{fmtS(c.start)}–{fmtS(c.end)}</td>
                   <td className="pr-3 font-medium">{EVENT_RU[c.event]} <span className="font-mono text-muted">{pct0(c.confidence)}</span></td>
-                  <td className="pr-3 font-mono text-muted">{pct0(c.probs.background)} · <span className="text-warn">{pct0(c.probs.motor)}</span> · <span className="text-alert">{pct0(c.probs.shot)}</span></td>
+                  <td className="pr-3 font-mono text-muted">{pct0(c.probs.background)} · <span className="text-warn">{pct0(c.probs.motor)}</span> · <span className="text-alert">{pct0(c.probs.shot)}</span>{c.probs.voice != null && <> · <span style={{ color: VOICE }}>{pct0(c.probs.voice)}</span></>}</td>
                   <td className="pr-3 font-mono">{num(c.activity, 2)}</td>
                   <td className="pr-3 font-mono text-muted">{c.baseline != null ? num(c.baseline, 2) : '—'}</td>
                   <td className={c.alert ? 'font-semibold text-alert' : 'text-muted'}>{c.note}</td>

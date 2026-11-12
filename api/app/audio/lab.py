@@ -35,26 +35,35 @@ FEATURES = [
     ("log_f0", "Основная частота", "Гц", "период гармонического ряда (обороты или вспышки мотора)"),
     ("low", "Доля низких частот", "lg", "энергия 30–600 Гц от всей: мотор и гром — низкие"),
     ("flat", "Шумность спектра", "", "ровный шум ближе к 1, тон — к 0"),
-    ("aci", "Сложность звука (ACI)", "", "изменчивость в полосе природы: хоры лягушек и птицы её поднимают"),
+    ("aci", "Сложность звука (ACI)", "", "изменчивость в полосе природы: хоры лягушек, птицы, водные насекомые"),
     ("bio_act", "Голоса природы", "дБ", "насколько полоса 1,2–7,6 кГц выше своего шумового пола"),
     ("mod", "Пульсация огибающей", "lg", "периодичность громкости низких полос (2–25 Гц)"),
     ("imp_crest", "Пик к среднему", "дБ", "по отсчётам: у выстрела — 30+ дБ"),
-    ("imp_rise", "Фронт удара", "мс", "время нарастания самого резкого звука: у выстрела — доли миллисекунды"),
+    ("imp_rise", "Фронт удара", "мс", "время нарастания самого резкого звука: у выстрела — доли миллисекунды, у «пф» ртом — миллисекунды"),
     ("imp_centroid", "Центр спектра удара", "кГц", "у выстрела спектр широкий, у удара весла — низкий"),
+    ("imp_width", "Длительность вспышки", "мс", "сколько удар держится выше 30 % пика: шипение «пф» тянется дольше дульной волны"),
+    ("imp_low", "Низы в ударе", "", "доля энергии ниже 400 Гц вокруг удара: у ружья мощный низ, у рта его почти нет"),
+    ("voiced", "Звонкость", "", "доля кадров с основным тоном голоса 75–400 Гц: речь, крик, «бах»"),
+    ("f0_drift", "Плавание тона", "пт", "разброс основного тона в полутонах: речь — гуляет, мотор — ровный"),
+    ("syllables", "Ритм слогов", "", "доля модуляции 3–8 Гц в полосе речи 300–3000 Гц: так звучит речь"),
 ]
 
 PRESETS = {
     "motor-archive": "Мотор катера из архива",
     "motor-new": "Мотор нового катера",
     "shot": "Выстрел",
-    "night": "Тихая ночь: лягушки и птицы",
+    "night": "Тихая ночь",
     "silence": "Тишина как улика",
+    "voices": "Голоса людей: разговор в лодке",
+    "imitation": "Выстрел голосом: «пф», «бах», «тыщ»",
+    "thunder": "Помеха: гром",
+    "wave": "Помеха: волна бьёт о буй",
     "airplane": "Помеха: самолёт вдали",
     "oar": "Помеха: удар весла о борт",
     "fish": "Помеха: всплеск рыбы",
-    "thunder": "Помеха: далёкий гром",
     "rain": "Помеха: дождь",
 }
+MEDIUM_RU = {"water": "гидрофон под водой", "air": "микрофон в воздухе"}
 
 
 def _rms(x: np.ndarray) -> float:
@@ -79,57 +88,66 @@ class Scene:
 
 
 def scene(preset: str, *, vessel_seed: int | None = None, duration: float = 12.0, snr_db: float = 10.0,
-          activity: float = 0.7, seed: int = 1) -> Scene:
-    """Сцена лаборатории: фон дельты нужной длины + событие в своём отрезке."""
+          activity: float = 0.7, seed: int = 1, medium: str = "water") -> Scene:
+    """Сцена лаборатории: фон дельты нужной длины в своей среде (под водой или в воздухе) + событие в своём отрезке."""
     r = np.random.default_rng(seed)
     sr = dsp.SR
+    water = medium == "water"
     n = int(sr * min(30.0, max(4.0, duration)))
     dur = n / sr
-    bg = synth.ambient(r, n, rain=preset == "rain")
+    bg = synth.hydro_ambient(r, n, rain=preset == "rain") if water else synth.ambient(r, n, rain=preset == "rain")
+    nat = synth.nature_water if water else synth.nature
     act = 0.0 if preset == "silence" else activity
     marks: list[dict] = []
     if preset == "silence":                                    # природа живёт, потом стихает
         cut = int(n * 0.42)
-        b1 = synth.nature(r, max(activity, 0.6), n)
+        b1 = nat(r, max(activity, 0.6), n)
         k = np.ones(n)
         k[cut:] = 0
         k[cut:cut + sr] = np.cos(np.linspace(0, np.pi / 2, min(sr, n - cut))) ** 2
-        bio = b1 * k + synth.nature(r, 0.03, n) * (1 - k)
+        bio = b1 * k + nat(r, 0.03, n) * (1 - k)
         level = 10 ** ((-16 + 22 * max(activity, 0.6)) / 20)
         bg = bg + bio / (_rms(b1) + 1e-9) * _rms(bg) * level
         marks.append({"start": round(cut / sr, 2), "end": round(dur, 2), "label": "природа стихла"})
         truth = "тишина"
     else:
         if act > 0.02:
-            bio = synth.nature(r, act, n)
+            bio = nat(r, act, n)
             bg = bg + bio / (_rms(bio) + 1e-9) * _rms(bg) * 10 ** ((-16 + 22 * act) / 20)
         truth = "фон"
-    x = bg
+    x = bg.copy()
+
+    def put(s: np.ndarray, a: int, ref: float, label: str, end: int | None = None):
+        m = min(len(s), n - a)
+        x[a:a + m] += s[:m] / ref * _rms(bg) * 10 ** (snr_db / 20)
+        marks.append({"start": round(a / sr, 2), "end": round((end if end is not None else a + m) / sr, 2), "label": label})
+
     if preset in ("motor-archive", "motor-new"):
         v = synth.vessel(vessel_seed if vessel_seed is not None else int(r.integers(10_000, 1 << 30)))
         a, b = int(n * 0.12), int(n * 0.92)
-        m = synth.motor(v, r, b - a) * _fade(b - a, sr)
-        x = x.copy()
-        x[a:b] += m / _rms(m[sr:-sr] if b - a > 3 * sr else m) * _rms(bg) * 10 ** (snr_db / 20)
-        marks.append({"start": round(a / sr, 2), "end": round(b / sr, 2), "label": "мотор"})
+        m = synth.motor(v, r, b - a, water=water)
+        m = (synth.multipath(m, r) if water else m) * _fade(b - a, sr)
+        put(m, a, _rms(m[sr:-sr] if b - a > 3 * sr else m), "мотор")
         truth = "мотор"
     elif preset == "shot":
         a = int(n * 0.5)
-        s = synth.shot(r, int(sr * 2))
-        s = s[: max(0, min(len(s), n - a))]
-        x = x.copy()
-        s4 = np.zeros(WIN)
-        s4[: len(s)] = s[:WIN]
-        x[a:a + len(s)] += s / _rms(s4) * _rms(bg) * 10 ** (snr_db / 20)     # как при обучении: мощность на 4 с
-        marks.append({"start": round(a / sr, 2), "end": round((a + sr) / sr, 2), "label": "выстрел"})
+        s = synth.shot_water(r, WIN) if water else synth.shot(r, WIN)
+        put(s, a, _rms(s), "выстрел", a + sr)                       # как при обучении: мощность на 4 с
         truth = "выстрел"
-    elif preset in synth.DISTRACTORS:
-        a = int(n * 0.4)
+    elif preset in ("voices", "imitation"):
+        a, b = int(n * 0.1), int(n * 0.95)
+        h = synth.human(r, b - a, imitation=preset == "imitation")
+        h = synth.to_water(h, r, loss_db=0) if water else h
+        put(h, a, _rms(h), "голоса" if preset == "voices" else "«выстрел» ртом", b)
+        truth = "голоса"
+    elif preset in ("thunder", "wave", "airplane", "oar", "fish"):
+        a = int(n * 0.35)
         L = min(int(sr * 4), n - a)
-        d = synth.distractor(r, L, preset)
-        x = x.copy()
-        x[a:a + L] += d / (_rms(d) + 1e-9) * _rms(bg) * 10 ** (snr_db / 20)
-        marks.append({"start": round(a / sr, 2), "end": round((a + L) / sr, 2), "label": PRESETS[preset].split(": ")[-1]})
+        kind = preset
+        if not water and preset == "wave":
+            kind = "fish"
+        d = synth.distractor_in(r, L, medium, kind) if water or preset != "thunder" else synth.thunder(r, L)
+        put(d, a, _rms(d), PRESETS[preset].split(": ")[-1])
         truth = "фон (помеха)"
     elif preset == "rain":
         truth = "фон (помеха)"
@@ -155,7 +173,7 @@ def _round(v, k=3):
     return [round(float(t), k) for t in v]
 
 
-def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: dict[str, dict], match_threshold: float) -> dict:
+def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: dict[str, dict], match_threshold: float, cut=None) -> dict:
     sr = dsp.SR
     x = np.asarray(x, np.float32)
     x = x - x.mean()
@@ -208,18 +226,19 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
                       "baseline": round(base_before, 3) if base_before is not None else None, "quiet": ear.quiet})
 
     # главный клип: где сработала тревога, иначе где сильнее угроза, иначе первый
-    pick = next((c for c in clips if c["alert"]), None) or max(clips, key=lambda c: max(c["probs"]["motor"], c["probs"]["shot"]))
+    pick = next((c for c in clips if c["alert"]), None) or max(clips, key=lambda c: 1 - c["probs"]["background"])
     main_seg = x[int(pick["start"] * sr):int(pick["start"] * sr) + WIN]
     mf = dsp.event_features(main_seg)
     named = dict(zip([k for k, *_ in FEATURES], mf[-len(FEATURES):].tolist()))
     named["log_f0"] = float(np.exp(named["log_f0"]))
     named["imp_rise"] = float(10 ** named["imp_rise"] * 1000)
+    named["imp_width"] = float(10 ** named["imp_width"] * 1000)
     features = [{"key": k, "label": lab, "unit": u, "hint": h, "value": round(named[k], 3)} for k, lab, u, h in FEATURES]
 
     # мотор: окно с самой высокой вероятностью мотора
     mi = int(np.argmax(P[:, 1]))
     motor = None
-    if P[mi, 1] > 0.25:
+    if P[mi, 1] > 0.5:
         seg = x[starts[mi]:starts[mi] + WIN]
         v = dsp.vessel_features(seg)
         f0 = float(np.exp(v[-1]))
@@ -237,28 +256,31 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
         fp = m.vessel.embed(v)[0]
         sims = sorted(((float(np.dot(fp, np.asarray(vv["vector"]) / (np.linalg.norm(vv["vector"]) + 1e-9))), vid, vv)
                        for vid, vv in vessels.items()), key=lambda t: -t[0])
+        cut = cut or (lambda vv: match_threshold)
+        sims = sorted(((s_, vid, vv, float(cut(vv))) for s_, vid, vv in sims), key=lambda t: -(t[0] - t[3]))
         best = sims[0] if sims else None
         motor = {
             "window_start": round(starts[mi] / sr, 2), "probability": round(float(P[mi, 1]), 4),
             "f0_hz": round(f0, 1), "rpm_if_crank": round(f0 * 60), "harmonicity": round(float(strength), 2),
             "psd": {"hz_step": round(float(fr[1]), 4), "db": _round(psd[keep], 1)}, "harmonics": harm,
             "fingerprint": _round(fp, 4),
-            "matches": [{"vessel_id": vid, "similarity": round(s_, 4), "last_seen": str(vv.get("last_seen") or ""), "seen": int(vv.get("seen", 0))}
-                        for s_, vid, vv in sims[:6]],
+            "matches": [{"vessel_id": vid, "similarity": round(s_, 4), "threshold": round(c_, 4), "last_seen": str(vv.get("last_seen") or ""),
+                         "seen": int(vv.get("seen", 0))} for s_, vid, vv, c_ in sims[:6]],
             "match_threshold": round(match_threshold, 4),
-            "verdict": (f"узнан: {best[1]}" if best and best[0] >= match_threshold else "новый катер — в архиве нет похожего"),
+            "verdict": (f"узнан: {best[1]}" if best and best[0] >= best[3] else "новый катер — в архиве нет похожего"),
         }
 
     # импульс: самый резкий звук всей записи
     a = np.abs(xn)
     env = np.convolve(a, np.ones(16) / 16, mode="same")
     pi = int(np.argmax(env))
-    crest, lrise, cen = dsp.impulse(xn[max(0, pi - WIN // 2):max(0, pi - WIN // 2) + WIN])
+    crest, lrise, cen, lwidth, lowf = dsp.impulse(xn[max(0, pi - WIN // 2):max(0, pi - WIN // 2) + WIN])
     z0, z1 = max(0, pi - int(0.04 * sr)), min(n, pi + int(0.06 * sr))
     zoom = xn[z0:z1]
     zi = np.linspace(0, len(zoom) - 1, min(500, len(zoom))).astype(int)
     si = int(np.argmax(P[:, 2]))
     impulse = {"t": round(pi / sr, 3), "crest_db": round(crest, 1), "rise_ms": round(10 ** lrise * 1000, 2), "centroid_khz": round(cen, 2),
+               "width_ms": round(10 ** lwidth * 1000, 1), "low_share": round(lowf, 3),
                "shot_probability": round(float(P[si, 2]), 4), "shot_window_start": round(starts[si] / sr, 2),
                "zoom": {"t0": round(z0 / sr, 4), "t1": round(z1 / sr, 4), "y": _round(zoom[zi], 3)}}
 

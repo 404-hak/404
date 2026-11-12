@@ -34,6 +34,7 @@ GENESIS = "0" * 64
 FP_DIM = 16                     # размер отпечатка без обученной модели (векторы — синтетические)
 MATCH_THRESHOLD = 0.8
 REGISTER_MIN_CONF = 0.9         # новый катер заносим в архив только по уверенному звуку
+COHORT_Q = 0.995                # порог образа — не ниже 99,5-го перцентиля сходства со случайными чужими катерами
 MERGE = {"motor": (timedelta(minutes=3), 12.0), "shot": (timedelta(minutes=1), 8.0)}   # одна тревога на соседние буи
 OFFLINE_AFTER = timedelta(seconds=60)
 HISTORY_NIGHTS = 60
@@ -95,6 +96,8 @@ class World:
         self.model: acoustic.Acoustic | None = acoustic.load() if model is _DEFAULT else model
         th = (self.model.meta.get("thresholds", {}) if self.model else {})
         self.match_threshold = float(th.get("match", MATCH_THRESHOLD))
+        # у каждого катера архива свой порог: насколько на него похожи случайные чужие (Z-норма)
+        self.match_z = float(th["match_z"]) if self.model and self.model.cohort is not None and "match_z" in th else None
         base = float(th.get("event", 0.6))
         self.thresholds = {"motor": float(th.get("motor", base)), "shot": float(th.get("shot", base))}
         self.weather = weather
@@ -131,6 +134,7 @@ class World:
         if self.store:
             self.store.clear()
             self.clips.clear()
+            self.store.set_meta("vessel_model", self.model.meta.get("vessel_model") if self.model else "none")
             self.store.save_alerts(self.alerts)
             for vid, v in self.vessels.items():
                 self.store.save_vessel(vid, v)
@@ -144,6 +148,20 @@ class World:
         self.vessels = self.store.load_vessels()
         for v in self.vessels.values():
             v["last_seen"] = date.fromisoformat(v["last_seen"]) if v.get("last_seen") else None
+        # сеть отпечатков сменилась — старые векторы несравнимы: архив катеров заводим заново
+        mid = self.model.meta.get("vessel_model") if self.model else "none"
+        if self.store.get_meta("vessel_model") != mid:
+            rnd = random.Random(404)
+            old = self.vessels
+            self.vessels = {}
+            for vid, seed in ARCHIVE_VESSELS.items():
+                vec = self._archive_vector(seed) if self.model else _unit([rnd.gauss(0, 1) for _ in range(FP_DIM)])
+                last = old.get(vid, {}).get("last_seen")
+                self.vessels[vid] = {"vector": vec, "last_seen": last, "seen": 0}
+            self.store.clear_vessels()
+            for vid in self.vessels:
+                self._save_vessel(vid)
+            self.store.set_meta("vessel_model", mid)
         saved = self.store.load_buoys()
         self.buoys = {}
         for b in geo.BUOYS:                          # места и имена — из кода, состояние — из базы
@@ -211,12 +229,22 @@ class World:
         self._seq += 1
         return f"A-{ts:%Y%m%d}-{self._seq:04d}"
 
+    def vessel_cut(self, v: dict) -> float:
+        """Порог сходства для этого образа по когорте случайных чужих катеров: не ниже их 99,5-го перцентиля
+        и не ниже среднего + z разбросов. На катер с «типичным» мотором похожи многие — порог у него строже."""
+        if self.match_z is None:
+            return self.match_threshold
+        s = self.model.cohort @ np.asarray(v["vector"], dtype=np.float32)
+        return max(float(np.quantile(s, COHORT_Q)), float(s.mean() + self.match_z * s.std()))
+
     def _match(self, fp: list[float], ts: datetime, register: bool = True) -> Match | None:
         """Сверка отпечатка с архивом. Узнанный катер уточняет свой образ (среднее по проходам).
-        Неузнанный заносится в архив как новый — только если звук уверенный (register)."""
-        best = max(((cosine(fp, v["vector"]), vid) for vid, v in self.vessels.items()), default=(0.0, None))
-        sim, vid = best
-        if vid is None or sim < self.match_threshold:
+        Неузнанный заносится в архив как новый — только если звук уверенный (register).
+        Решение — по запасу над порогом своего образа: у катеров с «типичным» мотором порог строже."""
+        best = max(((cosine(fp, v["vector"]) - self.vessel_cut(v), cosine(fp, v["vector"]), vid) for vid, v in self.vessels.items()),
+                   default=(-1.0, 0.0, None))
+        margin, sim, vid = best
+        if vid is None or margin < 0:
             if register:
                 new_id = f"boat-{len(self.vessels) + 1:02d}"
                 self.vessels[new_id] = {"vector": _unit(fp), "last_seen": ts.date(), "seen": 1}
@@ -316,8 +344,13 @@ class World:
         b = self.buoys[buoy_id]
         b.last_seen = ts
         ear = self.ears.setdefault(buoy_id, listener.Ear())
+        prev_fp = ear.motor_fp if ear.motor_at else None
         kind, conf, note = listener.hear(ear, an, self.thresholds, ts)
         b.health = round(float(ear.health), 2)
+        ear.motor_fp = an.fingerprint if an.event == "motor" else None
+        fp = an.fingerprint
+        if kind == "motor" and prev_fp and fp:              # мотор подтверждён двумя клипами — отпечаток по обоим
+            fp = _unit([a + c for a, c in zip(prev_fp, fp)])
         if kind in MERGE:
             near = self._open_nearby(kind, b, ts)
             if near:
@@ -327,7 +360,7 @@ class World:
         if kind:
             alert = self._make_alert(
                 AlertIn(buoy_id=buoy_id, kind=kind, confidence=max(0.01, conf), ts=ts,  # type: ignore[arg-type]
-                        fingerprint=an.fingerprint if kind == "motor" else None),
+                        fingerprint=fp if kind == "motor" else None),
                 audio_sha=sha, probs=an.probs, source="audio")
         res = ClipResult(sha256=sha, buoy_id=buoy_id, ts=ts, event=an.event, confidence=an.confidence,  # type: ignore[arg-type]
                          probs=an.probs, activity=an.activity, level_db=an.level_db, f0_hz=an.f0_hz, alert=alert, note=note)

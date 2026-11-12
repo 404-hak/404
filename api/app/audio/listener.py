@@ -5,6 +5,9 @@
 звук, у него свой, более строгий порог. Пороги подобраны при обучении на большом наборе фона
 со сложными помехами. Катер, которого слышно минуту, — одна тревога, а не десять.
 
+Голоса людей — не тревога: мимо проходят люди, рядом говорят и сами инспекторы. Сеть узнаёт голоса,
+чтобы не путать разговор и звуки ртом («пф», «бах») с мотором и выстрелом; ухо буя только отмечает их.
+
 «Тишина как улика»: у каждого буя своя обычная живость природы (скользящее среднее по спокойным
 клипам). Если лягушки и птицы стихли — живость упала ниже 40 % обычной несколько клипов подряд, —
 рядом, скорее всего, человек: тревога «тишина», даже если мотора не слышно.
@@ -31,6 +34,7 @@ class Ear:
     health: float | None = None
     quiet: int = 0
     motor_at: datetime | None = None          # прошлый клип с мотором выше порога — ждём подтверждения
+    motor_fp: list[float] | None = None       # его отпечаток — чтобы сверять катер по двум клипам
     last: dict[str, datetime] = field(default_factory=dict)
     offline_alerted: bool = False
 
@@ -40,6 +44,9 @@ def hear(ear: Ear, an: Analysis, thresholds: dict[str, float], ts: datetime) -> 
     ear.health = an.activity if ear.health is None else ear.health + (an.activity - ear.health) * HEALTH_ALPHA
     pair = ear.motor_at
     ear.motor_at = None
+    if an.event == "voice":
+        ear.quiet = 0
+        return None, an.confidence, "голоса людей — не тревога: это могут быть инспекторы или прохожие"
     if an.event in ("motor", "shot"):
         ear.quiet = 0
         name = "мотор" if an.event == "motor" else "выстрел"

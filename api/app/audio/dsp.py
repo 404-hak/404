@@ -180,13 +180,42 @@ def event_features(x: np.ndarray) -> np.ndarray:
     ms = np.abs(np.fft.rfft(env)) ** 2
     mfr = np.fft.rfftfreq(len(env), HOP / SR)
     mod = float(np.log10(ms[(mfr > 2) & (mfr < 25)].max() / (ms[(mfr > 0.3) & (mfr < 25)].mean() + 1e-9) + 1e-9))
-    scal = np.array([onset, crest, decay, harm, np.log(f0), low, flat, aci, bio_act, mod, *impulse(x)], np.float32)
+    scal = np.array([onset, crest, decay, harm, np.log(f0), low, flat, aci, bio_act, mod, *impulse(x), *voicing(x, L)], np.float32)
     return np.concatenate([mean, std, peak, shape, scal]).astype(np.float32)
 
 
-def impulse(x: np.ndarray) -> tuple[float, float, float]:
-    """Самый резкий звук клипа по отсчётам: (пик к среднему, дБ; время нарастания фронта, lg с; центр спектра удара, кГц).
-    Выстрел — фронт за доли миллисекунды и широкий спектр; удар весла, всплеск рыбы — медленнее и ниже."""
+def voicing(x: np.ndarray, L: np.ndarray) -> tuple[float, float, float]:
+    """Голос человека: (доля звонких кадров с основным тоном 75–400 Гц; «плавание» тона, полутоны;
+    ритм слогов — доля модуляции 3–8 Гц в полосе речи 300–3000 Гц). Речь — тон гуляет и есть слоговой ритм;
+    мотор — тон ровный; выстрел и шум — тона нет."""
+    f = frames(x, N_FFT, HOP) * np.hanning(N_FFT).astype(np.float32)
+    S = np.abs(np.fft.rfft(f, 2 * N_FFT, axis=1)) ** 2
+    ac = np.fft.irfft(S, axis=1)[:, : N_FFT]
+    ac = ac / (ac[:, :1] + 1e-12)
+    lo, hi = SR // 400, SR // 75
+    seg = ac[:, lo:hi]
+    k = seg.argmax(1)
+    peak = seg[np.arange(len(seg)), k]
+    e = (f ** 2).sum(1)
+    loud = e > np.percentile(e, 40)
+    voiced = (peak > 0.45) & loud
+    frac = float(voiced.mean())
+    st = 12 * np.log2(SR / (k[voiced] + lo)) if voiced.sum() >= 5 else np.zeros(1)
+    drift = float(np.std(st))                                               # разброс тона: речь — гуляет, мотор — ровный
+    band = (mel_centers() >= 300) & (mel_centers() <= 3000)
+    env = (10 ** (L[:, band] / 10)).sum(1)
+    env = (env - env.mean()) / (env.std() + 1e-9)
+    ms = np.abs(np.fft.rfft(env)) ** 2
+    mf = np.fft.rfftfreq(len(env), HOP / SR)
+    syl = float(ms[(mf >= 3) & (mf <= 8)].sum() / (ms[(mf >= 0.5) & (mf <= 20)].sum() + 1e-9))
+    return frac, min(12.0, drift), syl
+
+
+def impulse(x: np.ndarray) -> tuple[float, float, float, float, float]:
+    """Самый резкий звук клипа по отсчётам: (пик к среднему, дБ; время нарастания фронта, lg с; центр спектра удара, кГц;
+    длительность вспышки выше 30 % пика, lg с; доля энергии ниже 400 Гц вокруг удара).
+    Выстрел — фронт за доли миллисекунды, широкий спектр с мощным низом, затем эхо; удар весла, всплеск рыбы —
+    медленнее и ниже; «пф» ртом — фронт в миллисекунды, долгое шипение, низов почти нет."""
     a = np.abs(x)
     env = np.convolve(a, np.ones(16) / 16, mode="same")              # огибающая ~1 мс
     i = int(np.argmax(env))
@@ -197,11 +226,16 @@ def impulse(x: np.ndarray) -> tuple[float, float, float]:
     seg = x[max(0, i - 128):max(0, i - 128) + 1024]
     seg = np.pad(seg, (0, 1024 - len(seg))) * np.hanning(1024)
     sp = np.abs(np.fft.rfft(seg)) ** 2
-    cen = float((sp * np.fft.rfftfreq(1024, 1 / SR)).sum() / (sp.sum() + 1e-12))
-    return float(crest), float(np.log10(rise + 1e-4)), cen / 1000
+    fr = np.fft.rfftfreq(1024, 1 / SR)
+    cen = float((sp * fr).sum() / (sp.sum() + 1e-12))
+    lowf = float(sp[fr < 400].sum() / (sp.sum() + 1e-12))
+    after = env[i:i + SR // 2]
+    above = np.nonzero(after < 0.3 * env[i])[0]
+    width = (above[0] if len(above) else len(after)) / SR
+    return float(crest), float(np.log10(rise + 1e-4)), cen / 1000, float(np.log10(width + 1e-4)), lowf
 
 
-EVENT_DIM = N_MELS * 4 + 13
+EVENT_DIM = N_MELS * 4 + 18
 N_CEP = 24
 N_HARM = 24
 
@@ -210,6 +244,30 @@ def _detrend(f: np.ndarray, db: np.ndarray) -> np.ndarray:
     """Убрать наклон (дБ на герц): дальность гасит высокие частоты ровно по прямой — катер от неё не меняется."""
     k = np.polyfit(f, db, 1)
     return db - np.polyval(k, f)
+
+
+N_DEMON = 48
+
+
+def demon(x: np.ndarray, f0: float) -> np.ndarray:
+    """DEMON — приём подводной акустики: огибающая шума винта (1–6 кГц) и её ритм. В нём линии частоты
+    вала, лопастей и вспышек мотора; в долях основной частоты они постоянны для катера (лопасти,
+    редуктор, цилиндры) и почти не зависят от оборотов и отражений мелководья."""
+    X = np.fft.rfft(x)
+    f = np.fft.rfftfreq(len(x), 1 / SR)
+    bp = np.fft.irfft(X * ((f >= 1000) & (f <= 6000)), len(x))
+    env = np.abs(bp)
+    k = SR // 1000
+    env = env[: len(env) // k * k].reshape(-1, k).mean(1)                 # огибающая с частотой 1 кГц
+    env = (env - env.mean()) * np.hanning(len(env))
+    E = np.abs(np.fft.rfft(env, 8192)) ** 2
+    fe = np.fft.rfftfreq(8192, 1 / 1000)
+    ratios = np.arange(1, N_DEMON + 1) / 4                                  # 0,25…12 основной частоты
+    lo = np.floor((ratios - 0.125) * f0 / fe[1]).astype(int)
+    hi = np.ceil((ratios + 0.125) * f0 / fe[1]).astype(int) + 1
+    vals = np.array([E[max(1, a):min(len(E), b)].max() if a < len(E) - 1 else E.min() for a, b in zip(lo, hi)])
+    v = 10 * np.log10(vals + 1e-12)
+    return (v - v.max()) / 10
 
 
 def vessel_features(x: np.ndarray) -> np.ndarray:
@@ -234,10 +292,10 @@ def vessel_features(x: np.ndarray) -> np.ndarray:
     h = np.pad(h - h.max(), (0, N_HARM - len(h)), constant_values=-30) if len(h) else np.full(N_HARM, -30.0)
     L = logmel(x)
     m = _detrend(mel_centers(), L.mean(0))
-    return np.concatenate([c, h / 10, m / 10, [np.log(f0)]]).astype(np.float32)
+    return np.concatenate([c, h / 10, m / 10, demon(x, f0), [np.log(f0)]]).astype(np.float32)
 
 
-VESSEL_DIM = N_CEP + N_HARM + N_MELS + 1
+VESSEL_DIM = N_CEP + N_HARM + N_MELS + N_DEMON + 1
 
 
 def rms_db(x: np.ndarray) -> float:
