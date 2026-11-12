@@ -8,15 +8,29 @@ body { -webkit-font-smoothing: antialiased; }
 
 .cap { font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--c-text-2); }
 
-/* карта в цветах бренда */
+/* ---------- карта: общее ---------- */
 .leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
-.leaflet-bar a, .leaflet-bar a:hover { background: var(--c-surface); color: var(--c-text); border-color: var(--c-line); }
 .leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--c-text-2) !important; }
 .leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: none; font-size: 12px; padding: 4px 8px; }
 .leaflet-tooltip.tip::before { display: none; }
-.sector-label { font-family: var(--font-mono); font-size: 11px; color: var(--c-grey); white-space: nowrap; }
-.sector-label.hot { color: var(--c-warn); }
+
+/* номер сектора — в верхнем левом углу ячейки */
+.sector-label { display: inline-flex; align-items: center; height: 20px; min-width: 20px; padding: 0 6px; box-sizing: border-box; justify-content: center;
+  border-radius: 5px; background: rgba(11, 22, 40, .78); border: 1px solid rgba(226, 232, 240, .18);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--c-text-2); white-space: nowrap; }
+.sector-label.hot { color: var(--c-warn); border-color: rgba(245, 158, 11, .7); background: rgba(11, 22, 40, .88); }
+.sector-label span { margin-left: 4px; font-family: var(--font-sans); font-size: 11px; }
+
+/* подпись объекта справа от значка */
+.map-label { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
+  font-family: var(--font-sans); font-size: 11px; font-weight: 500; line-height: 14px; color: var(--c-primary);
+  text-shadow: 0 0 2px var(--c-bg), 0 0 3px var(--c-bg), 0 0 6px var(--c-bg); }
+.buoy--alert .map-label { font-weight: 600; font-size: 12px; }
+.buoy--offline .map-label { color: var(--c-text-2); }
+
+/* компактный режим (узкий экран, общий план): без названий буёв и пояснений у секторов */
+.compact .buoy .map-label, .compact .sector-label span { display: none; }
 
 /* буй — «кольцо с точкой», как нуль в надписи 404 */
 .buoy { position: relative; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--c-accent); background: var(--c-bg);
@@ -32,12 +46,16 @@ body { -webkit-font-smoothing: antialiased; }
 .buoy--alert .pulse.p2 { animation-delay: .8s; }
 @keyframes pulse { from { transform: scale(.45); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
 
-.inspector { width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); box-shadow: 0 0 0 5px rgba(226, 232, 240, .18); }
+/* вы — катер инспектора */
+.inspector { position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); border: 2px solid var(--c-bg);
+  box-sizing: border-box; box-shadow: 0 0 0 4px rgba(226, 232, 240, .25); }
+.inspector .map-label { left: calc(100% + 8px); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) { .buoy--alert .pulse { animation: none; opacity: .4; } }
 
-/* подписи поверх спутникового снимка Яндекса */
-.on-photo .sector-label { color: var(--c-primary); text-shadow: 0 1px 2px rgba(0, 0, 0, .85); }
-.on-photo .sector-label.hot { color: var(--c-warn); }
 .route-label { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; background: var(--c-surface); color: var(--c-text);
   border: 1px solid var(--c-line); border-radius: 6px; padding: 3px 7px; font-size: 12px; font-family: var(--font-sans); }
+
+/* ---------- спутник (Яндекс): снимок приглушён, чтобы швы мозаики не спорили со слоем 404 ---------- */
+.map-photo [class*="-ground-pane"] { filter: saturate(.55) brightness(.78) contrast(1.06); }
+.map-photo .map-label { text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); }

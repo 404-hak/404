@@ -16,3 +16,9 @@ export const shortHash = (h: string) => `${h.slice(0, 4)}…${h.slice(-4)}`;
 export const KIND_TITLE: Record<string, string> = {
   motor: 'Мотор', shot: 'Выстрел', silence: 'Тишина как улика', offline: 'Буй молчит',
 };
+
+/** 1 буй, 2 буя, 5 буёв */
+export const plural = (n: number, [one, few, many]: [string, string, string]) => {
+  const d = n % 10, h = n % 100;
+  return `${n}\u00a0${d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many}`;
+};
