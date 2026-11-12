@@ -44,6 +44,16 @@ function markTilt(t: number) {
   return 7 * Math.exp(-1.4 * tau) * Math.sin(6 * tau) + 1.2 * Math.sin(1.3 * t);
 }
 
+/** ?introAt=3.5 — стоп-кадр интро на нужной секунде (скриншоты для слайдов) */
+function frozenAt(): number | null {
+  try {
+    const v = new URLSearchParams(location.search).get('introAt');
+    return v != null && v !== '' && !Number.isNaN(+v) ? +v : null;
+  } catch {
+    return null;
+  }
+}
+
 function useScene() {
   return useMemo(() => {
     const r = rng(404);
@@ -75,7 +85,8 @@ export default function Intro({ onDone }: { onDone: () => void }) {
   const scheduled = useRef(false);
   const done = useRef(false);
 
-  const now = () => (performance.now() - born.current) / 1000;
+  const freeze = useRef(frozenAt());
+  const now = () => freeze.current ?? (performance.now() - born.current) / 1000;
 
   const finish = useCallback(() => {
     if (done.current) return;
@@ -95,7 +106,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
     const loop = () => {
       const tt = now();
       setT(tt);
-      if (tt >= T_OUT + OUT) finish();
+      if (tt >= T_OUT + OUT && freeze.current == null) finish();
       else raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -106,7 +117,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
   // звук: пробуем сразу; если браузер не разрешил — по первому касанию, с текущего момента сцены
   useEffect(() => {
-    if (!soundOn) return;
+    if (!soundOn || freeze.current != null) return;
     let s: SeaSound;
     try { s = new SeaSound(); } catch { return; }
     sound.current = s;
