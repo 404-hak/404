@@ -89,7 +89,6 @@ function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) 
 
 /** Карта с одинаковым управлением для спутника и схемы. */
 export default function MapShell({ state, handle }: { state: State; handle: MutableRefObject<MapHandle | null> }) {
-  const [photoOk, setPhotoOk] = useState(hasYandexKey);
   const [basemap, setBasemap] = useState<Basemap>(hasYandexKey ? 'photo' : 'scheme');
   const [notice, setNotice] = useState<string | null>(null);
   const intercept = state.alerts.some((a) => a.status === 'intercept');
@@ -103,9 +102,9 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
     <div ref={root} className="relative h-full w-full overflow-hidden">
       {basemap === 'photo' ? (
         <YandexMapView state={state} handle={handle} onFail={(why) => {
-          setPhotoOk(false);
+          // кнопка «Спутник» остаётся активной: нажатие повторит загрузку без перезагрузки страницы
           setBasemap('scheme');
-          setNotice(`Спутник недоступен (${why}) — показана офлайн-схема`);
+          setNotice(`Спутник недоступен: ${why}. Показана офлайн-схема — кнопка «Спутник» попробует снова.`);
         }} />
       ) : (
         <MapView state={state} handle={handle} />
@@ -115,15 +114,17 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
         {/* подложка */}
         <div className="pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] backdrop-blur"
           role="group" aria-label="Подложка карты">
-          <button type="button" className={seg(basemap === 'photo')} disabled={!photoOk}
+          <button type="button" className={seg(basemap === 'photo')} disabled={!hasYandexKey}
             onClick={() => { setNotice(null); setBasemap('photo'); }}
-            title={photoOk ? 'Спутниковый снимок (Яндекс Карты)' : 'Нужен ключ Яндекс Карт и интернет'}>Спутник</button>
+            title={hasYandexKey ? 'Спутниковый снимок (Яндекс Карты)' : 'Нужен ключ Яндекс Карт (VITE_YANDEX_MAPS_KEY)'}>Спутник</button>
           <button type="button" className={seg(basemap === 'scheme')} onClick={() => setBasemap('scheme')}
             title="Офлайн-схема, работает без интернета">Схема</button>
         </div>
         {notice && (
-          <div className="absolute right-3 top-[56px] max-w-[300px] rounded-[9px] border border-line bg-bg/95 px-3 py-2 text-[12px] leading-[17px] text-muted">
-            {notice}
+          <div className="pointer-events-auto absolute right-3 top-[56px] flex max-w-[340px] gap-2 rounded-[9px] border border-line bg-bg/95 py-2 pl-3 pr-2 text-[12px] leading-[17px] text-muted">
+            <span>{notice}</span>
+            <button type="button" onClick={() => setNotice(null)} aria-label="Закрыть сообщение" title="Закрыть"
+              className="-mt-0.5 h-5 shrink-0 px-1 hover:text-primary">✕</button>
           </div>
         )}
 
