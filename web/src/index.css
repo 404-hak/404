@@ -223,3 +223,15 @@ body { -webkit-font-smoothing: antialiased; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important;
     transition-duration: .001ms !important; }
 }
+
+/* камыш дельты: интро и фон */
+.reed { transform-box: fill-box; transform-origin: 50% 100%; animation: reed-sway 6s ease-in-out infinite alternate; }
+@keyframes reed-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.8deg); } }
+.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: #030812; opacity: .95; filter: blur(2px); }
+.sea .reeds-left { left: -1vw; }
+.sea .reeds-right { right: -1vw; }
+.sea .mist { position: absolute; left: -15%; right: -15%; top: calc(20% - 6vh); height: 12vh; pointer-events: none;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(226, 232, 240, .07), rgba(226, 232, 240, 0) 70%); filter: blur(10px);
+  animation: mist 46s ease-in-out infinite alternate; }
+@keyframes mist { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
+@media (prefers-reduced-motion: reduce) { .reed, .sea .mist { animation: none; } }

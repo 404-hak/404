@@ -13,6 +13,19 @@ export class SeaSound {
     this.master.connect(this.ctx.destination);
   }
 
+  get running() {
+    return this.ctx.state === 'running';
+  }
+
+  /** Попытка включить звук. Без клика браузер может не разрешить — тогда false, ждём касания. */
+  async resume(waitMs = 300): Promise<boolean> {
+    if (this.running) return true;
+    try {
+      await Promise.race([this.ctx.resume(), new Promise((r) => window.setTimeout(r, waitMs))]);
+    } catch { /* не разрешили */ }
+    return this.running;
+  }
+
   /** Момент «сейчас» по часам звука + смещение в секундах */
   at(offset: number) {
     return this.ctx.currentTime + offset;
