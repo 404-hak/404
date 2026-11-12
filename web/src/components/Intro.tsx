@@ -22,11 +22,34 @@ import { setIntroCover, setIntroPlaying, whenAppSettled } from '../introBus';
 const W = 1600, H = 900, HORIZON = 470, WATER = 610, CX = 800;
 const MARK_RATIO = 819.83 / 1250;        // ширина / высота знака (brand/src/mark-data.mjs)
 const MH = 210, MW = MH * MARK_RATIO;
-const START = -MH - 60;
-const T_IN = 1.1, T_DROP = 0.7;
+const T_IN = 1.1;
 const T_PING = 2.8, T_WORD = 3.2, T_TAG = 3.8, T_OUT = 5.8, OUT = 0.9;
 
-// ---------- поплавок: падение и плавучесть ----------
+// ---------- заброс: поплавок летит удочкой ----------
+/**
+ * Поплавок забрасывают с берега у камеры: он вылетает снизу слева, по дуге уходит вдаль
+ * (уменьшается — перспектива), в полёте чуть кувыркается, за ним тянется леска.
+ * Дуга подобрана так, что в момент касания воды скорость совпадает с физикой плавучести ниже.
+ */
+const T_CAST = 0.3, T_HIT = 1.45, V_HIT = 1500;
+const FLIGHT = T_HIT - T_CAST;
+const PIV = 0.6;                                   // точка вращения — на 60 % высоты (там ватерлиния в покое)
+const LAUNCH = { x: -230, y: 975, s: 1.55 };       // откуда летит: у камеры, снизу слева
+const ROD = { x: -170, y: -150 };                  // кончик удилища — за кадром слева вверху
+/** На узком экране края кадра обрезаны — бросок и удилище привязаны к видимому левому краю */
+function fitToView(vw: number, vh: number) {
+  const s = Math.max(vw / W, vh / H), x0 = Math.max(0, -((vw - W * s) / 2) / s);
+  LAUNCH.x = x0 - 230;
+  ROD.x = x0 - 170;
+}
+const HIT_TOP = WATER - 0.78 * MH;                 // касание — когда в воду входит сердцевина
+const HIT_PY = HIT_TOP + PIV * MH;
+const G_ARC = (2 * (LAUNCH.y + V_HIT * FLIGHT - HIT_PY)) / FLIGHT ** 2;
+const VY0 = V_HIT - G_ARC * FLIGHT;
+const REST_TILT = -17;                             // в покое лежит бочком — леска тянет к рыбаку
+const HIT_TILT = -9;
+
+// ---------- поплавок в воде: плавучесть ----------
 /** Силуэт знака по высоте — 20 полос сверху вниз: сколько воды он вытесняет на этой глубине */
 const AREA = [0, 2, 3, 4, 26, 45, 34, 110, 132, 105, 74, 57, 48, 38, 21, 11, 5, 4, 3, 2];
 /** Погружённая площадь, если ватерлиния на доле h высоты знака сверху (h < 0 — целиком под водой) */
@@ -38,61 +61,76 @@ function submerged(h: number) {
 const EQ = 0.6;                            // в покое ватерлиния на 60 % высоты: в воде низ сердцевины и игла
 const DT = 1 / 240;
 /**
- * Траектория считается один раз: тяжесть, выталкивающая сила по погружённой части силуэта,
- * сопротивление воды (вязкое и квадратичное) и воздуха. Удар — когда в воду входит сердцевина.
- * Развороты качания запоминаем: от каждого по воде пойдут круги.
+ * После касания — один расчёт: тяжесть, выталкивающая сила по погружённой части силуэта,
+ * сопротивление воды (вязкое и квадратичное) и воздуха. Развороты качания запоминаем:
+ * от каждого по воде пойдёт цуг волн.
  */
 const PATH = (() => {
   const G = 2600, C1 = 10, C2 = 0.005, AIR = 0.1, TOTAL = submerged(-1), SUB_EQ = submerged(EQ);
-  const n = Math.ceil((T_OUT + OUT + 1 - T_DROP) / DT);
+  const n = Math.ceil((T_OUT + OUT + 1 - T_HIT) / DT);
   const top = new Float32Array(n), vel = new Float32Array(n);
-  let y = START, v = 300, hit = -1;
+  let y = HIT_TOP, v = V_HIT;
   const turns: { t: number; amp: number }[] = [];
   let lastTurnH = 0.78;
   for (let i = 0; i < n; i++) {
     top[i] = y; vel[i] = v;
-    const t = T_DROP + i * DT, h = (WATER - y) / MH;
+    const t = T_HIT + i * DT, h = (WATER - y) / MH;
     const sub = submerged(h);
     const a = G - (G * sub) / SUB_EQ - (C1 * v + C2 * v * Math.abs(v)) * Math.sqrt(sub / TOTAL) - AIR * v;
     const nv = v + a * DT;
-    if (hit < 0 && h <= 0.78) hit = t;
-    if (hit > 0 && Math.sign(nv) !== Math.sign(v)) { turns.push({ t, amp: Math.abs(h - lastTurnH) }); lastTurnH = h; }
+    if (Math.sign(nv) !== Math.sign(v)) { turns.push({ t, amp: Math.abs(h - lastTurnH) }); lastTurnH = h; }
     v = nv; y += v * DT;
   }
-  return { top, vel, hit, turns };
+  return { top, vel, turns };
 })();
-const T_HIT = PATH.hit;
 const sample = (arr: Float32Array, t: number) => {
-  const x = Math.min(arr.length - 1.001, Math.max(0, (t - T_DROP) / DT)), i = Math.floor(x);
+  const x = Math.min(arr.length - 1.001, Math.max(0, (t - T_HIT) / DT)), i = Math.floor(x);
   return arr[i] + (arr[i + 1] - arr[i]) * (x - i);
 };
-/** Верх знака: траектория плюс лёгкая качка на волне, когда поплавок успокоился */
-function markTop(t: number) {
-  if (t < T_DROP) return START;
-  const wave = t > T_HIT ? 2.5 * Math.sin(1.6 * t) * (1 - Math.exp(-(t - T_HIT) * 0.7)) : 0;
-  return sample(PATH.top, t) + wave;
-}
-const markVel = (t: number) => (t < T_DROP ? 0 : sample(PATH.vel, t));
-function markTilt(t: number) {
-  if (t < T_HIT) return 4 * Math.sin((t - T_DROP) * 4);
+const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k); };
+
+interface Pose { x: number; py: number; s: number; tilt: number; vx: number; vy: number }
+/** Где поплавок: x и y точки вращения, масштаб (ближе к камере — крупнее), наклон, скорость */
+function pose(t: number): Pose {
+  if (t < T_HIT) {
+    const tau = Math.max(0, t - T_CAST), u = tau / FLIGHT;
+    // по горизонтали — замедляется, уходя вдаль; по вертикали — бросок под тяжестью
+    const x = LAUNCH.x + (CX - LAUNCH.x) * (u + 0.45 * u * (1 - u));
+    const vx = ((CX - LAUNCH.x) * (1 + 0.45 * (1 - 2 * u))) / FLIGHT;
+    const py = LAUNCH.y + VY0 * tau + 0.5 * G_ARC * tau * tau;
+    const sc = 1 + (LAUNCH.s - 1) * (1 - u) ** 1.3;
+    // в полёте тянется за леской и чуть кувыркается, к воде выпрямляется
+    const tilt = -58 + (HIT_TILT + 58) * smooth(u) + 9 * Math.sin(u * Math.PI * 2.5) * (1 - u);
+    return { x, py, s: sc, tilt, vx, vy: VY0 + G_ARC * tau };
+  }
   const tau = t - T_HIT;
-  return 6 * Math.exp(-1.3 * tau) * Math.sin(5.5 * tau) + 1.1 * Math.sin(1.3 * t);
+  const wave = 2.5 * Math.sin(1.6 * t) * (1 - Math.exp(-tau * 0.7));
+  const top = sample(PATH.top, t) + wave;
+  // качается вокруг наклона покоя: от удара — затухающе, потом едва заметно на волне
+  const tilt = REST_TILT + (HIT_TILT - REST_TILT) * Math.exp(-2.4 * tau)
+    + 6 * Math.exp(-1.3 * tau) * Math.sin(5.5 * tau) + 1.1 * Math.sin(1.3 * t) * (1 - Math.exp(-tau));
+  return { x: CX, py: top + PIV * MH, s: 1, tilt, vx: 0, vy: sample(PATH.vel, t) };
 }
+const topOf = (p: Pose) => p.py - PIV * MH * p.s;
 
 /**
- * Круги на воде для шейдера (в единицах плоскости воды): от удара — три, от каждого разворота
- * качания — по одному, слабее; сигнал сонара — два кольца цветом акцента. Берём шесть самых заметных.
+ * Волны от поплавка для шейдера (в единицах плоскости воды): от удара и от каждого разворота качания
+ * расходится цуг из нескольких гребней — он расплывается и слабеет с расстоянием, как на настоящей воде.
+ * Сигнал сонара — два кольца цветом акцента. Берём шесть самых заметных.
+ * Формат: радиус середины цуга, сила, ширина огибающей, вид (0 — вода, 1 — сонар).
  */
 function ringsAt(t: number) {
   const all: number[][] = [];
-  const add = (t0: number, speed: number, amp: number, width: number, kind: number, r0 = 0.12, life = 3.6) => {
+  const add = (t0: number, speed: number, amp: number, width: number, kind: number, r0 = 0.1, life = 4) => {
     const age = t - t0;
     if (age <= 0 || age > life) return;
-    const k = amp * Math.exp(-age * (kind ? 1.1 : 0.85)) * Math.min(1, age * 8);
-    if (k > 0.01) all.push([r0 + speed * age, k, width * (1 + age * 0.6), kind]);
+    const r = r0 + speed * age;
+    const k = amp * Math.exp(-age * (kind ? 1.1 : 0.7)) * Math.min(1, age * 6) / Math.sqrt(1 + r / 0.35);
+    if (k > 0.01) all.push([r, k, width * (1 + age * 0.9), kind]);
   };
-  [0, 0.16, 0.32].forEach((d, i) => add(T_HIT + d, 0.85, [1, 0.7, 0.45][i], 0.05, 0));
-  PATH.turns.slice(0, 6).forEach((e) => add(e.t, 0.6, Math.min(0.8, e.amp * 1.6), 0.04, 0));
+  add(T_HIT, 0.62, 1, 0.075, 0);
+  add(T_HIT + 0.2, 0.5, 0.55, 0.06, 0);
+  PATH.turns.slice(0, 5).forEach((e) => add(e.t, 0.45, Math.min(0.6, e.amp * 1.4), 0.05, 0));
   [0, 0.45].forEach((d) => add(T_PING + d, 1.7, 0.9, 0.035, 1, 0.1, 2.2));
   all.sort((a, b) => b[1] - a[1]);
   const out = new Float32Array(24);
@@ -198,7 +236,7 @@ function useScene() {
     // брызги: корона у места удара — вверх и в стороны, крупные капли ниже, мелкие выше
     const drops = Array.from({ length: 30 }, () => {
       const a = (35 + r() * 110) * (Math.PI / 180), sp = 260 + r() * 520;
-      return { x0: (r() - 0.5) * MW * 0.7, vx: Math.cos(a) * sp * 0.7, vy: -Math.sin(a) * sp, r: 1.2 + r() * 2.6 };
+      return { x0: (r() - 0.5) * MW * 0.7, vx: Math.cos(a) * sp * 0.7 + 110, vy: -Math.sin(a) * sp, r: 1.2 + r() * 2.6 };
     });
     const bubbles = Array.from({ length: 9 }, (_, i) => ({ t: T_HIT + 0.15 + i * 0.14 + r() * 0.12, dx: (r() - 0.5) * MW * 0.9, f: 600 + r() * 500 }));
     const shore = (x0: number, x1: number) => {
@@ -249,6 +287,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   useLayoutEffect(() => {
     setIntroCover(true);
     setIntroPlaying(true);
+    fitToView(innerWidth, innerHeight);               // и для запасной сцены без видеокарты
     let gfx: Sea | null = null;
     try { gfx = cvRef.current ? createSea(cvRef.current, new URLSearchParams(location.search).has('sea'), { scale: 0.45, intro: true }) : null; } catch { gfx = null; }
     setGl(!!gfx);
@@ -268,7 +307,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
       g.setMark(c);
     };
     img.src = C.mark;
-    const resize = () => g.resize(innerWidth, innerHeight);
+    const resize = () => { fitToView(innerWidth, innerHeight); g.resize(innerWidth, innerHeight); };
     resize();
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); g.dispose(); sea.current = null; setIntroCover(false); setIntroPlaying(false); };
@@ -299,19 +338,23 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     f.pulse = [0, 0, 0, 0];
     // поплавок в воде: опора на ватерлинии, верх и высота знака, наклон; где тело входит в воду
     const asp = innerWidth / innerHeight;
-    const [px, wl] = v.toUv(CX, WATER);
-    const top = markTop(tt), tilt = (markTilt(tt) * Math.PI) / 180;
-    const hUv = v.toUv(0, 0)[1] - v.toUv(0, MH)[1];
+    const P = pose(tt), top = topOf(P), tilt = (P.tilt * Math.PI) / 180;
+    const [px] = v.toUv(P.x, WATER);
+    const [ix, wl] = v.toUv(CX, WATER);
+    const hUv = (v.toUv(0, 0)[1] - v.toUv(0, MH)[1]) * P.s;
+    const inWater = tt >= T_HIT;
+    // отражение в воде проявляется, когда поплавок подлетает к ней
+    const near = inWater ? 1 : smooth((top + MH * P.s - (WATER - 240)) / 240);
     const cont = new Float32Array(8);
-    if (st.mask && tt >= T_DROP) {
+    if (st.mask && inWater) {
       const segs = contactsAt(st.mask, (WATER - top) / MH);
       const wA = hUv * MARK_RATIO * Math.cos(tilt);
       segs.forEach((sg, i) => cont.set([px * asp + (sg[0] - 0.5) * wA, px * asp + (sg[1] - 0.5) * wA], i * 2));
     }
     f.intro = {
       mark: [px * asp, wl + shift, v.toUv(0, top)[1] + shift, hUv],
-      mark2: [Math.cos(tilt), Math.sin(tilt), MARK_RATIO, st.mask && tt >= T_DROP ? 1 : 0],
-      rings: ringsAt(tt), accent: hex(C.accent), imp: [px, wl + shift], cont,
+      mark2: [Math.cos(tilt), Math.sin(tilt), MARK_RATIO, st.mask && tt >= T_CAST ? near : 0],
+      rings: ringsAt(tt), accent: hex(C.accent), imp: [ix, wl + shift], cont,
       foam: tt > T_HIT ? Math.max(0, 1 - (tt - T_HIT) / 0.9) : 0,
     };
     f.t = freeze.current ?? seaClock();
@@ -380,7 +423,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
       const at = now();
       const ev = (time: number, fn: (when: number) => void) => { if (time >= at - 0.05) fn(s.at(Math.max(0, time - at))); };
       s.startWaves();
-      if (at < T_HIT) ev(T_DROP + 0.05, (w) => s.whoosh(w, Math.max(0.1, T_HIT - Math.max(at, T_DROP + 0.05))));
+      if (at < T_HIT) ev(T_CAST + 0.05, (w) => s.whoosh(w, Math.max(0.1, T_HIT - Math.max(at, T_CAST + 0.05))));
       ev(T_HIT, (w) => s.plop(w));
       scene.bubbles.forEach((b) => ev(b.t, (w) => s.bubble(w, b.f)));
       ev(T_PING, (w) => s.ping(w));
@@ -397,11 +440,9 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
 
   // ---------- кадр ----------
   const T = t;                                   // время сцены
-  const fallen = t >= T_DROP;
+  const fallen = t >= T_CAST;
   const tau = t - T_HIT;
-  const top = fallen ? markTop(t) : START;
-  const tilt = fallen ? markTilt(t) : 0;
-  const vy = markVel(t);
+  const P = pose(t);
 
   // камера: наводка резкости в начале, растворение в конце
   const inK = easeOut(t / T_IN), outK = ease((t - T_OUT) / OUT);
@@ -411,16 +452,27 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const viewScale = Math.max(innerWidth / W, innerHeight / H);
   const midBlur = gl && camBlur > 0.2 ? { filter: `blur(${camBlur}px)` } : undefined;
 
-  const markAt = (dy = 0) => (
-    <g transform={`rotate(${tilt} ${CX} ${WATER}) translate(${CX - MW / 2} ${top + dy})`}>
+  const markAt = (dx = 0, dy = 0) => (
+    <g transform={`translate(${P.x + dx} ${P.py + dy}) rotate(${P.tilt}) scale(${P.s}) translate(${-MW / 2} ${-PIV * MH})`}>
       <image href={C.mark} width={MW} height={MH} />
     </g>
   );
   const markG = markAt();
-  // смаз падения без фильтра: пара бледных копий выше по траектории
-  const trail = fallen && vy > 700 && top < WATER - 0.7 * MH ? [1, 2, 3].map((i) => (
-    <g key={`tr${i}`} opacity={0.22 / i}>{markAt(-vy * 0.009 * i)}</g>
+  // смаз полёта без фильтра: пара бледных копий назад по траектории
+  const speed = Math.hypot(P.vx, P.vy);
+  const trail = fallen && tau < 0 && speed > 900 ? [1, 2, 3].map((i) => (
+    <g key={`tr${i}`} opacity={0.2 / i}>{markAt(-P.vx * 0.008 * i, -P.vy * 0.008 * i)}</g>
   )) : null;
+  // леска: от кончика удилища за кадром к макушке поплавка; в полёте почти натянута,
+  // после касания провисает и ближней частью ложится на воду
+  const th = (P.tilt * Math.PI) / 180, arm = PIV * MH * P.s;
+  const tip = { x: P.x + Math.sin(th) * arm, y: P.py - Math.cos(th) * arm };
+  const slack = tau > 0 ? smooth(tau / 0.9) : 0;
+  const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+  const c1 = { x: lerp(ROD.x, tip.x, 0.33), y: lerp(ROD.y, tip.y, 0.33) + 30 + slack * 120 };
+  const c2y = lerp(ROD.y, tip.y, 0.72) + 18;
+  const c2 = { x: lerp(ROD.x, tip.x, 0.72), y: c2y + slack * (WATER + 6 - c2y) };
+  const lineD = `M${ROD.x},${ROD.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${tip.x},${tip.y}`;
   const wordK = ease((t - T_WORD) / 1.0), tagK = ease((t - T_TAG) / 0.9);
   // взгляд вниз в конце: всё, что стоит на воде, поднимается вместе с горизонтом
   const lift = gl ? (HZ - viewMap(innerWidth, innerHeight).hz) * outK * innerHeight : 0;
@@ -600,7 +652,11 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
             </>
           )}
 
-          {/* поплавок: над водой — чётко, ниже ватерлинии его рисует вода */}
+          {/* леска и поплавок: над водой — чётко, ниже ватерлинии его рисует вода */}
+          {fallen && (
+            <path d={lineD} fill="none" stroke={C.light ? '#2B3442' : '#E8EDF3'} strokeWidth={1.1} strokeLinecap="round"
+              opacity={0.42 - 0.12 * slack} />
+          )}
           {fallen && <g mask="url(#i-aboveM)">{trail}{markG}</g>}
 
           {/* брызги: корона от удара летит по дуге и падает обратно, капли вытянуты по скорости; пузыри */}

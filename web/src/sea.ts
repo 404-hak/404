@@ -110,18 +110,22 @@ void main(){
       w+=normalize(w-c+1e-4)*sin((dw-r)*9.)*ring*.18;
     }
 #ifdef INTRO
-    // круги от поплавка (гребень и ложбина) и сигнал сонара цветом акцента
+    // волны от поплавка: каждое событие — цуг из нескольких гребней под мягкой огибающей
+    // (как от брошенного в воду предмета); считаем наклон поверхности — по склонам ложатся
+    // свет и тень. Сигнал сонара — отдельные кольца цветом акцента.
     vec2 ic=plane(uImp,asp);
     float dI=distance(w*vec2(1.,.55),ic*vec2(1.,.55));
     float wave=0.,sonar=0.;
     for(int i=0;i<6;i++){
       vec4 R=uRing[i];
-      float x=(dI-R.x)/R.z;
-      float e=exp(-x*x)*R.y;
-      wave+=x*e*(1.-R.w);
-      sonar+=e*R.w;
+      float x=dI-R.x;
+      float env=exp(-x*x/(R.z*R.z))*R.y;
+      if(R.w<.5){
+        float k=18.85/R.z;                                  // около трёх гребней на ширину огибающей
+        wave+=env*sin(k*x+1.2*x/R.z);                       // впереди гребни чуть реже — дисперсия
+      }else sonar+=env;
     }
-    w+=normalize(w-ic+1e-4)*wave*.05;
+    w+=normalize(w-ic+1e-4)*wave*.022;
 #endif
     vec2 q=vec2(fbm(w*.6+vec2(t*.03,0.)),noise2(w*.9+vec2(5.2,1.3)-vec2(0.,t*.02)));
     float f=fbm(w*.6+2.*q+vec2(0.,-t*.05));
@@ -155,7 +159,7 @@ void main(){
     water+=uLine*exp(-lp*lp/(wd*wd*.6))*glit*.22*uPower;
     water+=uLine*ring*.1;
 #ifdef INTRO
-    water+=uLine*wave*.16;
+    water+=uLine*wave*.2*(1.+.5*smoothstep(.0,.6,wave));   // свет на склонах к зрителю, тень — на обратных
     water+=uAccent*(sonar*.55+sonar*sonar*.25);
     if(uFoam>0.){                                          // пена в месте удара: расходится и тает
       float fo=(1.-smoothstep(.25,1.,dI/(.12+.4*(1.-uFoam))))*smoothstep(.38,.72,noise(w*vec2(9.,16.)+vec2(0.,t*.8)));
