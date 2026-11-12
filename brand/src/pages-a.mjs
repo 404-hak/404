@@ -104,7 +104,7 @@ export const d01 = () => divider('d01', '01', 'Логотип', 'Знак, ве�
 export function p11() {
   const L = 'left:683px;width:424px;';
   return page('p11', 'dark', `
-    ${top('1.1', 'Основная версия', 'Знак — «нерв-щит»: щит из двух лезвий-волн, внутри ветвится нерв с узлами-буями. Вместе с надписью 404 образует логотип.')}
+    ${top('1.1', 'Основная версия', 'Знак — щит из двух серпов, сквозь который проходит игла-сигнал, а из неё вырастает росток. Природа под защитой сети, которая слышит. Вместе с надписью 404 образует логотип.')}
     <div class="card" style="left:63px;top:205px;width:600px;height:543px">
       <div class="abs ctr" style="inset:0 0 20px 0">${M(C.primary, 'height:352px;width:auto')}</div>
       <div class="abs cap" style="left:20px;bottom:20px">Primary ${C.primary} на Background ${C.bg}</div>
@@ -112,10 +112,10 @@ export function p11() {
     ${box(L + 'top:203px', '<span class="cap">Параметры</span>')}
     ${box(L + 'top:225px', rows([
       ['Тип', 'Комбинированный: знак + надпись'],
-      ['Форма знака', 'Щит и нерв с тремя узлами'],
+      ['Форма знака', 'Щит, игла и росток'],
       ['Надпись', '404, широкие отрисованные цифры'],
       ['Цвет', `Primary ${C.primary} на Background ${C.bg}`],
-      ['Минимальный размер знака', '8 мм / 16 px'],
+      ['Минимальный размер знака', '10 мм / 24 px'],
       ['Охранное поле', '½ высоты знака'],
     ]))}
     ${box(L + 'top:512px', '<span class="cap">Состав логотипа</span>')}
@@ -181,35 +181,36 @@ export const d02 = () => divider('d02', '02', 'Построение', 'Конс�
   ['2.1', 'Конструкция знака', 'p21'], ['2.2', 'Композиция логотипа', 'p22'], ['2.3', 'Охранное поле', 'p23'], ['2.4', 'Минимальный размер', 'p24']]);
 
 export function p21() {
-  const H = 408, s = H / MARK.h, W = MARK.w * s, mx = 118, my = 62;
+  const H = 420, s = H / MARK.h, W = MARK.w * s, mx = 150, my = 56;
   const g = 'rgba(11,22,40,.42)', bg = C.bg, dim = C.bg;
   const Y = p => my + p / 100 * H;
   const guides = [
-    [0, pct0(0), 'вершина узла'],
-    [P.topNodeBottom, pct0(P.topNodeBottom), 'нижний край узла'],
-    [P.bladeTop, pct0(P.bladeTop), 'верхние концы щита'],
-    [P.sideNodeCenter, pct0(P.sideNodeCenter), 'центры боковых узлов'],
-    [P.nerveBase, pct0(P.nerveBase), 'основания ветвей'],
-    [P.bladeBottom, pct0(P.bladeBottom), 'нижние концы щита'],
-    [100, 100, 'нижний конец стебля'],
+    [0, 'вершина иглы'],
+    [P.hornTop, 'концы щита'],
+    [P.wingTip, 'концы крыльев'],
+    [P.junction, 'точка ветвления'],
+    [P.innerBottom, 'концы лепестков'],
+    [P.outerBottom, 'нижние концы щита'],
+    [100, 'нижний конец иглы'],
   ];
   let prev = -99;
-  const lab = guides.map(([p, v, t]) => { const y = Y(p); const ly = Math.max(y, prev + 31); prev = ly; return { y, ly, v, t }; });
-  const lines = lab.map(l => `<path d="M${mx - 34},${l.y} H470" stroke="${g}" stroke-width=".9"/>` +
-    `<path d="M470,${l.y} H480 L490,${l.ly}" fill="none" stroke="${g}" stroke-width=".9"/>` +
-    `<text x="496" y="${l.ly + 3}" font-size="11" font-weight="600" fill="${bg}">${l.v} %</text>` +
-    `<text x="496" y="${l.ly + 16}" font-size="10" fill="${T_LIGHT}">${l.t}</text>`).join('');
+  const lab = guides.map(([p, t]) => { const y = Y(p); const ly = Math.max(y, prev + 31); prev = ly; return { y, ly, v: pct0(p), t }; });
+  const lines = lab.map(l => `<path d="M${mx - 34},${l.y} H486" stroke="${g}" stroke-width=".9"/>` +
+    `<path d="M486,${l.y} H494 L502,${l.ly}" fill="none" stroke="${g}" stroke-width=".9"/>` +
+    `<text x="508" y="${l.ly + 3}" font-size="11" font-weight="600" fill="${bg}">${l.v} %</text>` +
+    `<text x="508" y="${l.ly + 16}" font-size="10" fill="${T_LIGHT}">${l.t}</text>`).join('');
   const cx = mx + W / 2;
-  const ringW = P.topNodeW / 100 * W;
+  const horn = P.hornSpanW / 100 * W;
   const svg = `<svg width="660" height="543" viewBox="0 0 660 543" style="position:absolute;left:63px;top:205px;font-family:Inter">
     <path d="M${mx},${my - 16} V${my + H + 16}" stroke="${g}" stroke-width=".9"/>
     <path d="M${mx + W},${my - 16} V${my + H + 16}" stroke="${g}" stroke-width=".9"/>
+    <path d="M${cx - horn / 2},${Y(P.hornTop) - 30} V${Y(P.hornTop) + 6} M${cx + horn / 2},${Y(P.hornTop) - 30} V${Y(P.hornTop) + 6}" stroke="${g}" stroke-width=".9" stroke-dasharray="3 3"/>
     <path d="M${cx},${my - 24} V${my + H + 24}" stroke="${C.grey}" stroke-width=".9" stroke-dasharray="6 4 1.5 4"/>
     ${lines}
     <g transform="translate(${mx} ${my}) scale(${s})"><path fill="${C.bg}" d="${MARK.d}"/></g>
     ${dimV(mx - 50, my, my + H, 'H = ' + ratioMark + ' W', dim, { rot: true, off: 10 })}
     ${dimH(my + H + 34, mx, mx + W, 'W', dim, { above: false })}
-    ${dimH(my - 26, cx - ringW / 2, cx + ringW / 2, pct0(P.topNodeW) + ' % W', dim)}
+    ${dimH(Y(P.hornTop) - 26, cx - horn / 2, cx + horn / 2, pct0(P.hornSpanW) + ' % W', dim)}
   </svg>`;
   return page('p21', 'light', `
     ${top('2.1', 'Конструкция знака', 'Направляющие сняты с мастер-файла знака. Знак не перестраивается вручную — используйте файлы из пакета.')}
@@ -217,18 +218,18 @@ export function p21() {
     ${box('left:683px;top:203px', '<span class="cap">Пропорции · W — ширина, H — высота знака</span>')}
     ${box('left:683px;top:225px;width:424px', rows([
       ['Высота : ширина', `${ratioMark} : 1`],
-      ['Узел сверху', `${pct0(P.topNodeW)} % W`],
-      ['Боковые узлы', `${pct0(P.sideNodeW)} % W`],
-      ['Стебель сверху', `${pct0(P.stemTopW)} % W`],
-      ['Верхние концы щита', `${pct0(P.bladeTop)} % H от верха`],
-      ['Основания ветвей', `${pct0(P.nerveBase)} % H от верха`],
-      ['Нижние концы щита', `${pct0(P.bladeBottom)} % H от верха`],
+      ['Между концами щита', `${pct0(P.hornSpanW)} % W`],
+      ['Между концами крыльев', `${pct0(P.wingSpanW)} % W`],
+      ['Концы щита', `${pct0(P.hornTop)} % H от верха`],
+      ['Точка ветвления', `${pct0(P.junction)} % H от верха`],
+      ['Нижние концы щита', `${pct0(P.outerBottom)} % H от верха`],
+      ['Игла', 'проходит знак насквозь, 100 % H'],
     ], { cols: 'c2' }))}
     ${box('left:683px;top:517px;display:flex;gap:26px;font-size:11px;color:' + T_LIGHT, `
       <span style="display:flex;align-items:center;gap:8px"><svg width="34" height="2"><path d="M0,1H34" stroke="${g}" stroke-width="1.2"/></svg>Направляющие</span>
       <span style="display:flex;align-items:center;gap:8px"><svg width="34" height="2"><path d="M0,1H34" stroke="${C.grey}" stroke-width="1.2" stroke-dasharray="6 4 1.5 4"/></svg>Ось симметрии</span>
       <span style="display:flex;align-items:center;gap:8px"><svg width="34" height="2"><path d="M0,1H34" stroke="${C.bg}" stroke-width="1.2"/></svg>Размеры</span>`)}
-    ${box('left:683px;top:652px;width:424px', '<div class="t12" style="font-size:12.5px;line-height:19px">Знак — щит из двух лезвий-волн; внутри него ветвится нерв с узлами-буями. Три узла — кольцо с точкой — это тот же глиф, что нуль в надписи 404. Знак симметричен, пропорции неизменны при любом масштабе.</div>')}
+    ${box('left:683px;top:652px;width:424px', '<div class="t12" style="font-size:12.5px;line-height:19px">Щит из двух серпов — защита. Игла проходит знак насквозь — гидрофон, опущенный в воду, и сигнал сети. Из иглы растут крылья и лепестки — жизнь дельты. Знак симметричен, пропорции неизменны при любом масштабе.</div>')}
   `, { label: 'Построение', num: '02' });
 }
 
@@ -325,21 +326,21 @@ export function p23() {
 
 export function p24() {
   const mkDim = (inner) => `<svg width="334" height="330" style="position:absolute;inset:0;font-family:Inter">${inner}</svg>`;
-  const hM = 8 * MM, wH = 35 * MM, wV = 18 * MM;
+  const hM = 10 * MM, wH = 40 * MM, wV = 20 * MM;
   const wM = MARK.w * hM / MARK.h;
   const cA = `<div class="abs ctr" style="inset:0">${M(C.bg, `height:${hM}px;width:auto`)}</div>` +
-    mkDim(`${dimV(167 + wM / 2 + 14, 165 - hM / 2, 165 + hM / 2, '8 мм', C.bg, { rot: false, side: 'right', off: 8 })}`);
+    mkDim(`${dimV(167 + wM / 2 + 14, 165 - hM / 2, 165 + hM / 2, '10 мм', C.bg, { rot: false, side: 'right', off: 8 })}`);
   const lhH = wH / LOCKUP_H.w * LOCKUP_H.h;
   const cB = `<div class="abs ctr" style="inset:0">${LH(C.bg, `width:${wH}px;height:auto`)}</div>` +
-    mkDim(dimH(165 + lhH / 2 + 22, 167 - wH / 2, 167 + wH / 2, '35 мм', C.bg, { above: false }));
+    mkDim(dimH(165 + lhH / 2 + 22, 167 - wH / 2, 167 + wH / 2, '40 мм', C.bg, { above: false }));
   const lhV = wV / LOCKUP_V.w * LOCKUP_V.h;
   const cC = `<div class="abs ctr" style="inset:0">${LV(C.bg, `width:${wV}px;height:auto`)}</div>` +
-    mkDim(dimH(165 + lhV / 2 + 22, 167 - wV / 2, 167 + wV / 2, '18 мм', C.bg, { above: false }));
+    mkDim(dimH(165 + lhV / 2 + 22, 167 - wV / 2, 167 + wV / 2, '20 мм', C.bg, { above: false }));
   const xs = [63, 418, 772];
   const cards = [cA, cB, cC].map((c, i) => `<div class="card" style="left:${xs[i]}px;top:205px;width:334px;height:330px">${c}<div class="abs cap" style="left:20px;bottom:20px">Масштаб 1:1</div></div>`).join('');
-  const names = [['Знак', '8 мм / 16 px по высоте'], ['Горизонтальный логотип', '35 мм / 72 px по ширине'], ['Вертикальный логотип', '18 мм / 64 px по ширине']];
+  const names = [['Знак', '10 мм / 24 px по высоте'], ['Горизонтальный логотип', '40 мм / 96 px по ширине'], ['Вертикальный логотип', '20 мм / 64 px по ширине']];
   const notes = [
-    ['Мельче — только знак', 'Меньше 16 px используется только знак — например, в фавиконе.'],
+    ['Мельче — только знак', 'Меньше 24 px используется только знак, укрупнённый в плашке, — как в фавиконе.'],
     ['Образцы', 'Логотипы на этой странице показаны в натуральную величину при печати в масштабе 100 % на листе A4.'],
     ['Мелкие носители', 'Если логотип не помещается в минимальный размер, используйте знак отдельно.'],
   ];

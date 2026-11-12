@@ -14,11 +14,14 @@ const sized = (svg, w, h) => svg.replace('<svg ', `<svg width="${w}" height="${h
 const write = (p, data) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, data); };
 
 // клад-плитка: знак по центру плашки, высота знака = frac стороны
-export function tileSVG(size, bg, fg, { radius = 0, frac = 0.56 } = {}) {
+export function tileSVG(size, bg, fg, { radius = 0, frac = 0.62, boldPx = 0, outPx = size } = {}) {
   const h = size * frac, w = MARK.w * h / MARK.h;
   const s = h / MARK.h;
   const rect = radius ? `<rect width="${size}" height="${size}" rx="${size * radius}" fill="${bg}"/>` : `<rect width="${size}" height="${size}" fill="${bg}"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">${rect}<path transform="translate(${(size - w) / 2} ${(size - h) / 2}) scale(${s})" fill="${fg}" d="${MARK.d}"/></svg>`;
+  // boldPx: утолщение штрихов в пикселях итогового растра — оптическая версия для 16–48 px
+  const sw = boldPx ? boldPx * (size / outPx) / s : 0;
+  const stroke = sw ? ` stroke="${fg}" stroke-width="${sw.toFixed(1)}" stroke-linejoin="round"` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">${rect}<path transform="translate(${(size - w) / 2} ${(size - h) / 2}) scale(${s})" fill="${fg}"${stroke} d="${MARK.d}"/></svg>`;
 }
 // знак на прозрачном квадрате
 const markSquare = (size, fg, frac = 0.8) => {
@@ -111,8 +114,8 @@ export async function buildPackage(browser, outDir) {
   await png('png/app-icon/404-icon-dark-square-1024.png', tileSVG(1024, C.bg, C.primary), 1024, 1024);
   await png('png/app-icon/404-icon-light-square-1024.png', tileSVG(1024, C.primary, C.bg), 1024, 1024);
   // ---- favicon (6) ----
-  add('favicon/favicon.svg', tileSVG(64, C.bg, C.primary, { radius: 0.224 }));
-  await png('favicon/favicon-32.png', tileSVG(64, C.bg, C.primary, { radius: 0.224 }), 32, 32);
+  add('favicon/favicon.svg', tileSVG(64, C.bg, C.primary, { radius: 0.224, frac: 0.78, boldPx: 0.5, outPx: 32 }));
+  await png('favicon/favicon-32.png', tileSVG(64, C.bg, C.primary, { radius: 0.224, frac: 0.78, boldPx: 0.5, outPx: 32 }), 32, 32);
   await png('favicon/apple-touch-icon.png', tileSVG(180, C.bg, C.primary), 180, 180);
   await png('favicon/icon-192.png', tileSVG(192, C.bg, C.primary), 192, 192);
   await png('favicon/icon-512.png', tileSVG(512, C.bg, C.primary), 512, 512);
@@ -121,7 +124,7 @@ export async function buildPackage(browser, outDir) {
     fs.mkdirSync(tmp, { recursive: true });
     for (const s of [16, 32, 48]) {
       await page.setViewportSize({ width: s, height: s });
-      await page.setContent(`<body style="margin:0;background:transparent">${sized(tileSVG(64, C.bg, C.primary, { radius: 0.224 }), s, s)}</body>`);
+      await page.setContent(`<body style="margin:0;background:transparent">${sized(tileSVG(64, C.bg, C.primary, { radius: 0.224, frac: s <= 16 ? 0.82 : 0.78, boldPx: s <= 16 ? 0.7 : 0.5, outPx: s }), s, s)}</body>`);
       fs.writeFileSync(path.join(tmp, `${s}.png`), await page.screenshot({ omitBackground: true, clip: { x: 0, y: 0, width: s, height: s } }));
     }
     execFileSync('convert', [path.join(tmp, '16.png'), path.join(tmp, '32.png'), path.join(tmp, '48.png'), path.join(outDir, 'favicon/favicon.ico')]);
@@ -133,7 +136,7 @@ export async function buildPackage(browser, outDir) {
   // ---- README ----
   const readme = `404 · пакет логотипов · версия 2.0
 
-Знак «нерв-щит» и надпись 404. Все файлы выпущены из одной геометрии (brand/src/geometry.mjs).
+Знак (щит, игла и росток) и надпись 404. Все файлы выпущены из одной геометрии (brand/src/geometry.mjs).
 Правила использования — в брендбуке: brand/404-brandbook.pdf.
 
 ЦВЕТА
@@ -153,7 +156,7 @@ export async function buildPackage(browser, outDir) {
   png/app-icon/            иконки приложения 1024 px: скруглённые и квадратные
   favicon/                 favicon.ico, favicon.svg, favicon-32.png, apple-touch-icon.png, icon-192.png, icon-512.png
 
-Минимальный размер: знак — 8 мм / 16 px; горизонтальный логотип — 35 мм / 72 px; вертикальный — 18 мм / 64 px.
+Минимальный размер: знак — 10 мм / 24 px; горизонтальный логотип — 40 мм / 96 px; вертикальный — 20 мм / 64 px.
 Охранное поле: знак — 1/2 высоты; горизонтальный логотип — 2/3 X; вертикальный — X (X — высота цифр 404).
 Знак не растягивается, не поворачивается, не перекрашивается вне палитры.
 `;

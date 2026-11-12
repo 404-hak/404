@@ -5,6 +5,7 @@ import { tokensCss, tailwindPreset } from './tokens.mjs';
 
 const { MARK, WORD, LOCKUP_H, LOCKUP_V } = G;
 const M = (fill, style) => G.inlineMark(fill, style);
+const markAt = (cx, cy, h, fill) => { const k = h / MARK.h; return `<g transform="translate(${cx - MARK.w * k / 2} ${cy - h / 2}) scale(${k})"><path fill="${fill}" d="${MARK.d}"/></g>`; };
 const LH = (fill, style) => G.inlineLockup('horizontal', fill, style);
 const LV = (fill, style) => G.inlineLockup('stacked', fill, style);
 const rg = h => G.rgbOf(h).join(' ');
@@ -122,13 +123,13 @@ export function p51() {
 }
 
 export function p52() {
-  const tile = (size, bg, fg, border = false, r = .224) =>
-    `<div style="width:${size}px;height:${size}px;border-radius:${size * r}px;background:${bg};${border ? 'border:1px solid var(--line-l);' : ''}display:flex;align-items:center;justify-content:center;flex:none">${M(fg, `height:${size * .56}px;width:auto`)}</div>`;
+  const tile = (size, bg, fg, border = false, r = .224, frac = .62) =>
+    `<div style="width:${size}px;height:${size}px;border-radius:${size * r}px;background:${bg};${border ? 'border:1px solid var(--line-l);' : ''}display:flex;align-items:center;justify-content:center;flex:none">${M(fg, `height:${size * frac}px;width:auto`)}</div>`;
   const tab = (dark) => {
     const bgc = dark ? C.surface : '#CBD5E1', tabBg = dark ? '#0F1D33' : C.primary, tx = dark ? C.primary : C.bg;
     return `<div style="border-radius:12px;background:${bgc};border:1px solid ${dark ? 'var(--line-d)' : 'var(--line-l)'};padding:12px 12px 0;overflow:hidden;height:80px">
       <div style="width:230px;height:34px;border-radius:9px 9px 0 0;background:${tabBg};display:flex;align-items:center;gap:9px;padding:0 12px;color:${tx};font-size:12px">
-        ${tile(16, dark ? C.surface : C.bg, C.primary, false, .22)}404 — бренд-гайд</div>
+        ${tile(16, dark ? C.surface : C.bg, C.primary, false, .22, .8)}404 — бренд-гайд</div>
       <div style="height:34px;background:${tabBg};margin:0 -12px"><div style="margin:9px 12px 0;height:16px;border-radius:8px;width:220px;background:${dark ? C.surface : '#CBD5E1'}"></div></div></div>`;
   };
   const files = [
@@ -149,11 +150,11 @@ export function p52() {
     ${box('left:63px;top:534px', tile(80, C.bg, C.primary, false, 0))}
     ${box('left:151px;top:534px', tile(80, C.primary, C.bg, true, 0))}
     ${box('left:262px;top:546px;width:300px', '<div class="t11" style="font-size:11px;line-height:16px">Квадратные версии …-square-1024.png — для магазинов приложений: скругление углов задаёт платформа.</div>')}
-    ${box('left:63px;top:650px;width:512px', '<div class="t12" style="font-size:12.5px;line-height:19px">Иконка — только знак, без надписи, на плашке Background (основная) или Primary (светлая). Знак — по центру, высота знака — 56 % стороны иконки.</div>')}
+    ${box('left:63px;top:650px;width:512px', '<div class="t12" style="font-size:12.5px;line-height:19px">Иконка — только знак, без надписи, на плашке Background (основная) или Primary (светлая). Знак — по центру, высота знака — 62 % стороны иконки; в фавиконе — 78 %, с утолщением штрихов для мелких размеров.</div>')}
     ${box('left:683px;top:204px', '<span class="cap">Фавикон</span>')}
     ${box('left:683px;top:226px;width:424px', tab(true))}
     ${box('left:683px;top:318px;width:424px', tab(false))}
-    ${box('left:683px;top:420px;display:flex;align-items:flex-end;gap:22px', `<div>${tile(48, C.bg, C.primary)}<div class="t11" style="margin-top:7px">48 px</div></div><div>${tile(32, C.bg, C.primary)}<div class="t11" style="margin-top:7px">32 px</div></div><div>${tile(16, C.bg, C.primary)}<div class="t11" style="margin-top:7px">16 px</div></div>`)}
+    ${box('left:683px;top:420px;display:flex;align-items:flex-end;gap:22px', `<div>${tile(48, C.bg, C.primary, false, .224, .78)}<div class="t11" style="margin-top:7px">48 px</div></div><div>${tile(32, C.bg, C.primary, false, .224, .78)}<div class="t11" style="margin-top:7px">32 px</div></div><div>${tile(16, C.bg, C.primary, false, .224, .8)}<div class="t11" style="margin-top:7px">16 px</div></div>`)}
     ${box('left:683px;top:518px;width:424px', rows(files, { cols: 'c2' }).replace(/class="tr c2"/g, 'class="tr" style="grid-template-columns:182px 1fr;min-height:40px"'))}
   `, { label: 'Логотип на фонах', num: '05' });
 }
@@ -173,7 +174,7 @@ export function p61() {
     ['Не добавлять тени, свечение и обводку', bad(M(C.primary, `height:104px;width:auto;filter:drop-shadow(6px 9px 5px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(45,212,191,.9))`))],
     ['Не размещать на фоне с низким контрастом', bad(M(G.mix(C.primary, C.surface, .13), 'height:104px;width:auto'))],
     ['Не менять пропорции и положение надписи', bad(`<div style="display:flex;align-items:flex-end;gap:6px">${M(C.primary, 'height:84px;width:auto')}${G.inlineWord(C.primary, 'width:118px;height:auto;margin-bottom:-4px')}</div>`)],
-    ['Не использовать контурную версию', bad(`<svg viewBox="0 0 ${MARK.w} ${MARK.h}" style="height:104px;width:auto"><path d="${MARK.d}" fill="none" stroke="${C.primary}" stroke-width="16" stroke-linejoin="round"/></svg>`)],
+    ['Не использовать контурную версию', bad(`<svg viewBox="0 0 ${MARK.w} ${MARK.h}" style="height:104px;width:auto"><path d="${MARK.d}" fill="none" stroke="${C.primary}" stroke-width="6" stroke-linejoin="round"/></svg>`)],
     ['Не размещать на пёстром фоне без затемнения', `${party}<div class="abs" style="right:14px;top:14px;width:22px;height:22px;border-radius:50%;background:${C.alert}"><svg width="22" height="22" viewBox="0 0 22 22"><path d="M7.5,7.5 L14.5,14.5 M14.5,7.5 L7.5,14.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></div>`],
   ];
   const cells = items.map(([t, inner], i) => {
@@ -250,7 +251,7 @@ export function p71() {
     ['Заголовки и текст', 'Inter'],
   ], { cols: '' }).replace(/class="tr "/g, 'class="tr" style="grid-template-columns:134px 1fr;min-height:34px;font-size:12px"');
   return page('p71', 'dark', `
-    ${top('7.1', 'Дашборд', 'Рабочий экран инспектора: тёмный интерфейс на цветах бренда. Узлы-буи на карте — тот же знак, что в логотипе.')}
+    ${top('7.1', 'Дашборд', 'Рабочий экран инспектора: тёмный интерфейс на цветах бренда. Буи на карте — кольцо с точкой, как нуль в надписи 404.')}
     <div class="card bgc" style="left:63px;top:205px;width:697px;height:543px">${ui}</div>
     ${box('left:783px;top:203px', '<span class="cap">Что взято из брендбука</span>')}
     ${box('left:783px;top:225px;width:324px', spec)}
@@ -344,7 +345,7 @@ export function p74() {
   </svg>`;
   const tg = `<svg width="334" height="190" viewBox="0 0 334 190" style="position:absolute;left:0;top:0">
     <circle cx="86" cy="95" r="44" fill="${C.bg}" stroke="${stroke}"/>
-    <g transform="translate(${86 - 17} ${95 - 22}) scale(${44 / MARK.h})"><path fill="${C.primary}" d="${MARK.d}"/></g>
+    ${markAt(86, 95, 50, C.primary)}
     <rect x="148" y="52" width="164" height="86" rx="14" fill="${C.surface}" stroke="${stroke}"/>
     <text x="162" y="74" font-family="Inter" font-weight="600" font-size="10.5" fill="${C.accent}">404</text>
     <text x="162" y="92" font-family="Inter" font-size="10.5" fill="${C.primary}">Буй Камышовый-4</text>
@@ -356,10 +357,10 @@ export function p74() {
     <rect x="132" y="56" width="70" height="108" rx="14" fill="${C.surface}" stroke="${stroke}"/>
     <path d="M132,92 H202 M132,140 H202" stroke="${C.bg}" stroke-width="6"/>
     <path d="M167,56 V30" stroke="${stroke}" stroke-width="3"/>${nodeSVG(167, 22, 9, C.accent)}
-    <g transform="translate(${167 - 12} 98) scale(${38 / MARK.h})"><path fill="${C.grey}" d="${MARK.d}"/></g></svg>`;
+    ${markAt(167, 118, 40, C.grey)}</svg>`;
   const patch = `<svg width="334" height="190" viewBox="0 0 334 190" style="position:absolute;left:0;top:0">
     <circle cx="167" cy="95" r="70" fill="${C.bg}" stroke="${C.grey}" stroke-width="2"/><circle cx="167" cy="95" r="62" fill="none" stroke="${C.grey}" stroke-width="1.4" stroke-dasharray="3 3"/>
-    <g transform="translate(${167 - 28} ${95 - 36}) scale(${72 / MARK.h})"><path fill="${C.grey}" d="${MARK.d}"/></g></svg>`;
+    ${markAt(167, 95, 84, C.grey)}</svg>`;
   const slide = `<svg width="334" height="190" viewBox="0 0 334 190" style="position:absolute;left:0;top:0">
     <rect x="54" y="30" width="226" height="127" rx="6" fill="${C.bg}" stroke="${stroke}"/>
     <g transform="translate(66 42)"><svg width="46" height="11" viewBox="0 0 ${LOCKUP_H.w} ${LOCKUP_H.h}"><path fill="${C.primary}" d="${LOCKUP_H.d}"/></svg></g>
@@ -370,7 +371,7 @@ export function p74() {
     <rect x="158" y="8" width="18" height="14" rx="3" fill="${C.grey}"/>
     <rect x="117" y="20" width="100" height="152" rx="10" fill="${C.bg}" stroke="${stroke}"/>
     <rect x="117" y="154" width="100" height="18" rx="0" fill="${C.accent}"/><rect x="117" y="154" width="100" height="18" fill="${C.accent}" clip-path="inset(0 round 0 0 10px 10px)"/>
-    <g transform="translate(${167 - 14} 38) scale(${44 / MARK.h})"><path fill="${C.primary}" d="${MARK.d}"/></g>
+    ${markAt(167, 62, 50, C.primary)}
     <path d="M137,104 H197 M137,116 H180" stroke="${C.primary}" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>
     <text x="137" y="144" font-family="Inter" font-weight="600" font-size="8" letter-spacing="1.2" fill="${T_DARK}">ИНСПЕКТОР</text></svg>`;
   const items = [

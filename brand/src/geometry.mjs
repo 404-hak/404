@@ -1,6 +1,8 @@
 // 404 · геометрия знака и надписи
 // Все контуры строятся из чисел здесь — брендбук, SVG/PNG/PDF-пакет и токены берут размеры отсюда.
 
+import { MARK_W, MARK_H, MARK_D, MARK_METRICS } from './mark-data.mjs';
+
 export const COLORS = {
   primary: '#E2E8F0',   // Пенный
   bg: '#0B1628',        // Ночной
@@ -139,71 +141,9 @@ function orient(segs, hole) {
   return (a > 0) === wantPositive ? segs : reverse(segs);
 }
 
-// ---------- ЗНАК «нерв-щит» ----------
-// Сырые координаты (холст 1000 × 1250, ось симметрии x = 500)
-const RAW = {
-  blade: 'M978,290 C1008,760 822,1052 560,1192 C664,1040 826,796 978,290 Z',
-  nerve: 'M506,1060 C520,880 600,700 700,540 L738,556 C688,720 600,900 506,1010 Z',
-  stem: 'M461,215 Q486,760 500,1250 Q514,760 539,215 Z',
-  top: { cx: 500, cy: 100, ro: 100, ri: 68, dot: 32 },
-  side: { cx: 722, cy: 500, ro: 56, ri: 26, dot: 10 },
-};
-const mirrorX = { a: -1, e: 1000 };
-
-function rawParts() {
-  const solids = [];
-  const holes = [];
-  const add = (segs, hole = false) => (hole ? holes : solids).push(segs);
-  add(parse(RAW.stem));
-  for (const m of [null, mirrorX]) {
-    const t = segs => (m ? xform(segs, m) : segs);
-    add(t(parse(RAW.blade)));
-    add(t(parse(RAW.nerve)));
-    const s = RAW.side;
-    add(t(circle(s.cx, s.cy, s.ro)));
-    add(t(circle(s.cx, s.cy, s.ri)), true);
-    add(t(circle(s.cx, s.cy, s.dot)));
-  }
-  const t0 = RAW.top;
-  add(circle(t0.cx, t0.cy, t0.ro));
-  add(circle(t0.cx, t0.cy, t0.ri), true);
-  add(circle(t0.cx, t0.cy, t0.dot));
-  return { solids, holes };
-}
-
-// нормализация: bbox → начало координат
-const parts = rawParts();
-const bb0 = bbox([...parts.solids, ...parts.holes]);
-const norm = { e: -bb0.x0, f: -bb0.y0 };
-
-const solids = parts.solids.map(s => orient(xform(s, norm), false));
-const holes = parts.holes.map(s => orient(xform(s, norm), true));
-
-export const MARK = {
-  w: r2(bb0.w),
-  h: r2(bb0.h),
-  d: toD([...solids, ...holes].flat()),
-  // детали для чертежа конструкции (в нормализованных координатах знака)
-  pct: (() => {
-    const T = RAW.top, S = RAW.side;
-    const ty = v => (v - bb0.y0) / bb0.h * 100;
-    return {
-      ratio: bb0.h / bb0.w,
-      topNodeBottom: ty(T.cy + T.ro),
-      bladeTop: ty(290),
-      sideNodeCenter: ty(S.cy),
-      sideNodeTop: ty(S.cy - S.ro),
-      sideNodeBottom: ty(S.cy + S.ro),
-      nerveBase: ty(1035),
-      bladeBottom: ty(1192),
-      stemTopW: (539 - 461) / bb0.w * 100,
-      topNodeW: (2 * T.ro) / bb0.w * 100,
-      sideNodeW: (2 * S.ro) / bb0.w * 100,
-      sideNodeCx: (S.cx - bb0.x0) / bb0.w * 100,
-      stemTop: ty(215),
-    };
-  })(),
-};
+// ---------- ЗНАК ----------
+// Контур снят трассировкой из source/mark-source.png (trace_mark.py), симметрия — по оси иглы.
+export const MARK = { w: MARK_W, h: MARK_H, d: MARK_D, pct: MARK_METRICS };
 
 // ---------- НАДПИСЬ 404 (цифры высотой 100) ----------
 const DIGIT_W = 125, GAP = 17;
