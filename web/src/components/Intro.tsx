@@ -702,14 +702,14 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
         {/* все картинки на месте с первого кадра (декодированы до старта), лишние — прозрачны */}
         {gl !== false && (
           <>
-            <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(10, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ opacity: midSoft }} />
-            <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(10, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={{ opacity: midSoft }} />
+            <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(10, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto max-w-[24vw]" style={{ opacity: midSoft }} />
+            <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(10, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto max-w-[24vw]" style={{ opacity: midSoft }} />
           </>
         )}
-        <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(1.2, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ opacity: gl === false ? 1 : midSharp }} />
-        <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(1.2, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={{ opacity: gl === false ? 1 : midSharp }} />
-        <ReedsImage side="left" seed={5} count={14} color={C.reedNear} blur={reedBlur(7, 82)} className="absolute bottom-[-8vh] left-[-6vw] h-[82vh] w-auto" />
-        <ReedsImage side="right" seed={17} count={14} color={C.reedNear} blur={reedBlur(7, 78)} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto" />
+        <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(1.2, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto max-w-[24vw]" style={{ opacity: gl === false ? 1 : midSharp }} />
+        <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(1.2, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto max-w-[24vw]" style={{ opacity: gl === false ? 1 : midSharp }} />
+        <ReedsImage side="left" seed={5} count={14} color={C.reedNear} blur={reedBlur(7, 82)} className="absolute bottom-[-8vh] left-[-6vw] h-[82vh] w-auto max-w-[30vw]" />
+        <ReedsImage side="right" seed={17} count={14} color={C.reedNear} blur={reedBlur(7, 78)} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto max-w-[30vw]" />
       </div>
 
       <div className="absolute right-4 top-4 flex items-center gap-2" style={{ opacity: 1 - outK, marginTop: 'env(safe-area-inset-top)', marginRight: 'env(safe-area-inset-right)' }}>
