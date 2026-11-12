@@ -310,7 +310,8 @@ header.mode-line { padding-top: env(safe-area-inset-top); }
 nav.md\:flex { padding-top: env(safe-area-inset-top); }
 
 /* ---------- внутри приложения: ничего не выдаёт сайт ---------- */
-.in-app, .in-app * { -webkit-tap-highlight-color: transparent; }
+.in-app, .in-app * { -webkit-tap-highlight-color: transparent; scrollbar-width: none; }
+.in-app *::-webkit-scrollbar { display: none; width: 0; height: 0; }   /* в приложении без полос прокрутки, как в iOS */
 .in-app { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-text-size-adjust: 100%; }
 .in-app input, .in-app textarea { -webkit-user-select: text; user-select: text; }
 .in-app img, .in-app svg { -webkit-user-drag: none; }

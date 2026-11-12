@@ -74,6 +74,35 @@ struct WebView: UIViewRepresentable {
     })();
     """
 
+    /// Стили приложения подставляем сами — работают, даже если сайт на сервере ещё старый:
+    /// отступы под вырез и Dynamic Island, меню над «домашней» полосой, без полос прокрутки, выделения и подсветки касаний
+    private static let appScript = """
+    (function () {
+      var d = document.documentElement;
+      d.classList.add('in-app');
+      var css = [
+        'html,body{overscroll-behavior:none;touch-action:manipulation}',
+        '.app{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}',
+        'header.mode-line{padding-top:env(safe-area-inset-top)}',
+        'nav.md\\\\:flex{padding-top:env(safe-area-inset-top)}',
+        '.in-app,.in-app *{-webkit-tap-highlight-color:transparent;scrollbar-width:none}',
+        '.in-app *::-webkit-scrollbar{display:none;width:0;height:0}',
+        '.in-app{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-text-size-adjust:100%}',
+        '.in-app input,.in-app textarea{-webkit-user-select:text;user-select:text}',
+        '.map-photo,.map-3d{touch-action:none}'
+      ].join('');
+      var st = document.createElement('style');
+      st.textContent = css;
+      d.appendChild(st);
+      function fit() {
+        var m = document.querySelector('meta[name="viewport"]');
+        if (m && m.content.indexOf('viewport-fit') < 0) m.content += ', viewport-fit=cover';
+        return !!m;
+      }
+      if (!fit()) document.addEventListener('DOMContentLoaded', fit);
+    })();
+    """
+
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -85,6 +114,7 @@ struct WebView: UIViewRepresentable {
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "theme")
         controller.add(context.coordinator, name: "haptic")
+        controller.addUserScript(WKUserScript(source: Self.appScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addUserScript(WKUserScript(source: Self.themeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.userContentController = controller
 
@@ -101,6 +131,7 @@ struct WebView: UIViewRepresentable {
         scroll.contentInsetAdjustmentBehavior = .never       // отступы под вырез делает сам сайт (safe-area)
         scroll.keyboardDismissMode = .interactive
         scroll.showsHorizontalScrollIndicator = false
+        scroll.showsVerticalScrollIndicator = false
         // масштаб страницы щипком отключён: щипок — только для карты (иначе страница и карта спорят за жест, отсюда лаги)
         scroll.minimumZoomScale = 1
         scroll.maximumZoomScale = 1
