@@ -15,7 +15,7 @@
 
 /* ---------- темы: «Ночь» (по умолчанию) и «День»; бренд-цвета — в brand/tokens/tokens.css ---------- */
 :root {
-  --c-card: rgba(18, 31, 50, .78);
+  --c-card: rgba(18, 31, 50, .87);
   --c-spot: rgba(226, 232, 240, .07);
   --c-shadow: rgba(0, 0, 0, .35);
   --c-vignette: rgba(5, 11, 22, .5);
@@ -26,7 +26,7 @@
   --c-mist: rgba(226, 232, 240, .07);
 }
 :root[data-theme="day"] {
-  --c-card: rgba(247, 249, 251, .8);
+  --c-card: rgba(247, 249, 251, .88);
   --c-spot: rgba(255, 255, 255, .7);
   --c-shadow: rgba(11, 22, 40, .14);
   --c-vignette: rgba(11, 22, 40, .12);
@@ -135,8 +135,9 @@ body { -webkit-font-smoothing: antialiased; }
 @keyframes ripple { 50% { transform: scaleY(-.55) skewX(3deg) translateX(1px); opacity: .1; } }
 
 /* ---------- разделы ---------- */
-.card { border-radius: 18px; border: 1px solid var(--c-line); background: var(--c-card); padding: 20px;
-  -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); }
+/* без backdrop-filter: стекло над живым морем пересчитывало размытие под каждой карточкой каждый кадр —
+   главный источник лагов; плотнее фон карточки даёт тот же вид почти бесплатно */
+.card { border-radius: 18px; border: 1px solid var(--c-line); background: var(--c-card); padding: 20px; }
 .page-in { animation: page-in .7s var(--ease-out) both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(3px); } 60% { filter: blur(0); } }
 .bar-grow { transform-origin: bottom; animation: grow-y 1s var(--ease-out) both; }
@@ -259,12 +260,13 @@ body { -webkit-font-smoothing: antialiased; }
 /* куст целиком: свойство rotate не трогает transform (зеркало справа) и идёт на видеокарте без перерисовки */
 .reeds-sway { transform-origin: 50% 100%; will-change: transform; animation: clump-sway 8s ease-in-out infinite alternate; }
 @keyframes clump-sway { from { rotate: -0.9deg; } to { rotate: 1.1deg; } }
-.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); filter: blur(1.5px); transition: color 1s, opacity 1s; }
+.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); transition: color 1s, opacity 1s; }
 .sea .reeds-left { left: -1vw; }
 .sea .reeds-right { right: -1vw; }
 .sea .mist { position: absolute; left: -15%; right: -15%; top: calc(20% - 6vh); height: 12vh; pointer-events: none;
-  background: radial-gradient(50% 50% at 50% 50%, var(--c-mist), transparent 70%); filter: blur(10px);
+  background: radial-gradient(50% 50% at 50% 50%, var(--c-mist), transparent 70%);
   animation: mist 46s ease-in-out infinite alternate; }
+.sea.has-water .mist { display: none; }   /* с живым морем дымку рисует шейдер */
 @keyframes mist { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
 @media (prefers-reduced-motion: reduce) { .reed, .reeds-sway, .sea .mist { animation: none; } }
 

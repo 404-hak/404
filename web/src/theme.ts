@@ -222,6 +222,14 @@ function computeSky(p: ThemePref, at: Date = liveAt()): Sky {
   return { pref: p, ...b, warm, ui: Object.keys(NIGHT).length ? safeUi(raw, warm) : raw };
 }
 
+/** Ставим только изменившиеся переменные: иначе каждая минута «Авто» пересчитывала стили всей страницы */
+const lastVars = new Map<string, string>();
+function setVar(el: HTMLElement, name: string, value: string) {
+  if (lastVars.get(name) === value) return;
+  lastVars.set(name, value);
+  el.style.setProperty(name, value);
+}
+
 function apply(animate: boolean) {
   const el = document.documentElement;
   if (animate) {
@@ -232,12 +240,12 @@ function apply(animate: boolean) {
   el.dataset.theme = theme;
   if (Object.keys(NIGHT).length) {
     const p = palette(sky.ui, sky.warm);
-    for (const v of COLOR_VARS) el.style.setProperty(v, css(p[v]));
-    for (const v of NUM_VARS) el.style.setProperty(v, String(NIGHT_N[v] + (DAY_N[v] - NIGHT_N[v]) * sky.ui));
-    for (const [r, c] of Object.entries(RGB_FROM)) el.style.setProperty(r, p[c].slice(0, 3).map(Math.round).join(' '));
+    for (const v of COLOR_VARS) setVar(el, v, css(p[v]));
+    for (const v of NUM_VARS) setVar(el, v, (NIGHT_N[v] + (DAY_N[v] - NIGHT_N[v]) * sky.ui).toFixed(3));
+    for (const [r, c] of Object.entries(RGB_FROM)) setVar(el, r, p[c].slice(0, 3).map(Math.round).join(' '));
     const veil = mixC([255, 255, 255, 1], [11, 22, 40, 1], sky.ui);
-    el.style.setProperty('--rgb-veil', veil.slice(0, 3).map(Math.round).join(' '));
-    el.style.setProperty('--theme-warm', sky.warm.toFixed(3));
+    setVar(el, '--rgb-veil', veil.slice(0, 3).map(Math.round).join(' '));
+    setVar(el, '--theme-warm', sky.warm.toFixed(2));
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', css(p['--c-bg']));
   }
   el.style.colorScheme = theme === 'day' ? 'light' : 'dark';

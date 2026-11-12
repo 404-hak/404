@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { currentTheme } from '../theme';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
+import { introCovering } from '../introBus';
 
 const COLOR: Record<Mode, [number, number, number]> = {
   calm: [140, 160, 128], alertness: [245, 158, 11], alarm: [239, 68, 68], intercept: [239, 68, 68],
@@ -63,6 +64,7 @@ export default function Hydrophone({ mode }: { mode: Mode | null }) {
     };
     const draw = (t: number) => {
       if (!still && !document.hidden) raf = requestAnimationFrame(draw);
+      if (introCovering()) { prev = 0; return; }        // под заставкой не видно — не тратим кадр
       const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0;
       prev = t;
       if (!still) {

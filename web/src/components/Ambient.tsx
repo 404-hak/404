@@ -3,7 +3,8 @@ import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 import Reeds from './Reeds';
 import { HZ } from '../theme';
-import { SPEED, createSea, follow, frameFrom, introCover, lerp3, seaClock, targets, trackBody } from '../sea';
+import { SPEED, createSea, follow, frameFrom, lerp3, seaClock, targets, trackBody } from '../sea';
+import { introCovering } from '../introBus';
 
 /**
  * Живой фон — море дельты под настоящим небом. В «Авто» солнце и луна идут по своим дугам
@@ -29,10 +30,9 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
     let sea: ReturnType<typeof createSea> = null;
     try { sea = reducedMotion() ? null : createSea(cv, force); } catch { sea = null; }
     if (!sea) { cv.style.display = 'none'; return; }
-    cv.parentElement?.classList.add('has-water');
     const gfx = sea;
 
-    let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0;
+    let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0, cap = 0, lowered = false, ready = false;
     const startAt = performance.now();
     const f = { ...frameFrom(targets(live.current.mode, live.current.moon), HZ), speed: 1 };
     const fadeSun = { on: false }, fadeMoon = { on: false };
@@ -43,12 +43,19 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       raf = requestAnimationFrame(frame);
       if (document.hidden) { prev = 0; return; }
       const { mode: m, quiet: q, moon: mp } = live.current;
-      // фон медленный: 30 кадров в секунду хватает глазу и вдвое легче видеокарте; на карте фон почти закрыт — 12
-      if (now - quietAt < (q ? 80 : 30)) return;
+      // кадры: каждый кадр монитора; если компьютер не успевает — 30 в секунду; на карте фон почти закрыт — 12
+      if (now - quietAt < (q ? 80 : cap) - 2) return;
       quietAt = now;
       const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;
       prev = now;
-      if (introCover.on) { f.t = seaClock(); return; }   // под заставкой не рисуем; вода — по общим часам
+      if (introCovering()) { f.t = seaClock(); return; }  // под заставкой не рисуем; вода — по общим часам
+      if (!ready) {                                        // шейдер собирается в фоне — страница не замирает
+        const st = gfx.status();
+        if (st === 'fail') { cancelAnimationFrame(raf); cv.style.display = 'none'; return; }
+        if (st === 'pending') return;
+        ready = true;
+        cv.parentElement?.classList.add('has-water');
+      }
 
       f.speed += (SPEED[m] - f.speed) * follow(0.6, dt);
       f.t += dt * f.speed;
@@ -79,7 +86,11 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       } else f.pulse = [0, 0, 0, 0];
       gfx.draw(f);
 
-      if (!q) { slow = dt > 0.05 ? slow + 1 : Math.max(0, slow - 1); if (slow > 45) { gfx.lower(w, h); slow = -1e9; } }
+      // не успеваем (кадр дольше 25 мс, на 30 к/с — дольше 50): сначала 30 кадров, потом меньше точек
+      if (!q && !lowered) {
+        slow = dt > (cap ? 0.05 : 0.025) ? slow + 1 : Math.max(0, slow - 2);
+        if (slow > 40) { slow = 0; if (!cap) cap = 33; else { gfx.lower(w, h); lowered = true; } }
+      }
     };
 
     const onMove = (e: PointerEvent) => { ptr.tx = e.clientX / innerWidth; ptr.ty = e.clientY / innerHeight; ptr.moved = performance.now(); };
@@ -105,8 +116,8 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
     <div aria-hidden className="sea pointer-events-none fixed inset-0">
       <canvas ref={ref} className="absolute inset-0 h-full w-full" />
       <div className="mist" />
-      <Reeds side="left" seed={5} count={13} className="reeds reeds-left" clump />
-      <Reeds side="right" seed={17} count={13} className="reeds reeds-right" clump />
+      <Reeds side="left" seed={5} count={13} className="reeds reeds-left" clump blur={1.6} />
+      <Reeds side="right" seed={17} count={13} className="reeds reeds-right" clump blur={1.6} />
     </div>
   );
 }

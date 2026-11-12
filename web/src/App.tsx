@@ -16,7 +16,7 @@ import { useRoute, type Route } from './route';
 import { sound } from './sound';
 import { useSurfaces } from './motion';
 import Intro from './components/Intro';
-import { INTRO_EVENT } from './introBus';
+import { INTRO_EVENT, appSettled } from './introBus';
 
 /** Интро — один раз за сеанс; ?intro в адресе показывает всегда; при «уменьшить движение» — не показываем */
 function introWanted() {
@@ -48,6 +48,8 @@ export default function App() {
   // новая тревога важнее выбранного буя; Esc снимает выделение
   const freshId = state?.alerts.find((a) => a.status === 'new')?.id;
   useEffect(() => { if (freshId) setSelected(null); }, [freshId]);
+  // первый снимок отрисован — заставка может стартовать, не споря с тяжёлой первой отрисовкой карты
+  useEffect(() => { if (state) requestAnimationFrame(() => requestAnimationFrame(appSettled)); }, [state != null]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null); };
     window.addEventListener('keydown', onKey);

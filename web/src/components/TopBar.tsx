@@ -23,7 +23,7 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
   const m = mode && online ? MODE[mode] : null;
   const btn = 'h-8 whitespace-nowrap rounded-[8px] px-3 text-[12px] font-medium';
   return (
-    <header className="mode-line bar-in relative z-20 shrink-0 bg-surface/70 backdrop-blur">
+    <header className="mode-line bar-in relative z-20 shrink-0 bg-surface/[.88]">
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
           <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро" className="shrink-0 md:hidden">

@@ -4,25 +4,102 @@ import { useSoundOn } from '../sound';
 import { ReedsImage } from './Reeds';
 import { HZ, currentSky, type Sky } from '../theme';
 import { hex, palAt, type V3 } from '../skyPalette';
-import { createSea, frameFrom, introCover, seaClock, targets, type Frame, type Sea } from '../sea';
+import { createSea, frameFrom, seaClock, targets, type Frame, type Sea } from '../sea';
+import { setIntroCover, setIntroPlaying, whenAppSettled } from '../introBus';
 
 /**
  * Интро: то же море, что на фоне сайта (один рисовальщик, sea.ts), только ракурс ниже и с бликом
- * объектива от солнца или луны. Камера наводит резкость, знак падает, как поплавок, — смаз движения,
- * бульк, по воде расходится волна, брызги штрихами, круги и пузыри; щит покачивается и отражается;
- * буй подаёт сигнал, из размытия проявляется «404 · Браконьер не найден». В конце камера опускает
- * взгляд к воде — горизонт встаёт туда, где он на фоне, и сцена растворяется в дашборде.
- * Стартует сам. Звук — если браузер разрешит; иначе по первому касанию (кнопка «Включить звук»).
- * Без видеокарты — та же сцена в SVG.
+ * объектива от солнца или луны. Камера наводит резкость, знак падает, как поплавок: разгоняется,
+ * с плеском уходит в воду почти целиком, всплывает и затухающе качается, пока не встанет — в воде
+ * низ сердцевины и игла. Под водой его видно сквозь толщу, по воде — отражение, у входа в воду
+ * мениск, от каждого качания расходятся круги. Буй подаёт сигнал сонара, из размытия проявляется
+ * «404 · Браконьер не найден». В конце взгляд опускается к воде — горизонт встаёт туда, где он
+ * на фоне, и сцена растворяется в дашборде.
+ * Стартует, когда всё готово (шейдер, картинки, первая отрисовка дашборда) — без рывков в начале.
+ * Звук — если браузер разрешит; иначе по первому касанию (кнопка «Включить звук»). Без видеокарты — SVG.
  */
 
 const W = 1600, H = 900, HORIZON = 470, WATER = 610, CX = 800;
 const MARK_RATIO = 819.83 / 1250;        // ширина / высота знака (brand/src/mark-data.mjs)
 const MH = 210, MW = MH * MARK_RATIO;
-const SETTLED = WATER - 0.8 * MH;         // в покое над водой щит и крылья, игла — под водой
-const START = -MH - 60, IMPACT = WATER - MH;
-const T_IN = 1.1, T_DROP = 0.7, FALL = 0.8, T_HIT = T_DROP + FALL;
+const START = -MH - 60;
+const T_IN = 1.1, T_DROP = 0.7;
 const T_PING = 2.8, T_WORD = 3.2, T_TAG = 3.8, T_OUT = 5.8, OUT = 0.9;
+
+// ---------- поплавок: падение и плавучесть ----------
+/** Силуэт знака по высоте — 20 полос сверху вниз: сколько воды он вытесняет на этой глубине */
+const AREA = [0, 2, 3, 4, 26, 45, 34, 110, 132, 105, 74, 57, 48, 38, 21, 11, 5, 4, 3, 2];
+/** Погружённая площадь, если ватерлиния на доле h высоты знака сверху (h < 0 — целиком под водой) */
+function submerged(h: number) {
+  let s = 0;
+  for (let i = 0; i < 20; i++) { const r0 = i / 20; s += AREA[i] * Math.min(1, Math.max(0, (r0 + 0.05 - Math.max(r0, h)) / 0.05)); }
+  return s;
+}
+const EQ = 0.6;                            // в покое ватерлиния на 60 % высоты: в воде низ сердцевины и игла
+const DT = 1 / 240;
+/**
+ * Траектория считается один раз: тяжесть, выталкивающая сила по погружённой части силуэта,
+ * сопротивление воды (вязкое и квадратичное) и воздуха. Удар — когда в воду входит сердцевина.
+ * Развороты качания запоминаем: от каждого по воде пойдут круги.
+ */
+const PATH = (() => {
+  const G = 2600, C1 = 10, C2 = 0.005, AIR = 0.1, TOTAL = submerged(-1), SUB_EQ = submerged(EQ);
+  const n = Math.ceil((T_OUT + OUT + 1 - T_DROP) / DT);
+  const top = new Float32Array(n), vel = new Float32Array(n);
+  let y = START, v = 300, hit = -1;
+  const turns: { t: number; amp: number }[] = [];
+  let lastTurnH = 0.78;
+  for (let i = 0; i < n; i++) {
+    top[i] = y; vel[i] = v;
+    const t = T_DROP + i * DT, h = (WATER - y) / MH;
+    const sub = submerged(h);
+    const a = G - (G * sub) / SUB_EQ - (C1 * v + C2 * v * Math.abs(v)) * Math.sqrt(sub / TOTAL) - AIR * v;
+    const nv = v + a * DT;
+    if (hit < 0 && h <= 0.78) hit = t;
+    if (hit > 0 && Math.sign(nv) !== Math.sign(v)) { turns.push({ t, amp: Math.abs(h - lastTurnH) }); lastTurnH = h; }
+    v = nv; y += v * DT;
+  }
+  return { top, vel, hit, turns };
+})();
+const T_HIT = PATH.hit;
+const sample = (arr: Float32Array, t: number) => {
+  const x = Math.min(arr.length - 1.001, Math.max(0, (t - T_DROP) / DT)), i = Math.floor(x);
+  return arr[i] + (arr[i + 1] - arr[i]) * (x - i);
+};
+/** Верх знака: траектория плюс лёгкая качка на волне, когда поплавок успокоился */
+function markTop(t: number) {
+  if (t < T_DROP) return START;
+  const wave = t > T_HIT ? 2.5 * Math.sin(1.6 * t) * (1 - Math.exp(-(t - T_HIT) * 0.7)) : 0;
+  return sample(PATH.top, t) + wave;
+}
+const markVel = (t: number) => (t < T_DROP ? 0 : sample(PATH.vel, t));
+function markTilt(t: number) {
+  if (t < T_HIT) return 4 * Math.sin((t - T_DROP) * 4);
+  const tau = t - T_HIT;
+  return 6 * Math.exp(-1.3 * tau) * Math.sin(5.5 * tau) + 1.1 * Math.sin(1.3 * t);
+}
+
+/**
+ * Круги на воде для шейдера (в единицах плоскости воды): от удара — три, от каждого разворота
+ * качания — по одному, слабее; сигнал сонара — два кольца цветом акцента. Берём шесть самых заметных.
+ */
+function ringsAt(t: number) {
+  const all: number[][] = [];
+  const add = (t0: number, speed: number, amp: number, width: number, kind: number, r0 = 0.12, life = 3.6) => {
+    const age = t - t0;
+    if (age <= 0 || age > life) return;
+    const k = amp * Math.exp(-age * (kind ? 1.1 : 0.85)) * Math.min(1, age * 8);
+    if (k > 0.01) all.push([r0 + speed * age, k, width * (1 + age * 0.6), kind]);
+  };
+  [0, 0.16, 0.32].forEach((d, i) => add(T_HIT + d, 0.85, [1, 0.7, 0.45][i], 0.05, 0));
+  PATH.turns.slice(0, 6).forEach((e) => add(e.t, 0.6, Math.min(0.8, e.amp * 1.6), 0.04, 0));
+  [0, 0.45].forEach((d) => add(T_PING + d, 1.7, 0.9, 0.035, 1, 0.1, 2.2));
+  all.sort((a, b) => b[1] - a[1]);
+  const out = new Float32Array(24);
+  for (let i = 0; i < 6; i++) { const r = all[i]; if (r) out.set(r, i * 4); else out.set([0, 0, 1, 0], i * 4); }
+  return out;
+}
+
 /** Палитра интро из настоящего неба темы: в «Авто» — время суток по МСК, солнце или луна на своих местах */
 const css = (c: V3) => `rgb(${c.map((v) => Math.round(v * 255)).join(' ')})`;
 const mixV = (a: V3, b: V3, k: number) => a.map((v, i) => v + (b[i] - v) * k) as V3;
@@ -86,21 +163,21 @@ function rng(seed: number) {
   return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
 }
 
-/** Затухающие колебания поплавка после удара о воду */
-function bobTop(tau: number) {
-  const w = 7, z = 0.32, wd = w * Math.sqrt(1 - z * z);
-  const x0 = IMPACT - SETTLED, v0 = 520;
-  return SETTLED + Math.exp(-z * w * tau) * (x0 * Math.cos(wd * tau) + ((v0 + z * w * x0) / wd) * Math.sin(wd * tau));
-}
-function markTop(t: number) {
-  if (t < T_HIT) return START + (IMPACT - START) * ((t - T_DROP) / FALL) ** 2;
-  const tau = t - T_HIT;
-  return bobTop(tau) + 3 * Math.sin(1.6 * t) * (1 - Math.exp(-tau));
-}
-function markTilt(t: number) {
-  if (t < T_HIT) return 5 * Math.sin((t - T_DROP) * 4);
-  const tau = t - T_HIT;
-  return 7 * Math.exp(-1.4 * tau) * Math.sin(6 * tau) + 1.2 * Math.sin(1.3 * t);
+
+/** Затухание ripples-полей знака: альфа-маска для поиска мест, где тело входит в воду */
+interface MarkMask { w: number; h: number; alpha: Uint8ClampedArray }
+/** Где тело знака пересекает воду: до четырёх отрезков в долях ширины знака (0…1) */
+function contactsAt(m: MarkMask, row: number) {
+  const out: number[][] = [];
+  if (row < 0 || row >= 1) return out;
+  const y = Math.floor(row * m.h);
+  let x0 = -1;
+  for (let x = 0; x <= m.w; x++) {
+    const on = x < m.w && m.alpha[(y * m.w + x) * 4 + 3] > 90;
+    if (on && x0 < 0) x0 = x;
+    if (!on && x0 >= 0) { out.push([x0 / m.w, x / m.w]); x0 = -1; }
+  }
+  return out.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0])).slice(0, 4);
 }
 
 /** ?introAt=3.5 — стоп-кадр интро на нужной секунде (скриншоты для слайдов) */
@@ -118,10 +195,10 @@ function useScene() {
     const r = rng(404);
     const stars = Array.from({ length: 80 }, () => ({ x: r() * W, y: r() * (HORIZON - 40), s: 0.5 + r() * 1.2, ph: r() * 6.28, sp: 0.6 + r() * 1.6 }));
     const glints = Array.from({ length: 52 }, () => ({ y: HORIZON + 6 + r() ** 1.6 * (H - HORIZON), ph: r() * 6.28, sp: 1 + r() * 2.5, j: r() }));
-    const streaks = Array.from({ length: 30 }, () => ({ x: r() * W, y: HORIZON + 8 + r() ** 1.3 * (H - HORIZON), l: 30 + r() * 130, sp: 4 + r() * 10, o: 0.03 + r() * 0.07 }));
-    const drops = Array.from({ length: 26 }, () => {
-      const a = (25 + r() * 130) * (Math.PI / 180);
-      return { vx: Math.cos(a) * (180 + r() * 380), vy: -Math.sin(a) * (300 + r() * 440), r: 1.4 + r() * 2.8 };
+    // брызги: корона у места удара — вверх и в стороны, крупные капли ниже, мелкие выше
+    const drops = Array.from({ length: 30 }, () => {
+      const a = (35 + r() * 110) * (Math.PI / 180), sp = 260 + r() * 520;
+      return { x0: (r() - 0.5) * MW * 0.7, vx: Math.cos(a) * sp * 0.7, vy: -Math.sin(a) * sp, r: 1.2 + r() * 2.6 };
     });
     const bubbles = Array.from({ length: 9 }, (_, i) => ({ t: T_HIT + 0.15 + i * 0.14 + r() * 0.12, dx: (r() - 0.5) * MW * 0.9, f: 600 + r() * 500 }));
     const shore = (x0: number, x1: number) => {
@@ -130,7 +207,7 @@ function useScene() {
       return d + ` L${x1},${HORIZON + 2} Z`;
     };
     const islands = [shore(-20, 560), shore(1060, 1300), shore(1380, 1620)];
-    return { stars, glints, streaks, drops, bubbles, islands };
+    return { stars, glints, drops, bubbles, islands };
   }, []);
 }
 
@@ -140,18 +217,20 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const [C] = useState(() => buildPalette(currentSky(), moon));   // небо на момент показа
   const moonRef = useRef(moon);
   moonRef.current = moon;
+  const rootRef = useRef<HTMLDivElement>(null);
   const cvRef = useRef<HTMLCanvasElement>(null);
-  const sea = useRef<{ gfx: Sea; f: Frame } | null>(null);
+  const sea = useRef<{ gfx: Sea; f: Frame; mask: MarkMask | null } | null>(null);
   const [gl, setGl] = useState<boolean | null>(null);
   const [t, setT] = useState(0);
+  const [started, setStarted] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
-  const born = useRef(performance.now());
+  const born = useRef(0);
   const sound = useRef<SeaSound | null>(null);
   const scheduled = useRef(false);
   const done = useRef(false);
 
   const freeze = useRef(frozenAt());
-  const now = () => freeze.current ?? (performance.now() - born.current) / 1000;
+  const now = () => freeze.current ?? (born.current ? (performance.now() - born.current) / 1000 : 0);
 
   const finish = useCallback(() => {
     if (done.current) return;
@@ -162,23 +241,38 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
 
   const skip = () => {
     // «Пропустить» — сразу к растворению сцены
+    if (!born.current) { born.current = performance.now(); setStarted(true); }
     if (now() < T_OUT) born.current = performance.now() - T_OUT * 1000;
   };
 
-  // море — тем же рисовальщиком, что фон сайта; сам фон под заставкой пока не рисует
+  // море — тем же рисовальщиком, что фон сайта; сам фон, гидрофон и обновления под заставкой ждут
   useLayoutEffect(() => {
-    introCover.on = true;
+    setIntroCover(true);
+    setIntroPlaying(true);
     let gfx: Sea | null = null;
-    try { gfx = cvRef.current ? createSea(cvRef.current, new URLSearchParams(location.search).has('sea'), 0.45) : null; } catch { gfx = null; }
+    try { gfx = cvRef.current ? createSea(cvRef.current, new URLSearchParams(location.search).has('sea'), { scale: 0.45, intro: true }) : null; } catch { gfx = null; }
     setGl(!!gfx);
-    if (!gfx) return () => { introCover.on = false; };
+    if (!gfx) return () => { setIntroCover(false); setIntroPlaying(false); };
     const g = gfx;
-    sea.current = { gfx: g, f: { ...frameFrom(targets('calm', moonRef.current), HZ), gain: 1 } };
+    const st: { gfx: Sea; f: Frame; mask: MarkMask | null } = { gfx: g, f: { ...frameFrom(targets('calm', moonRef.current), HZ), gain: 1 }, mask: null };
+    sea.current = st;
+    // знак — текстурой для отражения и подводной части; его альфа — чтобы найти, где тело входит в воду
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.height = 512; c.width = Math.round(512 * MARK_RATIO);
+      const g2 = c.getContext('2d', { willReadFrequently: true });
+      if (!g2) return;
+      g2.drawImage(img, 0, 0, c.width, c.height);
+      st.mask = { w: c.width, h: c.height, alpha: g2.getImageData(0, 0, c.width, c.height).data };
+      g.setMark(c);
+    };
+    img.src = C.mark;
     const resize = () => g.resize(innerWidth, innerHeight);
     resize();
     window.addEventListener('resize', resize);
-    return () => { window.removeEventListener('resize', resize); g.dispose(); sea.current = null; introCover.on = false; };
-  }, []);
+    return () => { window.removeEventListener('resize', resize); g.dispose(); sea.current = null; setIntroCover(false); setIntroPlaying(false); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Кадр моря: ракурс интро; в конце взгляд опускается к воде — горизонт и светила встают как на фоне */
   const drawSea = (tt: number) => {
@@ -188,6 +282,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     const v = viewMap(innerWidth, innerHeight);
     const k = ease((tt - T_OUT) / OUT);
     f.hz = v.hz + (HZ - v.hz) * k;
+    const shift = f.hz - v.hz;
     const tg = targets('calm', moonRef.current);
     Object.assign(f, { pal: tg.pal, moonC: tg.moonC, dark: tg.dark, beacon: tg.beacon });
     // светила заставки гаснут в начале растворения: под ней уже фон со своими солнцем и луной — не двоятся
@@ -201,23 +296,68 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     f.moon = place(tg.moon);
     f.bodyK = 1.4 - 0.4 * k;                     // в интро светила крупнее — ближе к кадру
     f.flare = 1 - k;                             // блик объектива — только в заставке
-    const tau = tt - T_HIT;
-    const [ix, iy] = v.toUv(CX, WATER);
-    f.pulse = tau > 0 && tau < 4.5 ? [ix, iy + (f.hz - v.hz), tau, 0.9] : [0, 0, 0, 0];   // волна от удара поплавка
+    f.pulse = [0, 0, 0, 0];
+    // поплавок в воде: опора на ватерлинии, верх и высота знака, наклон; где тело входит в воду
+    const asp = innerWidth / innerHeight;
+    const [px, wl] = v.toUv(CX, WATER);
+    const top = markTop(tt), tilt = (markTilt(tt) * Math.PI) / 180;
+    const hUv = v.toUv(0, 0)[1] - v.toUv(0, MH)[1];
+    const cont = new Float32Array(8);
+    if (st.mask && tt >= T_DROP) {
+      const segs = contactsAt(st.mask, (WATER - top) / MH);
+      const wA = hUv * MARK_RATIO * Math.cos(tilt);
+      segs.forEach((sg, i) => cont.set([px * asp + (sg[0] - 0.5) * wA, px * asp + (sg[1] - 0.5) * wA], i * 2));
+    }
+    f.intro = {
+      mark: [px * asp, wl + shift, v.toUv(0, top)[1] + shift, hUv],
+      mark2: [Math.cos(tilt), Math.sin(tilt), MARK_RATIO, st.mask && tt >= T_DROP ? 1 : 0],
+      rings: ringsAt(tt), accent: hex(C.accent), imp: [px, wl + shift], cont,
+      foam: tt > T_HIT ? Math.max(0, 1 - (tt - T_HIT) / 0.9) : 0,
+    };
     f.t = freeze.current ?? seaClock();
     const blur = 16 * (1 - easeOut(tt / T_IN));               // наводка резкости; в конце море резкое, как фон под ним
     st.gfx.setScale(0.45 * Math.max(0.12, 1 / (1 + blur * 0.35)));
     st.gfx.draw(f);
   };
 
+  // старт — когда готово всё: шейдер, знак, картинки камыша и первая отрисовка дашборда (не дольше 2,5 с)
+  useEffect(() => {
+    let raf = 0, settled = false, quiet = 0;
+    const t0 = performance.now();
+    const off = whenAppSettled(() => { settled = true; });
+    const imgs = Array.from(rootRef.current?.querySelectorAll('img') ?? []);
+    let decoded = false;
+    void Promise.all(imgs.map((im) => im.decode().catch(() => undefined))).then(() => { decoded = true; });
+    let prevAt = 0;
+    const wait = (nowMs: number) => {
+      if (born.current) return;
+      const st = sea.current;
+      const shader = gl === false || (st != null && st.gfx.status() !== 'pending' && st.mask != null);
+      if (st && st.gfx.status() === 'fail') setGl(false);
+      const timeout = nowMs - t0 > 2500;
+      // ещё пара спокойных кадров подряд — значит, страница под заставкой отрисовалась
+      quiet = prevAt && nowMs - prevAt < 24 ? quiet + 1 : 0;
+      prevAt = nowMs;
+      if ((shader && decoded && settled && quiet >= 3) || timeout) {
+        born.current = performance.now();
+        setStarted(true);
+        return;
+      }
+      raf = requestAnimationFrame(wait);
+    };
+    if (freeze.current != null) { born.current = performance.now(); setStarted(true); } else raf = requestAnimationFrame(wait);
+    return () => { cancelAnimationFrame(raf); off(); };
+  }, [gl]);
+
   // анимация
   useEffect(() => {
+    if (!started) return;
     let raf = 0;
     const loop = () => {
       const tt = now();
       setT(tt);
       drawSea(tt);
-      if (tt >= T_OUT) introCover.on = false;     // сцена растворяется — под ней уже живой фон
+      if (tt >= T_OUT) setIntroCover(false);      // сцена растворяется — под ней уже живой фон
       if (tt >= T_OUT + OUT && freeze.current == null) finish();
       else raf = requestAnimationFrame(loop);
     };
@@ -225,11 +365,11 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') skip(); };
     window.addEventListener('keydown', onKey);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', onKey); };
-  }, [finish]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [finish, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // звук: пробуем сразу; если браузер не разрешил — по первому касанию, с текущего момента сцены
   useEffect(() => {
-    if (!soundOn || freeze.current != null) return;
+    if (!soundOn || !started || freeze.current != null) return;
     let s: SeaSound;
     try { s = new SeaSound(); } catch { return; }
     sound.current = s;
@@ -253,7 +393,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, [soundOn]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [soundOn, started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- кадр ----------
   const T = t;                                   // время сцены
@@ -261,9 +401,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const tau = t - T_HIT;
   const top = fallen ? markTop(t) : START;
   const tilt = fallen ? markTilt(t) : 0;
-  // смаз движения: при падении — по скорости, после удара — по скорости покачивания
-  const vy = t < T_HIT ? (2 * (IMPACT - START) * ((t - T_DROP) / FALL)) / FALL : Math.abs(markTop(t + 0.01) - markTop(t)) * 100;
-  const motionBlur = fallen ? Math.min(11, vy * 0.0068) : 0;
+  const vy = markVel(t);
 
   // камера: наводка резкости в начале, растворение в конце
   const inK = easeOut(t / T_IN), outK = ease((t - T_OUT) / OUT);
@@ -273,18 +411,23 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const viewScale = Math.max(innerWidth / W, innerHeight / H);
   const midBlur = gl && camBlur > 0.2 ? { filter: `blur(${camBlur}px)` } : undefined;
 
-  const markG = (
-    <g transform={`rotate(${tilt} ${CX} ${WATER}) translate(${CX - MW / 2} ${top})`}>
+  const markAt = (dy = 0) => (
+    <g transform={`rotate(${tilt} ${CX} ${WATER}) translate(${CX - MW / 2} ${top + dy})`}>
       <image href={C.mark} width={MW} height={MH} />
     </g>
   );
+  const markG = markAt();
+  // смаз падения без фильтра: пара бледных копий выше по траектории
+  const trail = fallen && vy > 700 && top < WATER - 0.7 * MH ? [1, 2, 3].map((i) => (
+    <g key={`tr${i}`} opacity={0.22 / i}>{markAt(-vy * 0.009 * i)}</g>
+  )) : null;
   const wordK = ease((t - T_WORD) / 1.0), tagK = ease((t - T_TAG) / 0.9);
   // взгляд вниз в конце: всё, что стоит на воде, поднимается вместе с горизонтом
   const lift = gl ? (HZ - viewMap(innerWidth, innerHeight).hz) * outK * innerHeight : 0;
   const fb = C.body && C.body.y < HORIZON - 8 ? C.body : null;     // светило над горизонтом — есть блик
 
   return (
-    <div role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
+    <div ref={rootRef} role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
       style={{ background: `rgb(${C.fade} / ${1 - outK})` }}>
       {/* камера: масштаб и прозрачность — на видеокарте; расфокус моря — мельче холст, сцены поверх — SVG-размытие
           только по её содержимому (CSS-размытие всего экрана каждый кадр и давало лаги) */}
@@ -336,7 +479,14 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
               <feGaussianBlur stdDeviation="2.4" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
-            <filter id="i-motion" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={`${motionBlur * 0.15} ${motionBlur}`} /></filter>
+            {/* над водой знак виден целиком, к ватерлинии край мягко гаснет (дальше — мениск и вода из шейдера) */}
+            <linearGradient id="i-wl" gradientUnits="userSpaceOnUse" x1="0" y1={WATER - 2.5} x2="0" y2={WATER + 0.5}>
+              <stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+            </linearGradient>
+            <mask id="i-aboveM" maskUnits="userSpaceOnUse">
+              <rect x="0" y="0" width={W} height={WATER - 2.5} fill="#fff" />
+              <rect x="0" y={WATER - 2.5} width={W} height="3" fill="url(#i-wl)" />
+            </mask>
             <filter id="i-word" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation={12 * (1 - wordK)} /></filter>
             <filter id="i-tag" x="-20%" y="-150%" width="140%" height="400%"><feGaussianBlur stdDeviation={8 * (1 - tagK)} /></filter>
             <filter id="i-cam" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={camBlur / viewScale} /></filter>
@@ -419,54 +569,51 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
             </>
           )}
 
-          {/* круги от падения и сигнал буя */}
-          {tau > 0 && [0, 0.22, 0.44].map((d, k) => {
-            const a = tau - d;
-            if (a <= 0) return null;
-            const rx = MW * 0.5 + 250 * a;
-            return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.line} strokeWidth="2" opacity={Math.max(0, 0.7 * (1 - a / 2.4))} />;
-          })}
-          <g filter="url(#i-glow)">
-            {[0, 0.45].map((d, k) => {
-              const a = t - T_PING - d;
-              if (a <= 0 || a > 2.2) return null;
-              const rx = MW * 0.45 + 420 * a;
-              return <ellipse key={`p${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.accent} strokeWidth="2.5" opacity={Math.max(0, 0.9 * (1 - a / 2.0))} />;
-            })}
-          </g>
-
-          {/* отражение щита, поплавок со смазом движения */}
-          {fallen && tau > -0.05 && (
-            <g clipPath="url(#i-below)" mask="url(#i-reflMask)" opacity="0.24">
-              <g transform={`translate(${CX} ${WATER}) skewX(${Math.sin(T * 2.2) * 4}) translate(${-CX} ${-WATER}) translate(0 ${2 * WATER}) scale(1 -1)`}>
-                {markG}
+          {/* без видеокарты: круги, сонар, отражение и подводная часть — в SVG (с видеокартой это делает шейдер) */}
+          {gl === false && (
+            <>
+              {tau > 0 && [0, 0.22, 0.44].map((d, k) => {
+                const a = tau - d;
+                if (a <= 0) return null;
+                const rx = MW * 0.5 + 250 * a;
+                return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.line} strokeWidth="2" opacity={Math.max(0, 0.7 * (1 - a / 2.4))} />;
+              })}
+              <g filter="url(#i-glow)">
+                {[0, 0.45].map((d, k) => {
+                  const a = t - T_PING - d;
+                  if (a <= 0 || a > 2.2) return null;
+                  const rx = MW * 0.45 + 420 * a;
+                  return <ellipse key={`p${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.accent} strokeWidth="2.5" opacity={Math.max(0, 0.9 * (1 - a / 2.0))} />;
+                })}
               </g>
-            </g>
-          )}
-          {fallen && (
-            <g filter={motionBlur > 0.3 ? 'url(#i-motion)' : undefined}>
-              <g clipPath="url(#i-below)" opacity="0.13">{markG}</g>
-              <g clipPath="url(#i-above)">{markG}</g>
-            </g>
-          )}
-          {tau > 0 && (
-            <path d={`M${CX - MW * 0.7},${WATER + 3 * Math.sin(T * 1.3)} Q${CX},${WATER + 5} ${CX + MW * 0.7},${WATER + 3 * Math.sin(T * 1.3 + 1)}`}
-              fill="none" stroke={C.line} strokeWidth="2" opacity={0.55} />
+              {fallen && tau > -0.05 && (
+                <g clipPath="url(#i-below)" mask="url(#i-reflMask)" opacity="0.24">
+                  <g transform={`translate(${CX} ${WATER}) skewX(${Math.sin(T * 2.2) * 4}) translate(${-CX} ${-WATER}) translate(0 ${2 * WATER}) scale(1 -1)`}>
+                    {markG}
+                  </g>
+                </g>
+              )}
+              {fallen && <g clipPath="url(#i-below)" opacity="0.13">{markG}</g>}
+              {tau > 0 && tau < 0.7 && (
+                <ellipse cx={CX} cy={WATER} rx={MW * (0.6 + tau * 1.2)} ry={9 + tau * 6} fill={C.primary} opacity={0.5 * (1 - tau / 0.7)} />
+              )}
+            </>
           )}
 
-          {/* пена, брызги штрихами по траектории, пузыри */}
-          {tau > 0 && tau < 0.7 && (
-            <ellipse cx={CX} cy={WATER} rx={MW * (0.6 + tau * 1.2)} ry={9 + tau * 6} fill={C.primary} opacity={0.5 * (1 - tau / 0.7)} />
-          )}
-          {tau > 0 && tau < 1.3 && scene.drops.map((d, i) => {
-            const x = CX + d.vx * tau;
-            const vy2 = d.vy + 1500 * tau;
-            const y = WATER - 12 + d.vy * tau + 0.5 * 1500 * tau * tau;
-            if (y > WATER + 2) return null;
+          {/* поплавок: над водой — чётко, ниже ватерлинии его рисует вода */}
+          {fallen && <g mask="url(#i-aboveM)">{trail}{markG}</g>}
+
+          {/* брызги: корона от удара летит по дуге и падает обратно, капли вытянуты по скорости; пузыри */}
+          {tau > 0 && tau < 1.4 && scene.drops.map((d, i) => {
+            const g = 1500;
+            const x = CX + d.x0 + d.vx * tau;
+            const vy2 = d.vy + g * tau;
+            const y = WATER - 4 + d.vy * tau + 0.5 * g * tau * tau;
+            if (y > WATER + 1) return null;
             const sp = Math.hypot(d.vx, vy2);
             const ang = (Math.atan2(vy2, d.vx) * 180) / Math.PI;
-            return <ellipse key={`d${i}`} cx={x} cy={y} rx={d.r * (1 + sp * 0.006)} ry={d.r * 0.7}
-              transform={`rotate(${ang} ${x} ${y})`} fill={C.primary} opacity={Math.max(0, 0.95 - tau / 1.25)} />;
+            return <ellipse key={`d${i}`} cx={x} cy={y} rx={d.r * (1 + sp * 0.005)} ry={d.r * 0.7}
+              transform={`rotate(${ang} ${x} ${y})`} fill={C.primary} opacity={Math.max(0, 0.9 - tau / 1.4)} />;
           })}
           {scene.bubbles.map((b, i) => {
             const a = t - b.t;
@@ -508,7 +655,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
           </button>
         )}
         <button type="button" onClick={(e) => { e.stopPropagation(); skip(); }}
-          className="rounded-chip border border-line bg-bg/40 px-3 py-1.5 text-[12px] text-muted backdrop-blur hover:text-primary">
+          className="rounded-chip border border-line bg-bg/60 px-3 py-1.5 text-[12px] text-muted hover:text-primary">
           Пропустить
         </button>
       </div>

@@ -64,21 +64,21 @@ function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) 
   if (!shown) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="pointer-events-auto rounded-[9px] border border-line bg-bg/90 px-3 py-2 text-[12px] font-medium backdrop-blur">
+        className="pointer-events-auto rounded-[9px] border border-line bg-bg/90 px-3 py-2 text-[12px] font-medium">
         Что на карте?
       </button>
     );
   }
   if (inline) {
     return (
-      <div className="pointer-events-auto flex w-fit flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-line bg-bg/90 px-3 py-2 text-[12px] leading-4 backdrop-blur">
+      <div className="pointer-events-auto flex w-fit flex-wrap items-center gap-x-4 gap-y-2 rounded-[10px] border border-line bg-bg/90 px-3 py-2 text-[12px] leading-4">
         <span className="whitespace-nowrap text-muted">Буи:</span>{buoys}
         <span className="h-4 border-l border-line" />{items}{close}
       </div>
     );
   }
   return (
-    <div className="pointer-events-auto w-[236px] rounded-[12px] border border-line bg-bg/90 p-3 text-[12px] leading-4 backdrop-blur">
+    <div className="pointer-events-auto w-[236px] rounded-[12px] border border-line bg-bg/90 p-3 text-[12px] leading-4">
       <div className="mb-2.5 flex items-center justify-between"><span className="cap">Что на карте</span>{close}</div>
       <div className="mb-1.5 text-muted">Акустические буи</div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">{buoys}</div>
@@ -116,7 +116,7 @@ export default function MapShell({ state, handle, selected, onSelect }: { state:
 
       <div className="pointer-events-none absolute inset-0 z-[1100]">
         {/* подложка: светлая плашка переезжает к выбранной кнопке */}
-        <div className="fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_var(--c-shadow)] backdrop-blur"
+        <div className="fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_var(--c-shadow)]"
           role="group" aria-label="Подложка карты">
           <span aria-hidden className="absolute bottom-[3px] left-[3px] top-[3px] w-[78px] rounded-[7px] bg-primary transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
             style={{ transform: `translateX(${basemap === 'photo' ? 0 : 78}px)` }} />
@@ -135,7 +135,7 @@ export default function MapShell({ state, handle, selected, onSelect }: { state:
         )}
 
         {/* масштаб */}
-        <div className="fade-in pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 shadow-[0_8px_24px_var(--c-shadow)] backdrop-blur">
+        <div className="fade-in pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 shadow-[0_8px_24px_var(--c-shadow)]">
           <Btn title="Приблизить" onClick={() => handle.current?.zoomIn()}>
             <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.6"><path d="M7 1v12M1 7h12" /></svg>
           </Btn>

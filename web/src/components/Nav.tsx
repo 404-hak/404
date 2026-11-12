@@ -84,7 +84,7 @@ export function Sidebar({ route, go, badges }: Props) {
     if (el && (el.offsetTop !== mark.y || el.offsetHeight !== mark.h)) setMark({ y: el.offsetTop, h: el.offsetHeight });
   });
   return (
-    <nav aria-label="Разделы" className="relative z-20 hidden w-[68px] shrink-0 flex-col border-r border-line bg-surface/70 backdrop-blur md:flex xl:w-[232px]">
+    <nav aria-label="Разделы" className="relative z-20 hidden w-[68px] shrink-0 flex-col border-r border-line bg-surface/[.88] md:flex xl:w-[232px]">
       <div className="flex h-14 items-center px-5">
         <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро">
           <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="on-night hidden h-[18px] xl:block" />
@@ -129,7 +129,7 @@ export function Sidebar({ route, go, badges }: Props) {
 /** Нижняя панель разделов на телефоне. */
 export function BottomNav({ route, go, badges }: Props) {
   return (
-    <nav aria-label="Разделы" className="relative z-20 grid shrink-0 grid-cols-6 border-t border-line bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+    <nav aria-label="Разделы" className="relative z-20 grid shrink-0 grid-cols-6 border-t border-line bg-surface/[.94] pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.flatMap((s) => s.items).map((it) => (
         <button key={it.id} type="button" onClick={() => go(it.id)} aria-current={route === it.id ? 'page' : undefined}
           className={`relative flex h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${route === it.id ? 'text-primary' : 'text-muted'}`}>

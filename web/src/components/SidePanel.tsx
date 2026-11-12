@@ -277,7 +277,7 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; labe
     if (el && (el.offsetLeft !== bar.x || el.offsetWidth !== bar.w)) setBar({ x: el.offsetLeft, w: el.offsetWidth });
   });
   return (
-    <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5 backdrop-blur" role="tablist">
+    <div className="sticky top-0 z-10 border-b border-line bg-surface/95 px-5" role="tablist">
       <div className="relative flex gap-5">
         {tabs.map((t) => (
           <button key={t.id} ref={(el) => { refs.current[t.id] = el; }} type="button" role="tab" aria-selected={t.id === value}

@@ -46,26 +46,32 @@ export function ReedsImage({ side, seed = 7, count = 16, color, blur, className 
   );
 }
 
-export default function Reeds({ side, seed = 7, count = 16, className = '', style, clump = false }: {
+export default function Reeds({ side, seed = 7, count = 16, className = '', style, clump = false, blur = 0 }: {
   side: 'left' | 'right'; seed?: number; count?: number; className?: string; style?: React.CSSProperties; clump?: boolean;
+  /** мягкость краёв в единицах рисунка — фильтром внутри SVG: размывается при отрисовке один раз, не каждый кадр */
+  blur?: number;
 }) {
+  const fid = `reed-blur-${side}-${seed}`;
   const blades = useMemo(() => makeBlades(seed, count), [seed, count]);
   return (
     <svg viewBox="0 0 300 500" preserveAspectRatio={side === 'left' ? 'xMinYMax meet' : 'xMaxYMax meet'}
       className={`${className}${clump ? ' reeds-sway' : ''}`} aria-hidden
       style={{ ...style, transform: side === 'right' ? 'scaleX(-1)' : undefined, animationDuration: clump ? `${7 + (seed % 5)}s` : undefined, animationDelay: clump ? `${-(seed % 7)}s` : undefined }}>
-      {blades.map((b, i) => {
-        const by = 510;
-        return (
-          <g key={i} className={clump ? undefined : 'reed'} style={clump ? undefined : { animationDuration: `${b.dur}s`, animationDelay: `${b.delay}s` }}>
-            <path fill="currentColor" d={bladePath(b)} />
-            {b.head && (
-              <ellipse fill="currentColor" cx={b.x + b.lean * 0.78} cy={by - b.h * 0.8} rx={b.w * 0.9} ry={b.w * 3.6}
-                transform={`rotate(${b.lean * 0.25} ${b.x + b.lean * 0.78} ${by - b.h * 0.8})`} />
-            )}
-          </g>
-        );
-      })}
+      {blur > 0 && <defs><filter id={fid} x="-20%" y="-10%" width="140%" height="120%"><feGaussianBlur stdDeviation={blur} /></filter></defs>}
+      <g filter={blur > 0 ? `url(#${fid})` : undefined}>
+        {blades.map((b, i) => {
+          const by = 510;
+          return (
+            <g key={i} className={clump ? undefined : 'reed'} style={clump ? undefined : { animationDuration: `${b.dur}s`, animationDelay: `${b.delay}s` }}>
+              <path fill="currentColor" d={bladePath(b)} />
+              {b.head && (
+                <ellipse fill="currentColor" cx={b.x + b.lean * 0.78} cy={by - b.h * 0.8} rx={b.w * 0.9} ry={b.w * 3.6}
+                  transform={`rotate(${b.lean * 0.25} ${b.x + b.lean * 0.78} ${by - b.h * 0.8})`} />
+              )}
+            </g>
+          );
+        })}
+      </g>
     </svg>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Alert, AlertStatus, ChainCheck, NightForecast, State, Stats } from './types';
+import { introPlaying, onIntroFinished } from './introBus';
 
 /** Живое состояние: сервер шлёт полный снимок по WebSocket при каждом изменении. */
 export function useLiveState() {
@@ -9,11 +10,20 @@ export function useLiveState() {
     let ws: WebSocket | null = null;
     let stopped = false;
     let retry: number | undefined;
+    // пока заставка на экране, свежие снимки копятся (берём последний) и применяются, когда она ушла:
+    // перерисовка дашборда под заставкой отнимала у неё кадры
+    let held: State | null = null, first = true;
+    const off = onIntroFinished(() => { if (held) { setState(held); held = null; } });
+    const take = (s: State) => {
+      if (introPlaying() && !first) { held = s; return; }
+      first = false;
+      setState(s);
+    };
     const connect = () => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       ws = new WebSocket(`${proto}://${location.host}/ws`);
       ws.onopen = () => setOnline(true);
-      ws.onmessage = (e) => setState(JSON.parse(e.data));
+      ws.onmessage = (e) => take(JSON.parse(e.data));
       ws.onclose = () => {
         setOnline(false);
         if (!stopped) retry = window.setTimeout(connect, 1500);
@@ -23,6 +33,7 @@ export function useLiveState() {
     connect();
     return () => {
       stopped = true;
+      off();
       window.clearTimeout(retry);
       ws?.close();
     };
