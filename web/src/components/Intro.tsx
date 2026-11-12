@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SeaSound } from '../introSound';
 import { useSoundOn } from '../sound';
 import Reeds from './Reeds';
-import { currentTheme } from '../theme';
+import { currentSky, type Sky } from '../theme';
+import { hex, palAt, type V3 } from '../skyPalette';
 
 /**
  * Интро: ночное море дельты, камера наводит резкость, знак падает, как поплавок, — смаз движения,
@@ -11,26 +12,42 @@ import { currentTheme } from '../theme';
  * Стартует сам. Звук — если браузер разрешит; иначе по первому касанию (кнопка «Включить звук»).
  */
 
-const W = 1600, H = 900, HORIZON = 470, WATER = 610, CX = 800, MOON = { x: 1235, y: 165 };
+const W = 1600, H = 900, HORIZON = 470, WATER = 610, CX = 800;
 const MARK_RATIO = 819.83 / 1250;        // ширина / высота знака (brand/src/mark-data.mjs)
 const MH = 210, MW = MH * MARK_RATIO;
 const SETTLED = WATER - 0.8 * MH;         // в покое над водой щит и крылья, игла — под водой
 const START = -MH - 60, IMPACT = WATER - MH;
 const T_IN = 1.1, T_DROP = 0.7, FALL = 0.8, T_HIT = T_DROP + FALL;
 const T_PING = 2.8, T_WORD = 3.2, T_TAG = 3.8, T_OUT = 5.8, OUT = 0.9;
-/** Ночь — луна и звёзды; день — солнце, голубая вода, тёмный знак (инверсная версия бренда) */
-const NIGHT = {
-  primary: '#E2E8F0', accent: '#7A866F', muted: '#A2A9B4', moon: '#E8EDF4', ink: '#E2E8F0',
-  sky: ['#060D1A', '#0B1628', '#1C3050'], sea: ['#1C3050', '#0F1E36', '#050C17'], island: '#0A1424',
-  glow: 0.4, glint: 1, stars: true, vignette: 0.55, reedMid: '#07101F', reedNear: '#02060D', fade: '7, 15, 29',
-  mark: '/brand/404-logo-cream.svg', word: '/brand/404-wordmark-cream.svg', crescent: true,
-};
-const DAY = {
-  primary: '#FFFFFF', accent: '#5E6A57', muted: '#505968', moon: '#FFF8E6', ink: '#0B1628',
-  sky: ['#5D86B4', '#93B5D4', '#DDE8F1'], sea: ['#CADBE8', '#86A8C4', '#2D5070'], island: '#6B8173',
-  glow: 0.75, glint: 1.35, stars: false, vignette: 0.22, reedMid: '#4A5A42', reedNear: '#25311F', fade: '226, 232, 240',
-  mark: '/brand/404-logo-dark.svg', word: '/brand/404-wordmark-dark.svg', crescent: false,
-};
+/** Палитра интро из настоящего неба темы: в «Авто» — время суток по МСК, солнце или луна на своих местах */
+const css = (c: V3) => `rgb(${c.map((v) => Math.round(v * 255)).join(' ')})`;
+const mixV = (a: V3, b: V3, k: number) => a.map((v, i) => v + (b[i] - v) * k) as V3;
+/** Светило не прячем за надписью «404»: в интро сдвигаем его за край названия (в фоне — точное место) */
+const clearOfTitle = (x: number, y: number) => (y < 360 && Math.abs(x - CX) < 290 ? CX + (x >= CX ? 1 : -1) * 290 : x);
+
+function buildPalette(sky: Sky) {
+  const p = palAt(sky.sunAlt);
+  const light = sky.ui >= 0.5;
+  const useSun = sky.sun.visible >= sky.moon.visible && sky.sun.visible > 0.2;
+  const b = useSun ? sky.sun : sky.moon;
+  const seen = useSun ? sky.sun.visible : sky.moon.visible;
+  const skyBands = [0, 1, 2, 3].map((i) => css(mixV(p.hz, p.top, i / 3)));
+  const by = HORIZON - 34 - Math.min(1, Math.max(0, (b.y - 0.812) / 0.115)) * (HORIZON - 130);
+  const band = skyBands[Math.min(3, Math.floor(((HORIZON - by) / HORIZON) * 4))];
+  return {
+    light, skyBands, band,
+    seaBands: [0, 1, 2, 3].map((i) => css(mixV(p.far, p.near, i / 3))),
+    line: css(p.line), island: css(p.isle), stars: p.stars, horizon: css(mixV(p.hz, [1, 1, 1], 0.35)),
+    body: seen > 0.15 ? { x: clearOfTitle(140 + b.x * (W - 280), by), y: by, sun: useSun, illum: sky.moon.illum >= 0 ? sky.moon.illum : 0.75, waxing: sky.moon.waxing } : null,
+    bodyC: useSun ? css(p.sun) : '#F1F4FA',
+    primary: '#FFFFFF', accent: light ? '#5E6A57' : '#8E9C80', muted: light ? '#505968' : '#B4BAC4',
+    vignette: 0.12 + 0.4 * (1 - sky.day),
+    reedMid: css(mixV(hex('#07101F'), hex('#4A5A42'), sky.day)), reedNear: css(mixV(hex('#02060D'), hex('#25311F'), sky.day)),
+    fade: getComputedStyle(document.documentElement).getPropertyValue('--rgb-bg').trim() || '11 22 40',
+    mark: light ? '/brand/404-logo-dark.svg' : '/brand/404-logo-cream.svg',
+    word: light ? '/brand/404-wordmark-dark.svg' : '/brand/404-wordmark-cream.svg',
+  };
+}
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
@@ -91,7 +108,7 @@ function useScene() {
 export default function Intro({ onDone }: { onDone: () => void }) {
   const scene = useScene();
   const soundOn = useSoundOn();
-  const [C] = useState(() => (currentTheme() === 'day' ? DAY : NIGHT));   // тема на момент показа
+  const [C] = useState(() => buildPalette(currentSky()));   // небо на момент показа
   const [t, setT] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
   const born = useRef(performance.now());
@@ -182,39 +199,10 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
   return (
     <div role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
-      style={{ background: `rgba(${C.fade}, ${1 - outK})` }}>
+      style={{ background: `rgb(${C.fade} / ${1 - outK})` }}>
       <div className="absolute inset-0" style={{ filter: camBlur > 0.2 ? `blur(${camBlur}px)` : undefined, transform: `scale(${camScale})`, opacity: camOpacity }}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden>
           <defs>
-            <linearGradient id="i-sky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={C.sky[0]} />
-              <stop offset="0.7" stopColor={C.sky[1]} />
-              <stop offset="1" stopColor={C.sky[2]} />
-            </linearGradient>
-            <linearGradient id="i-sea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={C.sea[0]} />
-              <stop offset="0.2" stopColor={C.sea[1]} />
-              <stop offset="1" stopColor={C.sea[2]} />
-            </linearGradient>
-            <radialGradient id="i-moonGlow">
-              <stop offset="0" stopColor={C.moon} stopOpacity={C.glow} />
-              <stop offset="0.35" stopColor={C.moon} stopOpacity="0.1" />
-              <stop offset="1" stopColor={C.moon} stopOpacity="0" />
-            </radialGradient>
-            <linearGradient id="i-haze" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={C.primary} stopOpacity="0" />
-              <stop offset="0.5" stopColor={C.primary} stopOpacity="0.08" />
-              <stop offset="1" stopColor={C.primary} stopOpacity="0" />
-            </linearGradient>
-            <radialGradient id="i-mist">
-              <stop offset="0" stopColor={C.primary} stopOpacity="0.09" />
-              <stop offset="1" stopColor={C.primary} stopOpacity="0" />
-            </radialGradient>
-            <linearGradient id="i-band" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={C.primary} stopOpacity="0" />
-              <stop offset="0.5" stopColor={C.primary} stopOpacity="1" />
-              <stop offset="1" stopColor={C.primary} stopOpacity="0" />
-            </linearGradient>
             <radialGradient id="i-vignette" cx="50%" cy="48%" r="75%">
               <stop offset="0.55" stopColor="#000" stopOpacity="0" />
               <stop offset="1" stopColor="#000" stopOpacity={C.vignette} />
@@ -232,62 +220,68 @@ export default function Intro({ onDone }: { onDone: () => void }) {
               <feGaussianBlur stdDeviation="2.4" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
-            <filter id="i-far" x="-5%" y="-50%" width="110%" height="200%"><feGaussianBlur stdDeviation="1.4" /></filter>
-            <filter id="i-soft" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="0.7" /></filter>
             <filter id="i-motion" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={`${motionBlur * 0.15} ${motionBlur}`} /></filter>
             <filter id="i-word" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation={12 * (1 - wordK)} /></filter>
             <filter id="i-tag" x="-20%" y="-150%" width="140%" height="400%"><feGaussianBlur stdDeviation={8 * (1 - tagK)} /></filter>
           </defs>
 
-          {/* небо: звёзды, луна с ореолом */}
-          <rect width={W} height={HORIZON} fill="url(#i-sky)" />
-          {C.stars && scene.stars.map((s, i) => (
-            <circle key={i} cx={s.x} cy={s.y} r={s.s} fill={C.primary} opacity={0.2 + 0.55 * (0.5 + 0.5 * Math.sin(T * s.sp + s.ph))} />
-          ))}
-          <circle cx={MOON.x} cy={MOON.y} r="190" fill="url(#i-moonGlow)" />
-          <g filter="url(#i-glow)">
-            <circle cx={MOON.x} cy={MOON.y} r="30" fill={C.moon} />
-            {C.crescent && <circle cx={MOON.x + 12} cy={MOON.y - 7} r="27" fill="#0B1628" opacity="0.16" />}
-          </g>
+          {/* небо: четыре ровные полосы, звёзды-искорки, солнце или луна — плоские диски с кольцами */}
+          {[0, 0.18, 0.4, 0.68].map((f0, i, arr) => {
+            const f1 = arr[i + 1] ?? 1;
+            return <rect key={`sky${i}`} x="0" y={HORIZON * (1 - f1)} width={W} height={HORIZON * (f1 - f0) + 1} fill={C.skyBands[i]} />;
+          })}
+          {C.stars > 0.02 && scene.stars.map((s, i) => {
+            const on = Math.sin(T * s.sp + s.ph) > -0.4 ? 1 : 0.25;
+            const r = 2 + s.s * 2.4;
+            return <path key={i} d={`M${s.x - r},${s.y}H${s.x + r}M${s.x},${s.y - r}V${s.y + r}`} stroke="#FFF9EA" strokeWidth="1.3" strokeLinecap="round" opacity={on * C.stars * 0.9} />;
+          })}
+          {C.body && (
+            <g>
+              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 88 : 64} fill={C.bodyC} opacity="0.1" />
+              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 58 : 46} fill={C.bodyC} opacity="0.2" />
+              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 36 : 30} fill={C.bodyC} />
+              {!C.body.sun && C.body.illum < 0.97 && (
+                <circle cx={C.body.x + (C.body.waxing ? -1 : 1) * 60 * C.body.illum} cy={C.body.y} r="30.5" fill={C.band} opacity="0.94" />
+              )}
+            </g>
+          )}
 
-          {/* море: градиент, зыбь катится к зрителю, мазки света, лунная дорожка */}
-          <rect y={HORIZON} width={W} height={H - HORIZON} fill="url(#i-sea)" />
-          {Array.from({ length: 11 }, (_, i) => {
-            const p = ((i / 11 + T * 0.03) % 1);
+          {/* море: плоские слои глубины, ленты зыби, значки волн «~», мигающая дорожка под светилом */}
+          {[0, 0.06, 0.2, 0.45].map((f0, i, arr) => {
+            const f1 = arr[i + 1] ?? 1;
+            return <rect key={`sea${i}`} x="0" y={HORIZON + (H - HORIZON) * f0} width={W} height={(H - HORIZON) * (f1 - f0) + 1} fill={C.seaBands[i]} />;
+          })}
+          {Array.from({ length: 9 }, (_, i) => {
+            const p = ((i / 9 + T * 0.03) % 1);
             const k = p ** 1.9;
             const y = HORIZON + (H - HORIZON) * k;
-            const h = 2 + 46 * k;
-            return <rect key={`sw${i}`} x="0" y={y - h / 2} width={W} height={h} fill="url(#i-band)" opacity={0.045 * Math.sin(Math.PI * p)} />;
+            return <rect key={`sw${i}`} x="0" y={y} width={W} height={2 + 30 * k} fill={C.line} opacity={Math.sin(Math.PI * p) > 0.55 ? 0.07 : 0} />;
           })}
-          <g filter="url(#i-soft)">
-            {scene.streaks.map((s, i) => {
-              const x = ((s.x + T * s.sp) % (W + 200)) - 100;
-              const k = (s.y - HORIZON) / (H - HORIZON);
-              return <rect key={i} x={x} y={s.y} width={s.l * (0.4 + k)} height={1 + k * 1.4} rx="1" fill={C.primary} opacity={s.o} />;
-            })}
-          </g>
-          <g filter="url(#i-glow)">
-            {scene.glints.map((g, i) => {
-              const k = (g.y - HORIZON) / (H - HORIZON);
-              const len = 6 + k * 95 * (0.4 + g.j);
-              const x = MOON.x + Math.sin(T * 0.7 + g.ph) * (4 + k * 44) - len / 2;
-              return <rect key={i} x={x} y={g.y} width={len} height={1 + k * 2.2} rx="1" fill={C.moon}
-                opacity={Math.min(1, (0.12 + 0.5 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.5) * C.glint)} />;
-            })}
-          </g>
+          {scene.streaks.map((s, i) => {
+            const k = (s.y - HORIZON) / (H - HORIZON);
+            const L = 6 + 26 * k, A = 1.5 + 6 * k;
+            const x = s.x + Math.sin(T * 0.8 + i) * (2 + 6 * k);
+            return <path key={`wv${i}`} d={`M${x - L},${s.y} q${L / 2},${-A} ${L},0 t${L},0`} fill="none" stroke={C.line} strokeWidth={1 + 1.6 * k}
+              strokeLinecap="round" opacity={0.25 + 0.4 * k} />;
+          })}
+          {C.body && scene.glints.map((g, i) => {
+            const k = (g.y - HORIZON) / (H - HORIZON);
+            const len = 8 + k * 90 * (0.4 + g.j);
+            const x = C.body!.x + (g.j - 0.5) * (6 + k * 50) - len / 2;
+            const on = Math.sin(T * g.sp * 1.4 + g.ph) > -0.2 ? 1 : 0;
+            return <rect key={`gl${i}`} x={x} y={g.y} width={len} height={2 + k * 3} rx={1 + k * 1.5} fill={C.bodyC} opacity={on * (C.body!.sun ? 0.95 : 0.8)} />;
+          })}
 
-          {/* горизонт: дымка, дальние острова (не в фокусе), туман над водой */}
-          <rect y={HORIZON - 45} width={W} height="100" fill="url(#i-haze)" />
-          <g filter="url(#i-far)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} opacity="0.92" />)}</g>
-          <ellipse cx={500 + Math.sin(T * 0.12) * 120} cy={HORIZON + 22} rx="520" ry="34" fill="url(#i-mist)" />
-          <ellipse cx={1150 - Math.sin(T * 0.1 + 1) * 140} cy={HORIZON + 48} rx="460" ry="30" fill="url(#i-mist)" />
+          {/* горизонт: чёткая линия и плоские острова */}
+          <rect y={HORIZON - 1} width={W} height="2" fill={C.horizon} opacity="0.55" />
+          {scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} />)}
 
           {/* круги от падения и сигнал буя */}
           {tau > 0 && [0, 0.22, 0.44].map((d, k) => {
             const a = tau - d;
             if (a <= 0) return null;
             const rx = MW * 0.5 + 250 * a;
-            return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.ink} strokeWidth="1.5" opacity={Math.max(0, 0.55 * (1 - a / 2.4))} />;
+            return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.line} strokeWidth="2" opacity={Math.max(0, 0.7 * (1 - a / 2.4))} />;
           })}
           <g filter="url(#i-glow)">
             {[0, 0.45].map((d, k) => {
@@ -300,7 +294,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
           {/* отражение щита, поплавок со смазом движения */}
           {fallen && tau > -0.05 && (
-            <g clipPath="url(#i-below)" mask="url(#i-reflMask)" opacity="0.24" filter="url(#i-soft)">
+            <g clipPath="url(#i-below)" mask="url(#i-reflMask)" opacity="0.24">
               <g transform={`translate(${CX} ${WATER}) skewX(${Math.sin(T * 2.2) * 4}) translate(${-CX} ${-WATER}) translate(0 ${2 * WATER}) scale(1 -1)`}>
                 {markG}
               </g>
@@ -314,12 +308,12 @@ export default function Intro({ onDone }: { onDone: () => void }) {
           )}
           {tau > 0 && (
             <path d={`M${CX - MW * 0.7},${WATER + 3 * Math.sin(T * 1.3)} Q${CX},${WATER + 5} ${CX + MW * 0.7},${WATER + 3 * Math.sin(T * 1.3 + 1)}`}
-              fill="none" stroke={C.ink} strokeWidth="1.5" opacity={0.35} filter="url(#i-soft)" />
+              fill="none" stroke={C.line} strokeWidth="2" opacity={0.55} />
           )}
 
           {/* пена, брызги штрихами по траектории, пузыри */}
           {tau > 0 && tau < 0.7 && (
-            <ellipse cx={CX} cy={WATER} rx={MW * (0.6 + tau * 1.2)} ry={9 + tau * 6} fill={C.primary} opacity={0.4 * (1 - tau / 0.7)} filter="url(#i-soft)" />
+            <ellipse cx={CX} cy={WATER} rx={MW * (0.6 + tau * 1.2)} ry={9 + tau * 6} fill={C.primary} opacity={0.5 * (1 - tau / 0.7)} />
           )}
           {tau > 0 && tau < 1.3 && scene.drops.map((d, i) => {
             const x = CX + d.vx * tau;

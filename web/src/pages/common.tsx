@@ -23,8 +23,8 @@ export function Page({ title, lead, aside, children }: { cap?: string; title: st
       <div className="mx-auto max-w-[1180px] px-4 pb-10 pt-6 md:px-8 md:pt-9">
         <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-[640px]">
-            <h1 className="text-[30px] font-semibold leading-[36px] tracking-[-.015em] md:text-[38px] md:leading-[44px]"><Words text={title} /></h1>
-            {lead && <p className="enter mt-3 text-[14px] leading-[22px] text-muted" style={{ animationDelay: '180ms' }}>{lead}</p>}
+            <h1 className="on-sky text-[30px] font-semibold leading-[36px] tracking-[-.015em] md:text-[38px] md:leading-[44px]"><Words text={title} /></h1>
+            {lead && <p className="on-sky enter mt-3 text-[14px] leading-[22px] text-muted" style={{ animationDelay: '180ms' }}>{lead}</p>}
           </div>
           {aside && <div className="enter" style={{ animationDelay: '240ms' }}>{aside}</div>}
         </header>
