@@ -43,7 +43,13 @@ OUT = ROOT / "api" / "app" / "audio" / "model.npz"
 def event_item(args):
     seed, event = args
     r = np.random.default_rng(seed)
-    x, m = synth.scene(r, event)
+    seg = None
+    if event == "motor":                       # треть моторов звучит не весь клип: появляется или затихает внутри
+        rp = np.random.default_rng(seed ^ 0x5EED)
+        if rp.random() < 0.35:
+            L = float(rp.uniform(0.45, 0.95))
+            seg = (float(rp.uniform(0, 1 - L)), L, float(rp.uniform(0.15, 1.2)))
+    x, m = synth.scene(r, event, segment=seg)
     return dsp.event_features(x), EVENTS.index(event), m["activity"], m.get("snr_db", np.nan)
 
 

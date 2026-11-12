@@ -15,20 +15,27 @@ import contextlib
 import logging
 import os
 import secrets
+import uuid
+from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
+
+import numpy as np
+from pydantic import BaseModel, Field
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .audio import dsp, lab
 from .audio.dsp import AudioError
 from .models import Alert, AlertIn, AlertPatch, Buoy, ChainCheck, ClipResult, Forecast, Heartbeat, ModelInfo, NightForecast, State, Stats, Weather
 from .sim import Sim
 from .store import Clips, Store
 from .weather import OpenMeteo
-from .world import ModelMissing, World
+from .world import ARCHIVE_VESSELS, ModelMissing, World
 
 log = logging.getLogger("404")
 API_DIR = Path(__file__).resolve().parents[1]
@@ -172,6 +179,93 @@ def get_weather() -> Weather:
     if weather:
         return weather.status(now, c.wind_ms, c.water_temp)
     return Weather(source="seasonal", fetched_at=None, wind_ms=c.wind_ms, water_temp=c.water_temp)
+
+
+# ---------- лаборатория нейросети ----------
+LAB: OrderedDict[str, bytes] = OrderedDict()            # последние разобранные записи — чтобы их можно было послушать
+
+
+class LabScene(BaseModel):
+    preset: Literal["motor-archive", "motor-new", "shot", "night", "silence", "airplane", "oar", "fish", "thunder", "rain"]
+    vessel: Literal["boat-A", "boat-B", "boat-C"] = "boat-A"
+    duration_s: float = Field(default=12, ge=4, le=30)
+    snr_db: float = Field(default=10, ge=-10, le=30, description="Громкость события над фоном")
+    activity: float = Field(default=0.7, ge=0, le=1, description="Живость природы")
+    seed: int = Field(default=1, ge=0)
+
+
+def _need_model():
+    if not world.model:
+        raise HTTPException(503, "Нейросеть не обучена: запустите tools/ml/train.py")
+    return world.model
+
+
+def _lab_keep(wav: bytes) -> str:
+    lid = uuid.uuid4().hex[:12]
+    LAB[lid] = wav
+    while len(LAB) > 24:
+        LAB.popitem(last=False)
+    return lid
+
+
+def _lab_run(x: np.ndarray, wav: bytes, extra: dict) -> dict:
+    m = _need_model()
+    res = lab.analyze(m, x, world.thresholds, world.vessels, world.match_threshold)
+    return {"id": _lab_keep(wav), **extra, **res}
+
+
+@app.get("/api/lab/presets")
+def lab_presets() -> dict:
+    return {"presets": [{"id": k, "title": v} for k, v in lab.PRESETS.items()], "archive": list(ARCHIVE_VESSELS)}
+
+
+@app.post("/api/lab/scene")
+async def lab_scene(p: LabScene) -> dict:
+    """Синтезировать сцену (мотор, выстрел, тишина, помехи) и разобрать её нейросетью. Ничего не меняет в системе."""
+    _need_model()
+
+    def run():
+        sc = lab.scene(p.preset, vessel_seed=ARCHIVE_VESSELS[p.vessel] if p.preset == "motor-archive" else None,
+                       duration=p.duration_s, snr_db=p.snr_db, activity=p.activity, seed=p.seed)
+        return _lab_run(sc.x, dsp.write_wav(sc.x), {"source": "scene", "title": sc.title, "truth": sc.truth, "marks": sc.marks,
+                                                     "vessel": p.vessel if p.preset == "motor-archive" else None})
+    return await asyncio.to_thread(run)
+
+
+@app.post("/api/lab/analyze", openapi_extra={"requestBody": {"required": True, "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}}}})
+async def lab_analyze(request: Request, name: str | None = None) -> dict:
+    """Разобрать свой звук (WAV до 30 с): всё, что видит и решает нейросеть, без тревог."""
+    _need_model()
+    wav = await request.body()
+    if len(wav) > MAX_CLIP_BYTES:
+        raise HTTPException(413, "Файл больше 10 МБ")
+    try:
+        x = dsp.read_wav(wav)
+    except AudioError as e:
+        raise HTTPException(422, f"Звук не подходит: {e}")
+    return await asyncio.to_thread(_lab_run, x, wav, {"source": "upload", "title": name or "Ваша запись", "truth": None, "marks": []})
+
+
+@app.post("/api/lab/clip/{sha}")
+async def lab_clip(sha: str) -> dict:
+    """Разобрать клип, который прислал буй (из журнала клипов)."""
+    _need_model()
+    wav = world.clips.get(sha)
+    if wav is None:
+        raise HTTPException(404, "Клипа нет")
+    rec = next((r for r in world.recent if r["sha256"] == sha), None)
+    b = world.buoys.get(rec["buoy_id"]) if rec else None
+    title = f"Клип буя {b.name}" if b else "Клип буя"
+    return await asyncio.to_thread(_lab_run, dsp.read_wav(wav), wav, {"source": "buoy", "title": title, "truth": None, "marks": [],
+                                                                       "sha256": sha, "ts": rec["ts"] if rec else None})
+
+
+@app.get("/api/lab/audio/{lid}")
+def lab_audio(lid: str) -> Response:
+    wav = LAB.get(lid)
+    if wav is None:
+        raise HTTPException(404, "Запись устарела — разберите её заново")
+    return Response(wav, media_type="audio/wav")
 
 
 # ---------- алерты ----------

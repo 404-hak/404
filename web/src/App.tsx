@@ -9,6 +9,7 @@ import StatsPage from './pages/StatsPage';
 import ForecastPage from './pages/ForecastPage';
 import BuoysPage from './pages/BuoysPage';
 import EvidencePage from './pages/EvidencePage';
+import LabPage from './pages/LabPage';
 import { api, useLiveState } from './live';
 import { plural } from './format';
 import type { MapHandle } from './geo';
@@ -105,6 +106,7 @@ export default function App() {
       forecast: <ForecastPage />,
       buoys: <BuoysPage state={state} toBuoy={toBuoy} />,
       evidence: <EvidencePage state={state} />,
+      lab: <LabPage state={state} />,
     }[route];
   }
 

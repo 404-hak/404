@@ -179,3 +179,31 @@ def test_one_motor_heard_by_neighbours_is_one_alert():
     clock.t += timedelta(seconds=5)
     neighbour = heard_motor(w, clock, "b01", [wav("motor", 32, v=v, snr_db=8), wav("motor", 34, v=v, snr_db=8)])  # Осетровый-1 в 8 км
     assert first.alert and neighbour.alert is None and "Камышовый-4" in neighbour.note
+
+
+# ---------- лаборатория ----------
+def test_lab_scenes_are_heard_right():
+    with TestClient(main.app) as c:
+        n = len(main.world.alerts)
+        boat = c.post("/api/lab/scene", json={"preset": "motor-archive", "vessel": "boat-A", "duration_s": 12}).json()
+        assert [a["kind"] for a in boat["verdict"]["alerts"]] == ["motor"]          # одна тревога — со второго клипа
+        assert boat["motor"]["verdict"] == "узнан: boat-A"
+        assert boat["spec"]["bands"] == 64 and len(boat["wave"]["min"]) == 1200 and boat["timeline"]
+        silence = c.post("/api/lab/scene", json={"preset": "silence", "duration_s": 28}).json()
+        assert "silence" in [a["kind"] for a in silence["verdict"]["alerts"]]
+        for quiet in ("night", "oar", "airplane"):
+            assert c.post("/api/lab/scene", json={"preset": quiet}).json()["verdict"]["alerts"] == [], quiet
+        shot = c.post("/api/lab/scene", json={"preset": "shot", "snr_db": 12}).json()
+        assert "shot" in [a["kind"] for a in shot["verdict"]["alerts"]]
+        assert len(main.world.alerts) == n                                             # лаборатория ничего не меняет
+        assert c.get(f"/api/lab/audio/{boat['id']}").content[:4] == b"RIFF"
+
+
+def test_lab_upload_and_buoy_clip():
+    with TestClient(main.app) as c:
+        r = c.post("/api/lab/analyze?name=test.wav", content=wav("background", 77, activity=0.8), headers={"Content-Type": "audio/wav"})
+        assert r.status_code == 200 and r.json()["title"] == "test.wav" and r.json()["source"] == "upload"
+        assert c.post("/api/lab/analyze", content=b"nope").status_code == 422
+        sha = c.post("/api/buoys/b03/audio", content=wav("background", 78, activity=0.6)).json()["sha256"]
+        clip = c.post(f"/api/lab/clip/{sha}").json()
+        assert clip["source"] == "buoy" and clip["sha256"] == sha and "Тростниковый-3" in clip["title"]

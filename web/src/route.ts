@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { sparkTransition } from './upkMotion';
 
-export type Route = 'map' | 'alerts' | 'stats' | 'forecast' | 'buoys' | 'evidence';
-export const ROUTES: Route[] = ['map', 'alerts', 'stats', 'forecast', 'buoys', 'evidence'];
+export type Route = 'map' | 'alerts' | 'stats' | 'forecast' | 'buoys' | 'evidence' | 'lab';
+export const ROUTES: Route[] = ['map', 'alerts', 'stats', 'forecast', 'buoys', 'evidence', 'lab'];
 
 const parse = (): Route => {
   const r = location.hash.replace(/^#\/?/, '').split('?')[0] as Route;

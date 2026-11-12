@@ -18,12 +18,13 @@ export const ICONS: Record<Route, ReactNode> = {
   forecast: <I><path d="M15.5 12.4A6.5 6.5 0 0 1 7.6 3.5a6.5 6.5 0 1 0 7.9 8.9z" /></I>,
   buoys: <I><circle cx="10" cy="10" r="2.2" /><path d="M5.8 5.8a6 6 0 0 0 0 8.4M14.2 5.8a6 6 0 0 1 0 8.4M3.3 3.3a9.5 9.5 0 0 0 0 13.4M16.7 3.3a9.5 9.5 0 0 1 0 13.4" /></I>,
   evidence: <I><rect x="3" y="7.5" width="6" height="5" rx="1.6" /><rect x="11" y="7.5" width="6" height="5" rx="1.6" /><path d="M9 10h2" /></I>,
+  lab: <I><path d="M2.5 10h1.6M15.9 10h1.6M5.6 7v6M8.2 4.5v11M10.8 6.5v7M13.4 8.5v3" /></I>,
 };
 
 export const NAV: { group: string; items: { id: Route; label: string; short: string }[] }[] = [
   { group: 'Дежурство', items: [{ id: 'map', label: 'Обстановка', short: 'Карта' }, { id: 'alerts', label: 'Тревоги', short: 'Тревоги' }] },
   { group: 'Аналитика', items: [{ id: 'stats', label: 'Статистика', short: 'Анализ' }, { id: 'forecast', label: 'Прогноз ночей', short: 'Прогноз' }] },
-  { group: 'Сеть', items: [{ id: 'buoys', label: 'Буи', short: 'Буи' }, { id: 'evidence', label: 'Доказательства', short: 'Улики' }] },
+  { group: 'Сеть', items: [{ id: 'buoys', label: 'Буи', short: 'Буи' }, { id: 'evidence', label: 'Доказательства', short: 'Улики' }, { id: 'lab', label: 'Нейросеть', short: 'Слух' }] },
 ];
 
 const THEME_ICON: Record<ThemePref, ReactNode> = {
@@ -188,7 +189,7 @@ export function Sidebar({ route, go, badges }: Props) {
 /** Нижняя панель разделов на телефоне. */
 export function BottomNav({ route, go, badges }: Props) {
   return (
-    <nav aria-label="Разделы" className="relative z-20 grid shrink-0 grid-cols-6 border-t border-line bg-surface/[.94] pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav aria-label="Разделы" className="relative z-20 grid shrink-0 grid-cols-7 border-t border-line bg-surface/[.94] pb-[env(safe-area-inset-bottom)] md:hidden">
       {NAV.flatMap((s) => s.items).map((it) => (
         <button key={it.id} type="button" onClick={() => go(it.id)} aria-current={route === it.id ? 'page' : undefined}
           className={`relative flex h-14 flex-col items-center justify-center gap-0.5 text-[10px] font-medium ${route === it.id ? 'text-primary' : 'text-muted'}`}>

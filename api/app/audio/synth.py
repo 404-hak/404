@@ -104,7 +104,7 @@ def motor(v: Vessel, r: np.random.Generator, n: int = N) -> np.ndarray:
     elif kind == 2:
         env = np.linspace(1, r.uniform(0.2, 0.5), n)
     elif kind == 3:
-        c, w = r.uniform(0.2, 0.8) * CLIP_S, r.uniform(1.0, 3.0)
+        c, w = r.uniform(0.2, 0.8) * n / SR, r.uniform(1.0, 3.0)
         env = 0.3 + 0.7 * np.exp(-0.5 * ((t - c) / w) ** 2)
     else:
         env = np.ones(n)
@@ -115,7 +115,8 @@ def motor(v: Vessel, r: np.random.Generator, n: int = N) -> np.ndarray:
 def shot(r: np.random.Generator, n: int = N) -> np.ndarray:
     out = np.zeros(n)
     count = int(r.choice([1, 1, 1, 2, 2, 3]))
-    t0 = r.uniform(0.2, CLIP_S - 1.5)
+    dur = n / SR
+    t0 = r.uniform(0.2, dur - 1.5)
     for _ in range(count):
         i = int(t0 * SR)
         L = min(n - i, int(SR * 0.9))
@@ -131,7 +132,7 @@ def shot(r: np.random.Generator, n: int = N) -> np.ndarray:
                 s[d:] += s[:L - d] * 10 ** (r.uniform(-16, -8) / 20)
         out[i:i + L] += s
         t0 += r.uniform(0.25, 1.2)
-        if t0 > CLIP_S - 0.3:
+        if t0 > dur - 0.3:
             break
     return _distance(out, r.uniform(50, 1200))
 
@@ -140,12 +141,13 @@ def shot(r: np.random.Generator, n: int = N) -> np.ndarray:
 def nature(r: np.random.Generator, activity: float, n: int = N) -> np.ndarray:
     """Биофония: лягушки, птицы, сверчки; activity 0…1 — сколько их и как громко."""
     t = _t(n)
+    dur = n / SR
     out = np.zeros(n)
     for _ in range(int(round(activity * r.uniform(4, 9)))):            # лягушки: пульсирующие трели
         fc, rate = r.uniform(500, 2600), r.uniform(12, 55)
         call = np.zeros(n)
         pos = r.uniform(-0.5, 1.0)
-        while pos < CLIP_S:
+        while pos < dur:
             d = r.uniform(0.2, 1.4)
             m = (t >= pos) & (t < pos + d)
             call[m] = 1
@@ -155,7 +157,7 @@ def nature(r: np.random.Generator, activity: float, n: int = N) -> np.ndarray:
         out += tone * pulses * call * r.uniform(0.2, 1.0)
     for _ in range(int(round(activity * r.uniform(2, 10)))):           # птицы: свисты
         d = r.uniform(0.04, 0.3)
-        i = int(r.uniform(0, CLIP_S - d) * SR)
+        i = int(r.uniform(0, dur - d) * SR)
         L = int(d * SR)
         tt = np.arange(L) / SR
         f1, f2 = r.uniform(2000, 7000), r.uniform(2000, 7000)
@@ -168,8 +170,8 @@ def nature(r: np.random.Generator, activity: float, n: int = N) -> np.ndarray:
     return out
 
 
-def ambient(r: np.random.Generator, n: int = N) -> np.ndarray:
-    """Ветер, плеск, иногда дождь и самоносный шум гидрофона."""
+def ambient(r: np.random.Generator, n: int = N, rain: bool = False) -> np.ndarray:
+    """Ветер, плеск, иногда дождь (rain — точно дождь) и собственный шум гидрофона."""
     t = _t(n)
     wind = _shape(r.normal(0, 1, n), lambda f: 1 / np.sqrt(f + 20) * np.exp(-f / r.uniform(400, 1500)))
     gust = 0.6 + 0.4 * np.sin(2 * np.pi * r.uniform(0.05, 0.4) * t + r.uniform(0, 6.3))
@@ -177,7 +179,7 @@ def ambient(r: np.random.Generator, n: int = N) -> np.ndarray:
     lap = _shape(r.normal(0, 1, n), lambda f: np.exp(-0.5 * (np.log2((f + 1) / 600) / 0.8) ** 2))
     bursts = np.clip(np.sin(2 * np.pi * r.uniform(0.3, 1.2) * t + r.uniform(0, 6.3)), 0, None) ** 4
     out += lap / _rms(lap) * bursts * 10 ** (r.uniform(-14, -4) / 20)
-    if r.random() < 0.15:                                                # дождь: россыпь щелчков
+    if r.random() < 0.15 or rain:                                        # дождь: россыпь щелчков
         rain = np.zeros(n)
         idx = r.integers(0, n, int(r.uniform(200, 2000)))
         rain[idx] = r.normal(0, 1, len(idx))
@@ -187,17 +189,21 @@ def ambient(r: np.random.Generator, n: int = N) -> np.ndarray:
     return out
 
 
-def distractor(r: np.random.Generator, n: int = N) -> np.ndarray:
+DISTRACTORS = ("airplane", "fish", "oar", "thunder")
+
+
+def distractor(r: np.random.Generator, n: int = N, kind: str | None = None) -> np.ndarray:
     """Похожее на угрозу, но не угроза: самолёт вдали, всплеск рыбы, удар весла, гром."""
     t = _t(n)
-    k = int(r.integers(0, 4))
+    dur = n / SR
+    k = int(r.integers(0, 4)) if kind is None else DISTRACTORS.index(kind)
     if k == 0:                                                           # самолёт: гул с доплером
-        f0 = r.uniform(60, 140) * (1 + 0.04 * np.tanh((t - r.uniform(0, CLIP_S)) / 1.5))
+        f0 = r.uniform(60, 140) * (1 + 0.04 * np.tanh((t - r.uniform(0, dur)) / 1.5))
         ph = 2 * np.pi * np.cumsum(f0) / SR
         x = sum(10 ** (-3 * k2 / 20) * np.sin(k2 * ph) for k2 in range(1, 6)) * 0.3
         x += _shape(r.normal(0, 1, n), lambda f: np.exp(-f / 500))
-        return x * (0.5 + 0.5 * np.sin(np.pi * t / CLIP_S))
-    i = int(r.uniform(0.2, CLIP_S - 0.6) * SR)
+        return x * (0.5 + 0.5 * np.sin(np.pi * t / dur))
+    i = int(r.uniform(0.2, dur - 0.6) * SR)
     L = int(SR * 0.5)
     tt = np.arange(L) / SR
     x = np.zeros(n)
@@ -215,8 +221,10 @@ def distractor(r: np.random.Generator, n: int = N) -> np.ndarray:
 
 # ---------- сцена ----------
 def scene(r: np.random.Generator, event: str, v: Vessel | None = None, activity: float | None = None,
-          snr_db: float | None = None, n: int = N) -> tuple[np.ndarray, dict]:
-    """Клип буя: фон + природа (+ событие с заданным отношением сигнал/шум). Возвращает звук и разметку."""
+          snr_db: float | None = None, n: int = N, segment: tuple[float, float, float] | None = None) -> tuple[np.ndarray, dict]:
+    """Клип буя: фон + природа (+ событие с заданным отношением сигнал/шум). Возвращает звук и разметку.
+    segment — (начало, длина в долях клипа, плавность в секундах): мотор слышно не весь клип,
+    а появляется или затихает внутри него (катер завёлся, заглушил мотор, ушёл за мыс)."""
     act = float(r.uniform(0, 1)) if activity is None else activity
     bg = ambient(r, n)
     bio = nature(r, act, n)
@@ -230,7 +238,20 @@ def scene(r: np.random.Generator, event: str, v: Vessel | None = None, activity:
     if event in ("motor", "shot"):
         s = motor(v or vessel(int(r.integers(1 << 30))), r, n) if event == "motor" else shot(r, n)
         snr = r.uniform(-3, 20) if snr_db is None else snr_db
-        x = bg + s / _rms(s) * _rms(bg) * 10 ** (snr / 20)
+        ref = _rms(s)
+        if segment and event == "motor":
+            a, L = int(segment[0] * n), max(SR // 2, int(segment[1] * n))
+            f = max(1, min(L // 2, int(segment[2] * SR)))
+            mask = np.zeros(n)
+            mask[a:a + L] = 1
+            ramp = np.sin(np.linspace(0, np.pi / 2, f)) ** 2
+            mask[a:a + f] = ramp[: len(mask[a:a + f])]
+            end = min(n, a + L)
+            mask[max(a, end - f):end] = ramp[::-1][-(end - max(a, end - f)):] if end - max(a, end - f) > 0 else []
+            s = s * mask
+            ref = _rms(s[a:end])                          # отношение сигнал/шум — пока мотор слышно
+            meta["segment"] = segment
+        x = bg + s / ref * _rms(bg) * 10 ** (snr / 20)
         meta["snr_db"] = snr
     x = x / (np.abs(x).max() + 1e-9) * r.uniform(0.1, 0.9)
     return x.astype(np.float32), meta

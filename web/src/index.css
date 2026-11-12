@@ -238,6 +238,10 @@ body { -webkit-font-smoothing: antialiased; }
   box-shadow: 0 6px 18px var(--c-shadow); animation: fade-in .8s ease backwards; }
 
 /* ---------- спутник (Яндекс): снимок приглушён, чтобы швы мозаики не спорили со слоем 404 ---------- */
+/* лаборатория нейросети: «слушаю» — пять полосок */
+.lab-bar { height: 100%; transform-origin: 50% 100%; animation: lab-bar .9s ease-in-out infinite alternate; }
+@keyframes lab-bar { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
+
 /* ползунок времени неба (перемотка «Авто») */
 .sky-range { height: 14px; accent-color: var(--c-accent); cursor: pointer; background: transparent; }
 
