@@ -15,6 +15,19 @@ import type { MapHandle } from './geo';
 import { useRoute, type Route } from './route';
 import { sound } from './sound';
 import { useSurfaces } from './motion';
+import Intro from './components/Intro';
+import { INTRO_EVENT } from './introBus';
+
+/** Интро — один раз за сеанс; ?intro в адресе показывает всегда; при «уменьшить движение» — не показываем */
+function introWanted() {
+  try {
+    if (new URLSearchParams(location.search).has('intro')) return true;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    return sessionStorage.getItem('404-intro') !== 'seen';
+  } catch {
+    return true;
+  }
+}
 
 
 export default function App() {
@@ -24,7 +37,13 @@ export default function App() {
   const map = useRef<MapHandle | null>(null);
   const pendingFly = useRef<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [intro, setIntro] = useState(introWanted);
   useSurfaces();
+  useEffect(() => {
+    const show = () => setIntro(true);
+    window.addEventListener(INTRO_EVENT, show);
+    return () => window.removeEventListener(INTRO_EVENT, show);
+  }, []);
 
   // новая тревога важнее выбранного буя; Esc снимает выделение
   const freshId = state?.alerts.find((a) => a.status === 'new')?.id;
@@ -110,6 +129,12 @@ export default function App() {
         )}
         <BottomNav route={route} go={navigate} badges={badges} />
       </div>
+      {intro && (
+        <Intro onDone={() => {
+          try { sessionStorage.setItem('404-intro', 'seen'); } catch { /* приватный режим */ }
+          setIntro(false);
+        }} />
+      )}
     </div>
   );
 }

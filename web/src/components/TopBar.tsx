@@ -3,6 +3,7 @@ import type { Mode } from '../types';
 import { fmtTime } from '../format';
 import { SoundToggle } from './Nav';
 import Hydrophone from './Hydrophone';
+import { showIntro } from '../introBus';
 
 export const MODE: Record<Mode, { label: string; hint: string; text: string; dot: string; pill: string }> = {
   calm: { label: 'Спокойно', hint: 'угроз нет', text: 'text-accent', dot: 'bg-accent', pill: 'border-accent/40 bg-accent/10' },
@@ -25,7 +26,9 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
     <header className="mode-line bar-in relative z-20 shrink-0 bg-surface/70 backdrop-blur">
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
-          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0 md:hidden" />
+          <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро" className="shrink-0 md:hidden">
+            <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto" />
+          </button>
           <div className="hidden min-w-0 md:block">
             <div className="truncate text-[15px] font-semibold leading-5">{title}</div>
             <div className="truncate text-[11px] leading-4 text-muted">{subtitle}</div>

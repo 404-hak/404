@@ -6,7 +6,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const pkg = path.resolve(here, '../../brand/logo-package/404-logo-package');
 const out = path.resolve(here, '../public/brand');
 const files = [
-  'svg/404-lockup-horizontal-cream.svg', 'svg/404-logo-cream.svg',
+  'svg/404-lockup-horizontal-cream.svg', 'svg/404-logo-cream.svg', 'svg/404-wordmark-cream.svg',
   'favicon/favicon.svg', 'favicon/favicon.ico', 'favicon/apple-touch-icon.png',
   'favicon/icon-192.png', 'favicon/icon-512.png',
 ];

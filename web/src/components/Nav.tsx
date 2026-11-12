@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { showIntro } from '../introBus';
 import type { Route } from '../route';
 import { setSound, useSoundOn } from '../sound';
 
@@ -43,8 +44,10 @@ export function Sidebar({ route, go, badges }: Props) {
   return (
     <nav aria-label="Разделы" className="relative z-20 hidden w-[68px] shrink-0 flex-col border-r border-line bg-surface/70 backdrop-blur md:flex xl:w-[232px]">
       <div className="flex h-14 items-center px-5">
-        <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="hidden h-[18px] xl:block" />
-        <img src="/brand/404-logo-cream.svg" alt="404" className="-ml-0.5 h-7 xl:hidden" />
+        <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро">
+          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="hidden h-[18px] xl:block" />
+          <img src="/brand/404-logo-cream.svg" alt="404" className="-ml-0.5 h-7 xl:hidden" />
+        </button>
       </div>
       <div className="relative flex-1 px-3 pt-3">
         {/* светлая плашка переезжает к выбранному разделу */}
