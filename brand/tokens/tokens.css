@@ -1,0 +1,33 @@
+/* 404 · дизайн-токены · версия 2.0 */
+:root {
+  /* бренд */
+  --c-bg: #0B1628;        /* Ночной · фон интерфейса */
+  --c-surface: #142236;   /* Глубинный · карточки, панели */
+  --c-primary: #E2E8F0;   /* Пенный · знак, основной текст */
+  --c-grey: #64748B;      /* Сланцевый · крупный вторичный текст, линии */
+  --c-accent: #2DD4BF;    /* Бирюзовый · акцент, узлы сети */
+
+  /* статусы — только для состояний системы */
+  --c-ok: #2DD4BF;        /* Норма */
+  --c-warn: #F59E0B;      /* Предупреждение */
+  --c-alert: #EF4444;     /* Тревога */
+
+  /* тона для текста и линий */
+  --c-text: var(--c-primary);
+  --c-text-2: #A2A9B4;    /* Primary 70 % — мелкие подписи на тёмном */
+  --c-line: rgba(226, 232, 240, 0.15);
+
+  /* шрифты */
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* форма */
+  --r-card: 18px;
+  --r-chip: 6px;
+}
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+}
