@@ -72,7 +72,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
             + '<span class="map-label">{{ properties.name }}</span></div>'),
           inspector: y.templateLayoutFactory.createClass('<div class="inspector"><span class="map-label">Вы</span></div>'),
           sector: y.templateLayoutFactory.createClass(
-            '<div class="sector-label {{ properties.hot }}">{{ properties.n }}{% if properties.hot %}<span>· высокий риск</span>{% endif %}</div>'),
+            '<div class="sector-label {{ properties.hot }}">{{ properties.n }}{% if properties.hot %}<span>· риск</span>{% endif %}</div>'),
           label: y.templateLayoutFactory.createClass('<div class="route-label">{{ properties.text }}</div>'),
           lat: y.templateLayoutFactory.createClass('<span class="tick tick--lat">{{ properties.text }}</span>'),
           lon: y.templateLayoutFactory.createClass('<span class="tick tick--lon">{{ properties.text }}</span>'),

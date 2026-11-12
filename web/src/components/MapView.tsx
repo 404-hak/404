@@ -1,13 +1,51 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import L from 'leaflet';
-import type { GeoJsonObject } from 'geojson';
-import { AttributionControl, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import type { Feature, FeatureCollection } from 'geojson';
+import { AttributionControl, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { Buoy, State } from '../types';
 import { km } from '../format';
 import { BUOY_STATUS, areaOf, brackets, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 
-const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', land: '#15253B', coast: '#2B3D55', mask: '#050B16', signal: '#D3DEC6' };
+const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', signal: '#D3DEC6',
+  water: '#0A1628', coast: 'rgba(132,170,205,.32)', reeds: 'rgba(122,134,111,.16)' };
+
+/** Подложка дельты из OpenStreetMap: море, русла, протоки, плавни. Толщина проток растёт с масштабом. */
+const DELTA_STYLE = (kind: string, z: number): L.PathOptions => {
+  const k = Math.max(0.6, Math.min(2.2, (z - 8.5) / 2));
+  switch (kind) {
+    case 'sea': return { stroke: true, color: C.coast, weight: 1, fillColor: C.water, fillOpacity: 1 };
+    case 'water': return { stroke: false, fillColor: C.water, fillOpacity: 1 };
+    case 'wetland': return { stroke: false, fillColor: C.reeds, fillOpacity: 1 };
+    case 'river': return { color: C.water, weight: 1.8 * k, opacity: 1, lineCap: 'round', lineJoin: 'round' };
+    default: return { color: C.water, weight: 0.8 * k, opacity: 0.9, lineCap: 'round', lineJoin: 'round' };
+  }
+};
+
+function DeltaLayer() {
+  const map = useMap();
+  useEffect(() => {
+    let layer: L.GeoJSON | null = null;
+    let alive = true;
+    const renderer = L.canvas({ pane: 'land', padding: 0.4 });
+    const restyle = () => layer?.setStyle((f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom()));
+    fetch('/geo/delta-osm.geojson').then((r) => r.json()).then((fc: FeatureCollection) => {
+      if (!alive) return;
+      // порядок слоёв: плавни, море, водоёмы, затем линии рек поверх
+      const order = ['wetland', 'sea', 'water', 'stream', 'river'];
+      fc.features.sort((a, b) => order.indexOf(a.properties?.kind) - order.indexOf(b.properties?.kind));
+      layer = L.geoJSON(fc, {
+        renderer, interactive: false,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">участники OpenStreetMap</a>',
+        style: (f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom()),
+      } as L.GeoJSONOptions).addTo(map);
+      layer.getPane('land')?.classList.add('fade-in');
+    }).catch(() => { /* без подложки карта всё равно работает */ });
+    map.on('zoomend', restyle);
+    return () => { alive = false; map.off('zoomend', restyle); layer?.remove(); };
+  }, [map]);
+  return null;
+}
 
 // Иконки кэшируются: новая иконка на каждом такте сервера перезапускала бы анимации буёв
 const icons = new Map<string, L.DivIcon>();
@@ -29,7 +67,7 @@ const inspectorIcon = L.divIcon({
   className: '', html: '<div class="inspector"><span class="map-label">Вы</span></div>', iconSize: [14, 14], iconAnchor: [7, 7],
 });
 const sectorIcon = (n: number, hot: boolean) => memo(`s|${n}|${hot}`, () => L.divIcon({
-  className: '', html: `<div class="sector-label${hot ? ' hot' : ''}">${n}${hot ? '<span>· высокий риск</span>' : ''}</div>`,
+  className: '', html: `<div class="sector-label${hot ? ' hot' : ''}">${n}${hot ? '<span>· риск</span>' : ''}</div>`,
   iconSize: [0, 0], iconAnchor: [-6, -6],
 }));
 const tickIcon = (text: string, kind: 'lat' | 'lon') => memo(`t|${kind}|${text}`, () => L.divIcon({
@@ -110,13 +148,9 @@ function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
   return null;
 }
 
-/** Офлайн-схема дельты (Natural Earth) — работает без интернета и без ключа. */
+/** Офлайн-схема дельты по OpenStreetMap — работает без интернета и без ключа. */
 export default function MapView({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
-  const [delta, setDelta] = useState<GeoJsonObject | null>(null);
   const booting = useBooting();
-  useEffect(() => {
-    fetch('/geo/volga-delta.geojson').then((r) => r.json()).then(setDelta).catch(() => setDelta(null));
-  }, []);
 
   const area = useMemo(() => areaOf(state.sectors), [state.sectors]);
   const corners = useMemo(() => brackets(area), [area]);
@@ -133,12 +167,7 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
       <Bounded area={area} handle={handle} focus={active} booting={booting} />
       <ClickAway onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
-      <Pane name="land" style={{ zIndex: 350 }}>
-        {delta && (
-          <GeoJSON data={delta} interactive={false} attribution='<a href="https://www.naturalearthdata.com">Natural Earth</a>'
-            style={{ color: C.coast, weight: 1, fillColor: C.land, fillOpacity: 1, className: 'fade-in' }} />
-        )}
-      </Pane>
+      <Pane name="land" style={{ zIndex: 350 }}><DeltaLayer /></Pane>
 
       {/* всё за пределами района — приглушено */}
       <Polygon positions={maskRings(area)} interactive={false} pathOptions={{ stroke: false, fillColor: C.mask, fillOpacity: 0.62 }} />

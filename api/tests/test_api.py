@@ -121,3 +121,31 @@ def test_stats_endpoints():
     c = TestClient(app)
     assert c.get("/api/stats?days=7").json()["days"] == 7
     assert len(c.get("/api/forecast/nights?days=5").json()) == 5
+
+
+def _in_ring(x, y, ring):
+    inside = False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def test_buoys_are_on_water():
+    """Каждый буй и катер инспектора — в море или в водоёме по данным OpenStreetMap, а не на суше."""
+    import json
+    from pathlib import Path
+    fc = json.loads((Path(__file__).resolve().parents[2] / "web/public/geo/delta-osm.geojson").read_text())
+    polys = []
+    for f in fc["features"]:
+        g = f["geometry"]
+        if f["properties"]["kind"] in ("sea", "water"):
+            polys += [g["coordinates"]] if g["type"] == "Polygon" else g["coordinates"] if g["type"] == "MultiPolygon" else []
+
+    def on_water(lat, lon):
+        # чётно-нечётное правило по всем кольцам полигона: внутри внешнего и вне дыр
+        return any(sum(_in_ring(lon, lat, r) for r in poly) % 2 == 1 for poly in polys)
+
+    points = {b.name: (b.lat, b.lon) for b in geo.BUOYS} | {"катер инспектора": geo.INSPECTOR}
+    dry = [name for name, (lat, lon) in points.items() if not on_water(lat, lon)]
+    assert not dry, f"на суше: {dry}"

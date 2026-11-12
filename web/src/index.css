@@ -98,6 +98,7 @@ body { -webkit-font-smoothing: antialiased; }
 
 /* ---------- карта: общее ---------- */
 .leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
+.map-scheme.leaflet-container { background: #17293F; } /* суша на схеме; вода темнее */
 .leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--c-text-2) !important; }
 .leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
