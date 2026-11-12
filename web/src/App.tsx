@@ -91,7 +91,7 @@ export default function App() {
 
   return (
     <div className={`app mode-${mode} relative flex h-full text-primary`}>
-      <Ambient mode={mode} />
+      <Ambient mode={mode} quiet={route === 'map'} />
       <Sidebar route={route} go={navigate} badges={badges} />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <TopBar mode={state?.mode ?? null} online={online} title={item.label} subtitle={subtitle}
@@ -101,9 +101,13 @@ export default function App() {
         ) : (
           <div className="grid flex-1 place-items-center">
             <div className="flex flex-col items-center gap-7">
-              <div className="relative grid h-20 w-20 place-items-center">
-                <span className="boot-ring" /><span className="boot-ring r2" />
-                <img src="/brand/404-logo-cream.svg" alt="" className="h-14 w-auto opacity-90" />
+              <div className="relative flex w-[160px] flex-col items-center">
+                <img src="/brand/404-logo-cream.svg" alt="" className="bob relative z-[1] h-14 w-auto opacity-90" />
+                {/* две волны навстречу друг другу */}
+                <svg width="160" height="22" viewBox="0 0 160 22" className="-mt-2 overflow-hidden" aria-hidden>
+                  <path className="wave-run slow" d="M0 12 q10 -6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="rgba(150,186,214,.35)" strokeWidth="1.5" />
+                  <path className="wave-run" d="M0 10 q10 -6 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="#E2E8F0" strokeWidth="1.5" />
+                </svg>
               </div>
               <div className="text-[13px] text-muted">Подключаюсь к буям…</div>
             </div>

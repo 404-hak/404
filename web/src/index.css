@@ -35,12 +35,6 @@ body { -webkit-font-smoothing: antialiased; }
 .enter { animation: enter .5s var(--ease-out) both; }
 .fade-in { animation: fade-in .6s ease both; }
 
-/* полоса состояния под шапкой: «система дышит», в тревоге — чаще */
-.statusline { position: relative; height: 2px; overflow: hidden; background: color-mix(in srgb, var(--mode) 28%, transparent); }
-.statusline::after { content: ''; position: absolute; inset: 0; width: 28%;
-  background: linear-gradient(90deg, transparent, var(--mode), transparent); animation: sweep 3.6s var(--ease-inout) infinite; }
-.mode-alarm .statusline::after { animation-duration: 1.2s; }
-@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
 
 /* «в эфире» и точка режима */
 .live-dot { position: relative; }
@@ -78,9 +72,12 @@ body { -webkit-font-smoothing: antialiased; }
 .row-hot { animation: enter .45s var(--ease-out) both, row-flash 2.4s ease-out both; }
 @keyframes row-flash { from { background-color: rgba(239, 68, 68, .18); } to { background-color: transparent; } }
 
-/* загрузка */
-.boot-ring { position: absolute; inset: -18px; border-radius: 50%; border: 1.5px solid var(--c-accent); animation: sonar 2.4s var(--ease-out) infinite; }
-.boot-ring.r2 { animation-delay: 1.2s; }
+/* загрузка: знак покачивается на волне */
+.bob { animation: bob 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-5px) rotate(3deg); } }
+.wave-run { animation: wave-run 2.6s linear infinite; }
+.wave-run.slow { animation-duration: 4.2s; animation-direction: reverse; }
+@keyframes wave-run { to { transform: translateX(-40px); } }
 
 /* ---------- разделы ---------- */
 .card { border-radius: 18px; border: 1px solid var(--c-line); background: rgba(20, 34, 54, .72); padding: 20px;

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Mode } from '../types';
 import { fmtTime } from '../format';
 import { SoundToggle } from './Nav';
+import Hydrophone from './Hydrophone';
 
 export const MODE: Record<Mode, { label: string; hint: string; text: string; dot: string; pill: string }> = {
   calm: { label: 'Спокойно', hint: 'угроз нет', text: 'text-accent', dot: 'bg-accent', pill: 'border-accent/40 bg-accent/10' },
@@ -61,7 +62,7 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
           </div>
         </div>
       </div>
-      <div className="statusline" />
+      <Hydrophone mode={online ? mode : null} />
     </header>
   );
 }
