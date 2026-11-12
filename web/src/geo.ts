@@ -28,18 +28,6 @@ export function maskRings(area: Bounds): [number, number][][] {
 
 export const sectorCenter = (s: Sector): [number, number] => [(s.south + s.north) / 2, (s.west + s.east) / 2];
 
-/** Уголки рамки района, как в видоискателе: четыре «Г» равной длины на экране. */
-export function brackets([[s, w], [n, e]]: Bounds): [number, number][][] {
-  const dLon = (e - w) * 0.045;
-  const dLat = dLon * Math.cos(((s + n) / 2) * Math.PI / 180); // в Меркаторе градус широты длиннее
-  return [
-    [[n - dLat, w], [n, w], [n, w + dLon]],
-    [[n, e - dLon], [n, e], [n - dLat, e]],
-    [[s + dLat, e], [s, e], [s, e - dLon]],
-    [[s, w + dLon], [s, w], [s + dLat, w]],
-  ];
-}
-
 const dm = (x: number) => {
   const d = Math.floor(x + 1e-9), m = Math.round((x - d) * 60);
   return `${d}°${String(m).padStart(2, '0')}′`;

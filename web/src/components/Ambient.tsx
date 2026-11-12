@@ -2,183 +2,199 @@ import { useEffect, useRef } from 'react';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 
-/** Состояние моря по режиму: штиль → зыбь → неспокойная вода. */
-const SEA: Record<Mode, { amp: number; chop: number }> = {
-  calm: { amp: 1, chop: 0.2 }, alertness: { amp: 1.45, chop: 0.55 }, alarm: { amp: 2.1, chop: 1 }, intercept: { amp: 1.8, chop: 0.8 },
+/** Цвет бликов по режиму: лунный → янтарный → отсвет сигнальной ракеты. */
+const TINT: Record<Mode, [number, number, number]> = {
+  calm: [0.86, 0.91, 0.95], alertness: [1, 0.8, 0.5], alarm: [1, 0.56, 0.5], intercept: [1, 0.62, 0.55],
 };
-/** Отсвет у горизонта: в тревоге — красный, в настороженности — янтарный. */
-const GLOW: Record<Mode, [number, number, number, number]> = {
-  calm: [122, 134, 111, 0], alertness: [245, 158, 11, 0.09], alarm: [239, 68, 68, 0.16], intercept: [239, 68, 68, 0.12],
+/** Волнение и скорость течения по режиму. */
+const SEA: Record<Mode, { chop: number; speed: number }> = {
+  calm: { chop: 0, speed: 1 }, alertness: { chop: 0.45, speed: 1.25 }, alarm: { chop: 1, speed: 1.6 }, intercept: { chop: 0.8, speed: 1.45 },
 };
 
-/** Составляющие волнения: длина волны (м), направление (рад, π/2 — на зрителя), амплитуда (м), фаза. */
-// Зыбь идёт наискосок с двух сторон: на каждом срезе воды видны горбы, а не ровная полоса.
-const WAVES = [
-  { L: 34, dir: 0.62, a: 0.46, p: 0.0, chop: false },
-  { L: 22, dir: 2.42, a: 0.32, p: 1.7, chop: false },
-  { L: 13, dir: 0.98, a: 0.15, p: 4.1, chop: true },
-  { L: 8, dir: 2.12, a: 0.1, p: 2.3, chop: true },
-  { L: 9.5, dir: 0.22, a: 0.1, p: 3.6, chop: true },
-  { L: 4.6, dir: 1.45, a: 0.04, p: 5.2, chop: true },
-].map((w) => {
-  const k = (2 * Math.PI) / w.L;
-  return { ...w, k, w: Math.sqrt(9.81 * k), cx: Math.cos(w.dir), cz: Math.sin(w.dir) };   // ω = √(gk): длинные волны быстрее
-});
+const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+// Ночная вода: течения из искажённого шума, вытянутые по горизонтали, к горизонту рябь мельчает.
+// Лунная дорожка — острые блики на гребнях в колонке света; кольцо ряби искажает саму воду.
+const FRAGMENT = `precision highp float;
+uniform vec2 uRes;uniform float uT;uniform vec2 uLight;uniform float uPower;uniform vec3 uTint;
+uniform float uChop;uniform vec4 uPulse;uniform float uAppear;
+float ringLight=0.;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);
+  for(int i=0;i<4;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;
+  float asp=uRes.x/uRes.y;
+  float depth=mix(1.,3.6,uv.y);
+  vec2 q=vec2((uv.x-.5)*asp*depth*.6,depth*2.3);
+  vec2 sp=vec2((uv.x-.5)*asp,uv.y);
+  if(uPulse.w>0.){
+    vec2 c=vec2((uPulse.x-.5)*asp,uPulse.y);
+    float d=distance(sp,c);
+    float r=uPulse.z*.42;
+    float k=(d-r)*11.;
+    float env=exp(-k*k)*exp(-uPulse.z*.9)*uPulse.w;
+    q+=normalize(sp-c+1e-4)*sin((d-r)*70.)*env*.09;
+    ringLight=env*(.5+.5*sin((d-r)*70.))*.09;          // отблеск самого кольца
+  }
+  float t=uT;
+  vec2 a=vec2(fbm(q+vec2(t*.045,0.)),fbm(q+vec2(5.2,1.3)-vec2(0.,t*.035)));
+  vec2 b=vec2(fbm(q+2.1*a+vec2(1.7,9.2)+t*.06),fbm(q+2.1*a+vec2(8.3,2.8)-t*.045));
+  float f=fbm(q+(1.5+uChop*.9)*b);
+  float rip=noise(q*vec2(2.6,5.4)+b*(2.6+uChop*1.6)+vec2(t*.5,-t*.2));
+  float ridge=1.-abs(rip*2.-1.);
+  vec3 col=mix(vec3(.028,.058,.11),vec3(.058,.105,.17),smoothstep(.28,.82,f));
+  col=mix(col,vec3(.075,.12,.18),smoothstep(.5,1.,uv.y)*.55);
+  float w=mix(.34,.07,uv.y);
+  float dx=(uv.x-uLight.x)*asp;
+  float column=exp(-dx*dx/(w*w));
+  float glint=pow(ridge,mix(16.,42.,uv.y))*column*uPower;
+  float sheen=smoothstep(.56,.95,f)*.07;
+  col+=uTint*(glint*1.5+sheen+column*.045*uPower+ringLight);
+  col*=mix(.62,1.,smoothstep(1.25,.25,distance(uv,vec2(.5,.52))));
+  gl_FragColor=vec4(col*uAppear,1.);
+}`;
 
-const CAM_H = 5.5;     // высота взгляда над водой, м
-const D_NEAR = 7;      // ближний гребень у нижнего края, м
-const FOAM = [168, 194, 214];
+/** Доля пути к цели за кадр — одинаковая плавность на 60 и на 144 Гц. */
+const follow = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
+
+type Uniforms = { t: number; lx: number; ly: number; power: number; tint: number[]; chop: number; pulse: number[]; appear: number };
+
+function createWater(canvas: HTMLCanvasElement, force: boolean) {
+  const gl = canvas.getContext('webgl', {
+    alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'low-power',
+    failIfMajorPerformanceCaveat: !force,                 // на программном рендере — запасной фон
+  });
+  if (!gl) return null;
+  const compile = (type: number, src: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src); gl.compileShader(s);
+    return gl.getShaderParameter(s, gl.COMPILE_STATUS) ? s : null;
+  };
+  const vs = compile(gl.VERTEX_SHADER, VERTEX), fs = compile(gl.FRAGMENT_SHADER, FRAGMENT);
+  if (!vs || !fs) return null;
+  const prog = gl.createProgram()!;
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const u = Object.fromEntries(['uRes', 'uT', 'uLight', 'uPower', 'uTint', 'uChop', 'uPulse', 'uAppear'].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  let scale = 0.5;   // вода мягкая: половины разрешения хватает, видеокарта отдыхает
+  return {
+    resize(w: number, h: number) {
+      canvas.width = Math.max(2, Math.round(Math.min(w, 2400) * scale));
+      canvas.height = Math.max(2, Math.round((h * canvas.width) / Math.max(w, 1)));
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    },
+    lower(w: number, h: number) { scale = 0.34; this.resize(w, h); },
+    draw(s: Uniforms) {
+      gl.uniform2f(u.uRes, canvas.width, canvas.height);
+      gl.uniform1f(u.uT, s.t);
+      gl.uniform2f(u.uLight, s.lx, s.ly);
+      gl.uniform1f(u.uPower, s.power);
+      gl.uniform3f(u.uTint, s.tint[0], s.tint[1], s.tint[2]);
+      gl.uniform1f(u.uChop, s.chop);
+      gl.uniform4f(u.uPulse, s.pulse[0], s.pulse[1], s.pulse[2], s.pulse[3]);
+      gl.uniform1f(u.uAppear, s.appear);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    },
+  };
+}
 
 /**
- * Живой фон — ночное море в перспективе. Гребни считаются по физике волн на глубокой воде,
- * ближние закрывают дальние, к горизонту всё тонет в дымке. Лунная дорожка горит настолько,
- * насколько освещена луна этой ночью. Режим меняет состояние моря и отсвет у горизонта.
- * Без движения, если так настроена система; на скрытой вкладке не рисует; на карте — реже.
+ * Живой фон — ночная вода на видеокарте. Течения медленно перетекают, рябь мельчает к горизонту,
+ * лунная дорожка мерцает бликами и мягко идёт за курсором; яркость — освещённость луны этой ночью.
+ * Клик пускает по воде кольцо ряби, тревога — кольцо от центра и красноватые блики.
+ * Без видеокарты или при «уменьшить движение» — спокойный запасной фон (CSS), без покадровой анимации.
  */
 export default function Ambient({ mode, quiet = false, moon = 0.3 }: { mode: Mode; quiet?: boolean; moon?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const live = useRef({ mode, quiet, moon });
+  const pulse = useRef<{ x: number; y: number; t0: number; k: number } | null>(null);
   live.current = { mode, quiet, moon };
 
   useEffect(() => {
+    if (mode === 'alarm' || mode === 'alertness') pulse.current = { x: 0.5, y: 0.42, t0: performance.now(), k: mode === 'alarm' ? 1 : 0.6 };
+  }, [mode]);
+
+  useEffect(() => {
     const cv = ref.current;
-    const g = cv?.getContext('2d');
-    if (!cv || !g) return;
-    const still = reducedMotion();
-    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
-    let w = 0, h = 0, horizon = 0, F = 0, step = 6, raf = 0, last = 0;
-    // качество подстраивается само: на слабом устройстве меньше линий и крупнее шаг
-    let quality = 1, cost = 0, frames = 0;
-    let lines: { y: number; d: number; near: number }[] = [];
-    const s = { amp: SEA[live.current.mode].amp, chop: SEA[live.current.mode].chop, glow: [...GLOW[live.current.mode]], moon: live.current.moon };
-    let sky: CanvasGradient, sea: CanvasGradient;
-    const xs: number[] = [], ys: number[] = [], hs: number[] = [];
+    if (!cv) return;
+    const force = new URLSearchParams(location.search).has('sea');   // для проверки на машине без видеокарты
+    let water: ReturnType<typeof createWater> = null;
+    try { water = reducedMotion() ? null : createWater(cv, force); } catch { water = null; }
+    if (!water) { cv.style.display = 'none'; return; }
+    cv.parentElement?.classList.add('has-water');
+    const sea = water;
 
-    const resize = () => {
-      w = cv.clientWidth; h = cv.clientHeight;
-      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-      g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      horizon = Math.round(h * 0.3);
-      F = ((h - horizon) * D_NEAR) / CAM_H;
-      step = Math.round((w > 1000 ? 6 : 8) / quality);
-      // гребни ровнее по экрану, к горизонту сгущаются; глубина — из перспективы
-      const n = Math.round(Math.max(18, Math.min(46, (h - horizon) / 14)) * quality);
-      lines = Array.from({ length: n }, (_, i) => {
-        const f = (i + 1) / n;
-        const y = horizon + (h - horizon + 30) * f ** 1.55;
-        return { y, d: (CAM_H * F) / (y - horizon), near: f };
-      });
-      sky = g.createLinearGradient(0, 0, 0, horizon);
-      sky.addColorStop(0, '#070E1B'); sky.addColorStop(1, '#122238');
-      sea = g.createLinearGradient(0, horizon, 0, h);
-      sea.addColorStop(0, '#0E1C30'); sea.addColorStop(0.35, '#0B1729'); sea.addColorStop(1, '#091323');
+    let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0;
+    const startAt = performance.now();
+    const m0 = live.current.mode;
+    const s: Uniforms & { speed: number } = {
+      t: 0, lx: 0.72, ly: 0.5, power: 0.25 + live.current.moon * 0.75, tint: [...TINT[m0]], chop: SEA[m0].chop,
+      speed: SEA[m0].speed, pulse: [0, 0, 0, 0], appear: 0,
+    };
+    const ptr = { x: 0.72, moved: -1e9 };
+
+    const resize = () => { w = innerWidth; h = innerHeight; sea.resize(w, h); };
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      if (document.hidden) { prev = 0; return; }
+      const { mode: m, quiet: q, moon: mn } = live.current;
+      if (q && now - quietAt < 80) return;              // на карте фон почти закрыт — 12 кадров в секунду
+      quietAt = now;
+      const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;
+      prev = now;
+
+      s.speed += (SEA[m].speed - s.speed) * follow(0.6, dt);   // море разгоняется и стихает плавно
+      s.t += dt * s.speed;
+      s.chop += (SEA[m].chop - s.chop) * follow(0.5, dt);
+      for (let k = 0; k < 3; k++) s.tint[k] += (TINT[m][k] - s.tint[k]) * follow(1.2, dt);
+      // дорожка света идёт за курсором с инерцией, в покое возвращается на место
+      const moving = now - ptr.moved < 1800;
+      s.lx += ((moving ? ptr.x : 0.72) - s.lx) * follow(moving ? 2.2 : 0.35, dt);
+      // яркость дорожки — освещённость луны; даже в безлунную ночь небо немного светится
+      s.power += ((0.25 + mn * 0.75) * (moving ? 1.2 : 1) - s.power) * follow(1.4, dt);
+      const a = Math.min(1, (now - startAt) / 1600);
+      s.appear = 1 - (1 - a) ** 3;
+      const p = pulse.current;
+      if (p) {
+        const age = (now - p.t0) / 1000;
+        if (age > 4.5) pulse.current = null;
+        s.pulse = [p.x, p.y, age, p.k];
+      } else s.pulse = [0, 0, 0, 0];
+      sea.draw(s);
+
+      // слабая видеокарта: стабильно меньше 30 кадров — снижаем разрешение
+      if (!q) { slow = dt > 0.034 ? slow + 1 : Math.max(0, slow - 1); if (slow > 90) { sea.lower(w, h); slow = -1e9; } }
     };
 
-    const frame = (t: number) => {
-      if (!still && !document.hidden) raf = requestAnimationFrame(frame);
-      if (!still && t - last < (live.current.quiet ? 125 : 24)) return;
-      last = t;
-      const started = performance.now();
-      const { mode: m, moon } = live.current;
-      // плавный переход состояния моря (несколько секунд)
-      s.amp += (SEA[m].amp - s.amp) * 0.012;
-      s.chop += (SEA[m].chop - s.chop) * 0.012;
-      for (let k = 0; k < 4; k++) s.glow[k] += (GLOW[m][k] - s.glow[k]) * 0.02;
-      s.moon += (moon - s.moon) * 0.02;
-      const time = still ? 0 : t / 1000;
-      const cx = w / 2, moonX = w * 0.74;
-
-      // небо, дымка горизонта и отсвет режима
-      g.fillStyle = sky; g.fillRect(0, 0, w, horizon + 1);
-      g.fillStyle = sea; g.fillRect(0, horizon, w, h - horizon);
-      const [gr, gg, gb, ga] = s.glow;
-      if (ga > 0.003) {
-        const rg = g.createRadialGradient(cx, horizon, 0, cx, horizon, w * 0.7);
-        rg.addColorStop(0, `rgba(${gr | 0},${gg | 0},${gb | 0},${ga.toFixed(3)})`);
-        rg.addColorStop(1, `rgba(${gr | 0},${gg | 0},${gb | 0},0)`);
-        g.fillStyle = rg; g.fillRect(0, 0, w, h);
-      }
-      const haze = g.createLinearGradient(0, horizon - 26, 0, horizon + 26);
-      haze.addColorStop(0, 'rgba(150,180,205,0)'); haze.addColorStop(0.5, 'rgba(150,180,205,.07)'); haze.addColorStop(1, 'rgba(150,180,205,0)');
-      g.fillStyle = haze; g.fillRect(0, horizon - 26, w, 52);
-
-      const glints = new Path2D();
-      for (const ln of lines) {
-        // точки гребня: высота волны и горизонтальный сдвиг (острые гребни, пологие впадины)
-        let n = 0;
-        for (let x = -24; x <= w + 24; x += step) {
-          const xw = ((x - cx) * ln.d) / F;
-          let y = 0, dx = 0;
-          for (const wv of WAVES) {
-            const a = wv.a * s.amp * (wv.chop ? 0.75 + s.chop * 1.2 : 1);
-            const ph = wv.k * (xw * wv.cx + ln.d * wv.cz) - wv.w * time + wv.p;
-            y += a * Math.sin(ph);
-            dx += 0.9 * a * Math.cos(ph) * wv.cx;
-          }
-          xs[n] = cx + ((xw + dx) * F) / ln.d;
-          ys[n] = horizon + ((CAM_H - y) * F) / ln.d;
-          hs[n] = y;
-          n++;
-        }
-        // полоса под гребнем закрывает дальние линии — как настоящая вода
-        const band = 8 + ln.near * 34;
-        g.beginPath();
-        g.moveTo(xs[0], ys[0]);
-        for (let i = 1; i < n; i++) g.lineTo(xs[i], ys[i]);
-        for (let i = n - 1; i >= 0; i--) g.lineTo(xs[i], ys[i] + band);
-        g.closePath();
-        g.fillStyle = sea; g.fill();
-
-        // сам гребень: к горизонту тоньше и тусклее, у лунной дорожки светлее
-        const fog = ln.near ** 0.9;
-        const base = 0.035 + 0.2 * fog;
-        const lit = s.moon * (0.18 + 0.5 * fog);
-        const spread = 30 + 300 * ln.near;
-        const grad = g.createLinearGradient(moonX - spread, 0, moonX + spread, 0);
-        grad.addColorStop(0, `rgba(${FOAM[0]},${FOAM[1]},${FOAM[2]},${base.toFixed(3)})`);
-        grad.addColorStop(0.5, `rgba(226,232,240,${(base + lit).toFixed(3)})`);
-        grad.addColorStop(1, `rgba(${FOAM[0]},${FOAM[1]},${FOAM[2]},${base.toFixed(3)})`);
-        g.beginPath();
-        g.moveTo(xs[0], ys[0]);
-        for (let i = 1; i < n; i++) g.lineTo(xs[i], ys[i]);
-        g.strokeStyle = grad; g.lineWidth = 0.6 + 0.9 * fog; g.stroke();
-
-        // блики луны на верхушках гребней у дорожки — мерцают сами, потому что гребни бегут
-        if (s.moon > 0.05 && ln.near > 0.12) {
-          const crest = 0.12 * s.amp;
-          for (let i = 1; i < n - 1; i++) {
-            if (Math.abs(xs[i] - moonX) < spread * 0.8 && hs[i] > crest && hs[i] >= hs[i - 1] && hs[i] >= hs[i + 1]) {
-              const len = 2 + 7 * ln.near;
-              glints.moveTo(xs[i] - len, ys[i]); glints.lineTo(xs[i] + len, ys[i]);
-            }
-          }
-        }
-      }
-      g.strokeStyle = `rgba(240,244,248,${(0.55 * s.moon).toFixed(3)})`;
-      g.lineWidth = 1.2; g.lineCap = 'round';
-      g.stroke(glints);
-
-      if (!still && !live.current.quiet) {
-        cost += performance.now() - started;
-        if (++frames === 40) {
-          if (cost / frames > 9 && quality > 0.55) { quality -= 0.15; resize(); }
-          cost = 0; frames = 0;
-        }
-      }
+    const onMove = (e: PointerEvent) => { ptr.x = e.clientX / innerWidth; ptr.moved = performance.now(); };
+    const onDown = (e: PointerEvent) => {
+      if (live.current.quiet) return;
+      pulse.current = { x: e.clientX / innerWidth, y: 1 - e.clientY / innerHeight, t0: performance.now(), k: 0.55 };
     };
-
-    const onVisible = () => { if (!document.hidden && !still) { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); } };
-    const onResize = () => { resize(); if (still) frame(0); };
     resize();
     raf = requestAnimationFrame(frame);
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', resize);
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerdown', onDown, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onDown);
     };
   }, []);
 
-  return <canvas ref={ref} aria-hidden className="pointer-events-none fixed inset-0 h-full w-full" />;
+  return (
+    <div aria-hidden className="sea pointer-events-none fixed inset-0">
+      <canvas ref={ref} className="absolute inset-0 h-full w-full" />
+    </div>
+  );
 }

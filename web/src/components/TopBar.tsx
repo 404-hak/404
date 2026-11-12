@@ -22,11 +22,11 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
   const m = mode && online ? MODE[mode] : null;
   const btn = 'h-8 whitespace-nowrap rounded-[8px] px-3 text-[12px] font-medium';
   return (
-    <header className="mode-line relative z-20 shrink-0 bg-surface/70 backdrop-blur">
+    <header className="mode-line bar-in relative z-20 shrink-0 bg-surface/70 backdrop-blur">
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
           <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0 md:hidden" />
-          <div key={title} className="enter hidden min-w-0 md:block">
+          <div className="hidden min-w-0 md:block">
             <div className="truncate text-[15px] font-semibold leading-5">{title}</div>
             <div className="truncate text-[11px] leading-4 text-muted">{subtitle}</div>
           </div>
@@ -48,7 +48,7 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
 
           <div className="hidden items-center gap-1 rounded-[10px] border border-dashed border-line p-[3px] sm:flex" title="Для показа: прогон сценария тревоги">
             <span className="px-2 font-mono text-[10px] uppercase tracking-[.08em] text-muted">Демо</span>
-            <button type="button" className={`${btn} bg-white/[.06] text-primary hover:bg-white/10`} onClick={onDemo}>▶ Запустить</button>
+            <button type="button" className={`${btn} btn-shine ink-host bg-white/[.06] text-primary hover:bg-white/10`} onClick={onDemo}>▶ Запустить</button>
             <button type="button" className={`${btn} text-muted hover:text-primary`} onClick={onReset}>Сбросить</button>
           </div>
           <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>

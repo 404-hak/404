@@ -48,17 +48,17 @@ export function Sidebar({ route, go, badges }: Props) {
       </div>
       <div className="relative flex-1 px-3 pt-3">
         {/* светлая плашка переезжает к выбранному разделу */}
-        <span aria-hidden className="absolute left-3 right-3 rounded-[10px] border border-white/10 bg-white/[.07] transition-[transform,height] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+        <span aria-hidden className="absolute left-3 right-3 rounded-[10px] border border-white/10 bg-white/[.07] transition-[transform,height] duration-500 ease-[cubic-bezier(.16,1,.3,1)]"
           style={{ transform: `translateY(${mark.y}px)`, height: mark.h, top: 0 }} />
-        {NAV.map((sec) => (
+        {NAV.map((sec, si) => (
           <div key={sec.group} className="mb-4">
             <div className="cap mb-1.5 hidden px-3 xl:block">{sec.group}</div>
             <div className="mx-auto mb-2 h-px w-6 bg-line xl:hidden" />
-            {sec.items.map((it) => (
+            {sec.items.map((it, ii) => (
               <button key={it.id} ref={(el) => { refs.current[it.id] = el; }} type="button" onClick={() => go(it.id)}
-                title={it.label} aria-current={route === it.id ? 'page' : undefined}
-                className={`relative flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium ${route === it.id ? 'text-primary' : 'text-muted hover:text-primary'}`}>
-                <span className={`shrink-0 transition-transform duration-300 ${route === it.id ? 'scale-110' : ''}`}>{ICONS[it.id]}</span>
+                title={it.label} aria-current={route === it.id ? 'page' : undefined} style={{ ['--i' as string]: si * 2 + ii }}
+                className={`nav-in relative flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium ${route === it.id ? 'text-primary' : 'text-muted hover:text-primary'}`}>
+                <span className={`shrink-0 transition-transform duration-500 ease-[var(--spring-soft)] ${route === it.id ? 'scale-110' : ''}`}>{ICONS[it.id]}</span>
                 <span className="hidden flex-1 text-left xl:block">{it.label}</span>
                 {badges[it.id] != null && (
                   <span className="absolute right-1.5 top-1 xl:static">{badges[it.id]}</span>

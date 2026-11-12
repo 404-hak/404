@@ -4,10 +4,10 @@ import type { Feature, FeatureCollection } from 'geojson';
 import { AttributionControl, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { Buoy, State } from '../types';
 import { km } from '../format';
-import { BUOY_STATUS, areaOf, brackets, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
+import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 
-const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', signal: '#D3DEC6',
+const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', 
   water: '#0A1628', coast: 'rgba(132,170,205,.32)', reeds: 'rgba(122,134,111,.16)' };
 
 /** Подложка дельты из OpenStreetMap: море, русла, протоки, плавни. Толщина проток растёт с масштабом. */
@@ -56,7 +56,7 @@ const memo = (key: string, make: () => L.DivIcon) => {
 
 const buoyIcon = (b: Buoy, i: number, sel: boolean) => memo(`b|${b.id}|${b.status}|${b.name}|${i}|${sel}`, () => {
   const s = b.status === 'alert' ? 24 : 18;
-  const fx = b.status === 'alert' ? '<span class="pulse"></span><span class="pulse p2"></span>' : '<span class="sonar"></span>';
+  const fx = b.status === 'alert' ? '<span class="pulse"></span><span class="pulse p2"></span>' : '';
   return L.divIcon({
     className: '',
     html: `<div class="buoy buoy--${b.status}${sel ? ' buoy--selected' : ''}" style="--i:${i};--d:${((i * 0.83) % 3.6).toFixed(2)}s">${fx}<span class="map-label">${esc(b.name)}</span></div>`,
@@ -74,15 +74,10 @@ const tickIcon = (text: string, kind: 'lat' | 'lon') => memo(`t|${kind}|${text}`
   className: '', html: `<span class="tick tick--${kind}">${text}</span>`, iconSize: [0, 0], iconAnchor: [0, 0],
 }));
 
-/** После добавления на карту: нормированная длина пути (для анимаций обводки) и задержка. */
-const svgPath = (length: number, delay?: number) => ({
-  add: (e: L.LeafletEvent) => {
-    const el = (e.target as L.Path).getElement() as SVGPathElement | undefined;
-    el?.setAttribute('pathLength', String(length));
-    if (delay != null) el?.style.setProperty('--d', `${delay.toFixed(2)}s`);
-  },
-});
-const DRAW = svgPath(1);
+/** После добавления на карту: нормированная длина пути — для прорисовки рамки. */
+const DRAW = {
+  add: (e: L.LeafletEvent) => ((e.target as L.Path).getElement() as SVGPathElement | undefined)?.setAttribute('pathLength', '1'),
+};
 
 /** Держит карту в районе дежурства и отдаёт наружу управление ею. */
 function Bounded({ area, handle, focus, booting }: {
@@ -153,7 +148,6 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
   const booting = useBooting();
 
   const area = useMemo(() => areaOf(state.sectors), [state.sectors]);
-  const corners = useMemo(() => brackets(area), [area]);
   const ticks = useMemo(() => gridTicks(state.sectors), [state.sectors]);
   const byId = useMemo(() => Object.fromEntries(state.buoys.map((b) => [b.id, b])), [state.buoys]);
   const active = state.alerts.find((a) => a.status === 'new' || a.status === 'intercept');
@@ -178,28 +172,18 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
       ))}
       {state.sectors.filter((s) => hot.includes(s.n)).map((s) => (
         <Rectangle key={`hot${s.n}`} bounds={[[s.south, s.west], [s.north, s.east]]} interactive={false}
-          pathOptions={{ color: C.warn, opacity: 0.9, weight: 1.5, fillColor: C.warn, fillOpacity: 0.06, className: 'sector-hot' }} />
+          pathOptions={{ color: C.warn, opacity: 0.9, weight: 1.5, fillColor: C.warn, fillOpacity: 0.05 }} />
       ))}
       <Rectangle bounds={area} interactive={false} eventHandlers={DRAW}
         pathOptions={{ color: C.primary, opacity: 0.4, weight: 1.2, fill: false, className: 'draw' }} />
-      {corners.map((c, i) => (
-        <Polyline key={`c${i}`} positions={c} interactive={false} eventHandlers={DRAW}
-          pathOptions={{ color: C.primary, opacity: 0.95, weight: 2.5, lineCap: 'square', className: 'draw late' }} />
-      ))}
 
-      {state.links.map(([a, b], i) => {
+      {state.links.map(([a, b]) => {
         if (!byId[a] || !byId[b]) return null;
-        const line: [number, number][] = [[byId[a].lat, byId[a].lon], [byId[b].lat, byId[b].lon]];
         const alarm = byId[a].status === 'alert' || byId[b].status === 'alert';
-        // сигнал бежит от буя с тревогой к соседям
-        const path = byId[b].status === 'alert' ? [line[1], line[0]] : line;
-        return [
-          <Polyline key={`${a}-${b}`} positions={line} interactive={false}
-            pathOptions={{ color: alarm ? C.alert : C.accent, opacity: alarm ? 0.6 : 0.5, weight: 1.2, dashArray: '2 5', className: 'fade-in' }} />,
-          <Polyline key={`${a}-${b}-p-${alarm}`} positions={path} interactive={false}
-            eventHandlers={svgPath(100, alarm ? (i % 3) * 0.4 : (i * 0.61) % 3.4)}
-            pathOptions={{ color: alarm ? C.alert : C.signal, opacity: 0.9, weight: 2, lineCap: 'round', className: `packet${alarm ? ' packet--alert' : ''}` }} />,
-        ];
+        return (
+          <Polyline key={`${a}-${b}`} positions={[[byId[a].lat, byId[a].lon], [byId[b].lat, byId[b].lon]]} interactive={false}
+            pathOptions={{ color: alarm ? C.alert : C.accent, opacity: alarm ? 0.7 : 0.5, weight: 1.2, dashArray: '2 5', className: 'fade-in' }} />
+        );
       })}
 
       {intercept && (

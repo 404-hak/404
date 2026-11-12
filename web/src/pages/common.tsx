@@ -1,18 +1,28 @@
 import type { ReactNode } from 'react';
 import { useTween } from '../motion';
 
+/** Заголовок появляется по словам: каждое выезжает снизу из-под маски. */
+export function Words({ text, delay = 0 }: { text: string; delay?: number }) {
+  return (
+    <span className="words" aria-label={text}>
+      {text.split(' ').map((w, i) => (
+        <span key={i} className="word" aria-hidden><span style={{ animationDelay: `${delay + i * 70}ms` }}>{w}</span>{' '}</span>
+      ))}
+    </span>
+  );
+}
+
 /** Прокручиваемая страница раздела с заголовком. */
-export function Page({ cap, title, lead, aside, children }: { cap: string; title: string; lead?: ReactNode; aside?: ReactNode; children: ReactNode }) {
+export function Page({ title, lead, aside, children }: { cap?: string; title: string; lead?: ReactNode; aside?: ReactNode; children: ReactNode }) {
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1180px] px-4 pb-10 pt-6 md:px-8 md:pt-8">
-        <header className="enter mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mx-auto max-w-[1180px] px-4 pb-10 pt-6 md:px-8 md:pt-9">
+        <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-[640px]">
-            <div className="cap">{cap}</div>
-            <h1 className="mt-1.5 text-[28px] font-semibold leading-[34px] tracking-[-.01em] md:text-[34px] md:leading-[40px]">{title}</h1>
-            {lead && <p className="mt-2 text-[14px] leading-[21px] text-muted">{lead}</p>}
+            <h1 className="text-[30px] font-semibold leading-[36px] tracking-[-.015em] md:text-[38px] md:leading-[44px]"><Words text={title} /></h1>
+            {lead && <p className="enter mt-3 text-[14px] leading-[22px] text-muted" style={{ animationDelay: '180ms' }}>{lead}</p>}
           </div>
-          {aside}
+          {aside && <div className="enter" style={{ animationDelay: '240ms' }}>{aside}</div>}
         </header>
         {children}
       </div>

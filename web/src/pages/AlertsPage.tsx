@@ -14,7 +14,7 @@ const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offl
 function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => void; i: number }) {
   const minutes = a.intercept_at ? Math.round((new Date(a.intercept_at).getTime() - new Date(a.ts).getTime()) / 60000) : null;
   return (
-    <article className={`enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/50 shadow-[0_0_0_1px_rgba(239,68,68,.15),0_10px_30px_-12px_rgba(239,68,68,.5)]' : 'border-line hover:border-white/25'}`}
+    <article className={`enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
       style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
       <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
         <span>{a.id.replace(/^A-\d+-/, '№ ')}</span>
@@ -33,7 +33,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
       <div className="mt-3 flex gap-2">
         {a.status === 'new' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-[#F25555]">Начать перехват</button>
+            className="btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-[#F25555]">Начать перехват</button>
         )}
         {a.status !== 'resolved' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved')}

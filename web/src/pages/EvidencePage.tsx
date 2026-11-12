@@ -46,7 +46,7 @@ export default function EvidencePage({ state }: { state: State }) {
       lead="Каждое событие записывается с отпечатком SHA-256, и в него входит отпечаток предыдущей записи. Поменять задним числом время, буй или уверенность нельзя: сломается вся цепочка дальше. Для суда это доказательство, что запись не трогали."
       aside={
         <button type="button" onClick={verify} disabled={!chain || scan >= 0}
-          className="h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-bg shadow-[0_8px_24px_-8px_rgba(226,232,240,.6)] hover:bg-white disabled:opacity-60">
+          className="btn-shine ink-host h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-bg hover:bg-white disabled:opacity-60">
           {scan >= 0 ? 'Проверяю…' : 'Проверить цепочку'}
         </button>
       }>

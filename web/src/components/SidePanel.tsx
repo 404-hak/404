@@ -118,11 +118,11 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
       <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
         {!intercept && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg shadow-[0_6px_22px_-6px_rgba(239,68,68,.75)] hover:bg-[#F25555] hover:shadow-[0_8px_28px_-6px_rgba(239,68,68,.95)]">
+            className="btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-[#F25555]">
             Начать перехват
           </button>
         )}
-        <button type="button" className="h-10 flex-1 rounded-[9px] border border-line text-[13px] font-semibold hover:border-grey hover:bg-white/[.04]"
+        <button type="button" className="ink-host relative h-10 flex-1 overflow-hidden rounded-[9px] border border-line text-[13px] font-semibold hover:border-grey hover:bg-white/[.04]"
           onClick={() => api.setAlertStatus(a.id, 'resolved')}>
           {intercept ? 'Задержан — закрыть' : 'Ложная тревога'}
         </button>

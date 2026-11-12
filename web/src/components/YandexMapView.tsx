@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import type { State } from '../types';
 import { km } from '../format';
 import { loadYmaps } from '../yandex';
-import { BUOY_STATUS, areaOf, brackets, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
+import { BUOY_STATUS, areaOf, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 
 const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
@@ -68,7 +68,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         layouts.current = {
           buoy: y.templateLayoutFactory.createClass(
             '<div class="buoy buoy--{{ properties.status }}{% if properties.selected %} buoy--selected{% endif %}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
-            + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% else %}<span class="sonar"></span>{% endif %}'
+            + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% endif %}'
             + '<span class="map-label">{{ properties.name }}</span></div>'),
           inspector: y.templateLayoutFactory.createClass('<div class="inspector"><span class="map-label">Вы</span></div>'),
           sector: y.templateLayoutFactory.createClass(
@@ -85,10 +85,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         m.geoObjects.add(new y.Rectangle(area, {}, {
           fill: false, strokeColor: C.primary, strokeOpacity: 0.55, strokeWidth: 1.5, interactivityModel: 'default#transparent',
         }));
-        // уголки-видоискатель и координаты линий сетки
-        for (const c of brackets(area)) {
-          m.geoObjects.add(new y.Polyline(c, {}, { strokeColor: C.primary, strokeOpacity: 0.95, strokeWidth: 3, interactivityModel: 'default#transparent' }));
-        }
+        // координаты линий сетки по краю района
         for (const t of gridTicks(state.sectors)) {
           m.geoObjects.add(new y.Placemark(t.at, { text: t.text }, {
             iconLayout: layouts.current[t.kind], interactivityModel: 'default#transparent', zIndex: 50,

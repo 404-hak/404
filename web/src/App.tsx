@@ -3,7 +3,7 @@ import TopBar from './components/TopBar';
 import MapShell from './components/MapShell';
 import SidePanel from './components/SidePanel';
 import Ambient from './components/Ambient';
-import { BottomNav, NAV, Sidebar } from './components/Nav';
+import { BottomNav, Sidebar } from './components/Nav';
 import AlertsPage from './pages/AlertsPage';
 import StatsPage from './pages/StatsPage';
 import ForecastPage from './pages/ForecastPage';
@@ -14,11 +14,8 @@ import { plural } from './format';
 import type { MapHandle } from './geo';
 import { useRoute, type Route } from './route';
 import { sound } from './sound';
+import { useSurfaces } from './motion';
 
-const SUBTITLE: Record<Route, string> = {
-  map: '', alerts: 'новые, перехват и закрытые', stats: 'что услышали буи', forecast: 'риск на две недели вперёд',
-  buoys: 'связь, заряд и слух каждого буя', evidence: 'цепочка SHA-256 для суда',
-};
 
 export default function App() {
   const { state, online } = useLiveState();
@@ -27,6 +24,7 @@ export default function App() {
   const map = useRef<MapHandle | null>(null);
   const pendingFly = useRef<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  useSurfaces();
 
   // новая тревога важнее выбранного буя; Esc снимает выделение
   const freshId = state?.alerts.find((a) => a.status === 'new')?.id;
@@ -64,10 +62,9 @@ export default function App() {
   const badges: Partial<Record<Route, ReactNode>> = open
     ? { alerts: <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-alert px-1 font-mono text-[10px] font-semibold text-bg">{open}</span> }
     : {};
-  const item = NAV.flatMap((s) => s.items).find((i) => i.id === route)!;
-  const subtitle = route === 'map' && state
-    ? `Дельта Волги · ${plural(state.sectors.length, ['сектор', 'сектора', 'секторов'])} · ${plural(state.buoys.length, ['буй', 'буя', 'буёв'])}`
-    : SUBTITLE[route];
+  const subtitle = state
+    ? `${plural(state.sectors.length, ['сектор', 'сектора', 'секторов'])} · ${plural(state.buoys.length, ['буй', 'буя', 'буёв'])}`
+    : '';
   const mode = online && state ? state.mode : 'calm';
 
   let page: ReactNode = null;
@@ -94,7 +91,7 @@ export default function App() {
       <Ambient mode={mode} quiet={route === 'map'} moon={state?.forecast.moon_illumination ?? 0.3} />
       <Sidebar route={route} go={navigate} badges={badges} />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <TopBar mode={state?.mode ?? null} online={online} title={item.label} subtitle={subtitle}
+        <TopBar mode={state?.mode ?? null} online={online} title={route === 'map' ? 'Дельта Волги · дежурство' : 'Дельта Волги'} subtitle={subtitle}
           onDemo={() => { navigate('map'); api.runDemo(); }} onReset={() => api.resetDemo()} />
         {state ? (
           <main key={route} className="page-in min-h-0 flex-1">{page}</main>
