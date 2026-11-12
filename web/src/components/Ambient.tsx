@@ -2,68 +2,62 @@ import { useEffect, useRef } from 'react';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 
-/** Цвет бликов по режиму: лунный → янтарный → отсвет сигнальной ракеты. */
-const TINT: Record<Mode, [number, number, number]> = {
-  calm: [0.86, 0.91, 0.95], alertness: [1, 0.8, 0.5], alarm: [1, 0.56, 0.5], intercept: [1, 0.62, 0.55],
+/** Цвета свечения по режиму: светлое течение и глубина. Спокойно — морская синева. */
+const COLORS: Record<Mode, { a: [number, number, number]; b: [number, number, number] }> = {
+  calm: { a: [0.37, 0.57, 0.7], b: [0.1, 0.2, 0.34] },
+  alertness: { a: [0.62, 0.55, 0.4], b: [0.16, 0.2, 0.3] },
+  alarm: { a: [0.7, 0.36, 0.36], b: [0.2, 0.13, 0.22] },
+  intercept: { a: [0.66, 0.4, 0.38], b: [0.18, 0.14, 0.24] },
 };
-/** Волнение и скорость течения по режиму. */
-const SEA: Record<Mode, { chop: number; speed: number }> = {
-  calm: { chop: 0, speed: 1 }, alertness: { chop: 0.45, speed: 1.25 }, alarm: { chop: 1, speed: 1.6 }, intercept: { chop: 0.8, speed: 1.45 },
-};
+const SPEED: Record<Mode, number> = { calm: 1, alertness: 1.2, alarm: 1.55, intercept: 1.4 };
 
 const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
-// Ночная вода: течения из искажённого шума, вытянутые по горизонтали, к горизонту рябь мельчает.
-// Лунная дорожка — острые блики на гребнях в колонке света; кольцо ряби искажает саму воду.
+// Мягкое свечение воды: течения из искажённого шума, вытянутые по горизонтали, сквозь них —
+// плавные полосы волн. Свет у курсора и кольцо от клика. Без бликов и точек — не реалистично, а спокойно.
 const FRAGMENT = `precision highp float;
-uniform vec2 uRes;uniform float uT;uniform vec2 uLight;uniform float uPower;uniform vec3 uTint;
-uniform float uChop;uniform vec4 uPulse;uniform float uAppear;
-float ringLight=0.;
+uniform vec2 uRes;uniform float uT;uniform vec2 uPtr;uniform float uPower;
+uniform vec3 uA;uniform vec3 uB;uniform float uGain;uniform vec4 uPulse;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);
-  for(int i=0;i<4;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
+  for(int i=0;i<3;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
 void main(){
   vec2 uv=gl_FragCoord.xy/uRes;
-  float asp=uRes.x/uRes.y;
-  float depth=mix(1.,3.6,uv.y);
-  vec2 q=vec2((uv.x-.5)*asp*depth*.6,depth*2.3);
-  vec2 sp=vec2((uv.x-.5)*asp,uv.y);
+  vec2 asp=vec2(uRes.x/uRes.y,1.);
+  vec2 ptr=vec2(uPtr.x,1.-uPtr.y);
+  float d=distance(uv*asp,ptr*asp);
+  vec2 p=uv*asp*vec2(1.,2.1);
+  p+=(ptr-uv)*asp*.4*exp(-d*d*5.)*uPower;
+  float t=uT*.07;
+  vec2 q=vec2(fbm(p+vec2(t*1.4,0.)),fbm(p+vec2(5.2,1.3)-vec2(t,0.)));
+  vec2 r=vec2(fbm(p+2.4*q+vec2(1.7,9.2)+vec2(t*1.2,0.)),fbm(p+2.4*q+vec2(8.3,2.8)-vec2(t*.8,0.)));
+  float f=fbm(p+3.*r);
+  float band=.5+.5*sin(p.y*5.5+f*5.-uT*.42+r.x*3.);
+  float light=smoothstep(.32,.84,f)*mix(.62,1.,smoothstep(.15,.9,band));
+  light*=mix(.45,1.,smoothstep(.12,.85,distance(uv,vec2(.5,.52))*1.3));
+  float glow=exp(-d*d*10.)*.3*uPower;
+  float ring=0.;
   if(uPulse.w>0.){
-    vec2 c=vec2((uPulse.x-.5)*asp,uPulse.y);
-    float d=distance(sp,c);
-    float r=uPulse.z*.42;
-    float k=(d-r)*11.;
-    float env=exp(-k*k)*exp(-uPulse.z*.9)*uPulse.w;
-    q+=normalize(sp-c+1e-4)*sin((d-r)*70.)*env*.09;
-    ringLight=env*(.5+.5*sin((d-r)*70.))*.09;          // отблеск самого кольца
+    float pd=distance(uv*asp,vec2(uPulse.x,1.-uPulse.y)*asp);
+    float w=(pd-uPulse.z*.6)*8.;
+    ring=exp(-w*w)*exp(-uPulse.z*1.4)*uPulse.w;
   }
-  float t=uT;
-  vec2 a=vec2(fbm(q+vec2(t*.045,0.)),fbm(q+vec2(5.2,1.3)-vec2(0.,t*.035)));
-  vec2 b=vec2(fbm(q+2.1*a+vec2(1.7,9.2)+t*.06),fbm(q+2.1*a+vec2(8.3,2.8)-t*.045));
-  float f=fbm(q+(1.5+uChop*.9)*b);
-  float rip=noise(q*vec2(2.6,5.4)+b*(2.6+uChop*1.6)+vec2(t*.5,-t*.2));
-  float ridge=1.-abs(rip*2.-1.);
-  vec3 col=mix(vec3(.028,.058,.11),vec3(.058,.105,.17),smoothstep(.28,.82,f));
-  col=mix(col,vec3(.075,.12,.18),smoothstep(.5,1.,uv.y)*.55);
-  float w=mix(.34,.07,uv.y);
-  float dx=(uv.x-uLight.x)*asp;
-  float column=exp(-dx*dx/(w*w));
-  float glint=pow(ridge,mix(16.,42.,uv.y))*column*uPower;
-  float sheen=smoothstep(.56,.95,f)*.07;
-  col+=uTint*(glint*1.5+sheen+column*.045*uPower+ringLight);
-  col*=mix(.62,1.,smoothstep(1.25,.25,distance(uv,vec2(.5,.52))));
-  gl_FragColor=vec4(col*uAppear,1.);
+  vec3 col=mix(uB,uA,clamp(r.x*1.2+glow*1.5+ring,0.,1.));
+  float alpha=clamp(light*.5+glow+ring*.5,0.,.9)*uGain;
+  alpha+=(hash(gl_FragCoord.xy+fract(uT))-.5)/120.*step(.002,alpha);
+  alpha=max(alpha,0.);
+  gl_FragColor=vec4(col*alpha,alpha);
 }`;
 
 /** Доля пути к цели за кадр — одинаковая плавность на 60 и на 144 Гц. */
 const follow = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
-type Uniforms = { t: number; lx: number; ly: number; power: number; tint: number[]; chop: number; pulse: number[]; appear: number };
+interface Frame { t: number; ptr: number[]; power: number; a: number[]; b: number[]; gain: number; pulse: number[] }
 
-function createWater(canvas: HTMLCanvasElement, force: boolean) {
+function createGlow(canvas: HTMLCanvasElement, force: boolean) {
   const gl = canvas.getContext('webgl', {
-    alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'low-power',
+    alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power',
     failIfMajorPerformanceCaveat: !force,                 // на программном рендере — запасной фон
   });
   if (!gl) return null;
@@ -83,101 +77,106 @@ function createWater(canvas: HTMLCanvasElement, force: boolean) {
   const loc = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(['uRes', 'uT', 'uLight', 'uPower', 'uTint', 'uChop', 'uPulse', 'uAppear'].map((n) => [n, gl.getUniformLocation(prog, n)]));
-  let scale = 0.5;   // вода мягкая: половины разрешения хватает, видеокарта отдыхает
+  const u = Object.fromEntries(['uRes', 'uT', 'uPtr', 'uPower', 'uA', 'uB', 'uGain', 'uPulse'].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  let scale = 0.5;   // свечение мягкое: половины разрешения хватает
   return {
     resize(w: number, h: number) {
-      canvas.width = Math.max(2, Math.round(Math.min(w, 2400) * scale));
+      canvas.width = Math.max(2, Math.round(Math.min(w, 2200) * scale));
       canvas.height = Math.max(2, Math.round((h * canvas.width) / Math.max(w, 1)));
       gl.viewport(0, 0, canvas.width, canvas.height);
     },
-    lower(w: number, h: number) { scale = 0.34; this.resize(w, h); },
-    draw(s: Uniforms) {
+    lower(w: number, h: number) { scale = 0.3; this.resize(w, h); },
+    draw(f: Frame) {
       gl.uniform2f(u.uRes, canvas.width, canvas.height);
-      gl.uniform1f(u.uT, s.t);
-      gl.uniform2f(u.uLight, s.lx, s.ly);
-      gl.uniform1f(u.uPower, s.power);
-      gl.uniform3f(u.uTint, s.tint[0], s.tint[1], s.tint[2]);
-      gl.uniform1f(u.uChop, s.chop);
-      gl.uniform4f(u.uPulse, s.pulse[0], s.pulse[1], s.pulse[2], s.pulse[3]);
-      gl.uniform1f(u.uAppear, s.appear);
+      gl.uniform1f(u.uT, f.t);
+      gl.uniform2f(u.uPtr, f.ptr[0], f.ptr[1]);
+      gl.uniform1f(u.uPower, f.power);
+      gl.uniform3f(u.uA, f.a[0], f.a[1], f.a[2]);
+      gl.uniform3f(u.uB, f.b[0], f.b[1], f.b[2]);
+      gl.uniform1f(u.uGain, f.gain);
+      gl.uniform4f(u.uPulse, f.pulse[0], f.pulse[1], f.pulse[2], f.pulse[3]);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     },
   };
 }
 
 /**
- * Живой фон — ночная вода на видеокарте. Течения медленно перетекают, рябь мельчает к горизонту,
- * лунная дорожка мерцает бликами и мягко идёт за курсором; яркость — освещённость луны этой ночью.
- * Клик пускает по воде кольцо ряби, тревога — кольцо от центра и красноватые блики.
- * Без видеокарты или при «уменьшить движение» — спокойный запасной фон (CSS), без покадровой анимации.
+ * Живой фон — мягкое свечение воды. Течения медленно перетекают по горизонтали, сквозь них идут
+ * плавные полосы волн. Свет сам бродит по экрану, при движении мыши идёт за курсором; клик — кольцо света.
+ * Режим меняет цвет (синева → тёплый → красноватый) и скорость течения.
+ * Без видеокарты или при «уменьшить движение» — тихий запасной фон.
  */
-export default function Ambient({ mode, quiet = false, moon = 0.3 }: { mode: Mode; quiet?: boolean; moon?: number }) {
+export default function Ambient({ mode, quiet = false }: { mode: Mode; quiet?: boolean; moon?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const live = useRef({ mode, quiet, moon });
+  const live = useRef({ mode, quiet });
   const pulse = useRef<{ x: number; y: number; t0: number; k: number } | null>(null);
-  live.current = { mode, quiet, moon };
+  live.current = { mode, quiet };
 
   useEffect(() => {
-    if (mode === 'alarm' || mode === 'alertness') pulse.current = { x: 0.5, y: 0.42, t0: performance.now(), k: mode === 'alarm' ? 1 : 0.6 };
+    if (mode === 'alarm' || mode === 'alertness') pulse.current = { x: 0.5, y: 0.5, t0: performance.now(), k: mode === 'alarm' ? 0.9 : 0.55 };
   }, [mode]);
 
   useEffect(() => {
     const cv = ref.current;
     if (!cv) return;
     const force = new URLSearchParams(location.search).has('sea');   // для проверки на машине без видеокарты
-    let water: ReturnType<typeof createWater> = null;
-    try { water = reducedMotion() ? null : createWater(cv, force); } catch { water = null; }
-    if (!water) { cv.style.display = 'none'; return; }
+    let glow: ReturnType<typeof createGlow> = null;
+    try { glow = reducedMotion() ? null : createGlow(cv, force); } catch { glow = null; }
+    if (!glow) { cv.style.display = 'none'; return; }
     cv.parentElement?.classList.add('has-water');
-    const sea = water;
+    const gfx = glow;
 
     let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0;
     const startAt = performance.now();
-    const m0 = live.current.mode;
-    const s: Uniforms & { speed: number } = {
-      t: 0, lx: 0.72, ly: 0.5, power: 0.25 + live.current.moon * 0.75, tint: [...TINT[m0]], chop: SEA[m0].chop,
-      speed: SEA[m0].speed, pulse: [0, 0, 0, 0], appear: 0,
-    };
-    const ptr = { x: 0.72, moved: -1e9 };
+    const c0 = COLORS[live.current.mode];
+    const f: Frame & { speed: number } = { t: 0, ptr: [0.5, 0.5], power: 0.55, a: [...c0.a], b: [...c0.b], gain: 0, pulse: [0, 0, 0, 0], speed: 1 };
+    const ptr = { tx: 0.5, ty: 0.5, moved: -1e9 };
 
-    const resize = () => { w = innerWidth; h = innerHeight; sea.resize(w, h); };
+    const resize = () => { w = innerWidth; h = innerHeight; gfx.resize(w, h); };
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       if (document.hidden) { prev = 0; return; }
-      const { mode: m, quiet: q, moon: mn } = live.current;
+      const { mode: m, quiet: q } = live.current;
       if (q && now - quietAt < 80) return;              // на карте фон почти закрыт — 12 кадров в секунду
       quietAt = now;
       const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;
       prev = now;
 
-      s.speed += (SEA[m].speed - s.speed) * follow(0.6, dt);   // море разгоняется и стихает плавно
-      s.t += dt * s.speed;
-      s.chop += (SEA[m].chop - s.chop) * follow(0.5, dt);
-      for (let k = 0; k < 3; k++) s.tint[k] += (TINT[m][k] - s.tint[k]) * follow(1.2, dt);
-      // дорожка света идёт за курсором с инерцией, в покое возвращается на место
-      const moving = now - ptr.moved < 1800;
-      s.lx += ((moving ? ptr.x : 0.72) - s.lx) * follow(moving ? 2.2 : 0.35, dt);
-      // яркость дорожки — освещённость луны; даже в безлунную ночь небо немного светится
-      s.power += ((0.25 + mn * 0.75) * (moving ? 1.2 : 1) - s.power) * follow(1.4, dt);
-      const a = Math.min(1, (now - startAt) / 1600);
-      s.appear = 1 - (1 - a) ** 3;
+      f.speed += (SPEED[m] - f.speed) * follow(0.6, dt);
+      f.t += dt * f.speed;
+      const c = COLORS[m];
+      for (let k = 0; k < 3; k++) {
+        f.a[k] += (c.a[k] - f.a[k]) * follow(1.1, dt);
+        f.b[k] += (c.b[k] - f.b[k]) * follow(1.1, dt);
+      }
+      // свет: при движении мыши идёт за курсором, в покое сам медленно бродит по экрану
+      const moving = now - ptr.moved < 2200;
+      const s = now / 1000;
+      const tx = moving ? ptr.tx : 0.5 + 0.3 * Math.sin(s * 0.07);
+      const ty = moving ? ptr.ty : 0.5 + 0.2 * Math.sin(s * 0.053 + 1.3);
+      const k = follow(moving ? 4 : 0.8, dt);
+      f.ptr[0] += (tx - f.ptr[0]) * k;
+      f.ptr[1] += (ty - f.ptr[1]) * k;
+      f.power += ((moving ? 1 : 0.6) - f.power) * follow(2, dt);
+      const a = Math.min(1, (now - startAt) / 1800);
+      f.gain = 1 - (1 - a) ** 3;
       const p = pulse.current;
       if (p) {
         const age = (now - p.t0) / 1000;
-        if (age > 4.5) pulse.current = null;
-        s.pulse = [p.x, p.y, age, p.k];
-      } else s.pulse = [0, 0, 0, 0];
-      sea.draw(s);
+        if (age > 3.5) pulse.current = null;
+        f.pulse = [p.x, p.y, age, p.k];
+      } else f.pulse = [0, 0, 0, 0];
+      gfx.draw(f);
 
-      // слабая видеокарта: стабильно меньше 30 кадров — снижаем разрешение
-      if (!q) { slow = dt > 0.034 ? slow + 1 : Math.max(0, slow - 1); if (slow > 90) { sea.lower(w, h); slow = -1e9; } }
+      if (!q) { slow = dt > 0.034 ? slow + 1 : Math.max(0, slow - 1); if (slow > 90) { gfx.lower(w, h); slow = -1e9; } }
     };
 
-    const onMove = (e: PointerEvent) => { ptr.x = e.clientX / innerWidth; ptr.moved = performance.now(); };
+    const onMove = (e: PointerEvent) => { ptr.tx = e.clientX / innerWidth; ptr.ty = e.clientY / innerHeight; ptr.moved = performance.now(); };
     const onDown = (e: PointerEvent) => {
       if (live.current.quiet) return;
-      pulse.current = { x: e.clientX / innerWidth, y: 1 - e.clientY / innerHeight, t0: performance.now(), k: 0.55 };
+      pulse.current = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, t0: performance.now(), k: 0.5 };
     };
     resize();
     raf = requestAnimationFrame(frame);

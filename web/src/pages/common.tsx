@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { useTween } from '../motion';
 
 /** Заголовок появляется по словам: каждое выезжает снизу из-под маски. */
@@ -6,7 +6,11 @@ export function Words({ text, delay = 0 }: { text: string; delay?: number }) {
   return (
     <span className="words" aria-label={text}>
       {text.split(' ').map((w, i) => (
-        <span key={i} className="word" aria-hidden><span style={{ animationDelay: `${delay + i * 70}ms` }}>{w}</span>{' '}</span>
+        // пробел — между блоками слов: внутри inline-block он схлопывается
+        <Fragment key={i}>
+          {i > 0 && ' '}
+          <span className="word" aria-hidden><span style={{ animationDelay: `${delay + i * 70}ms` }}>{w}</span></span>
+        </Fragment>
       ))}
     </span>
   );

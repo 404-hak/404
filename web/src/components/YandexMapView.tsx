@@ -174,6 +174,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   // выделение меняет только сам значок, без перерисовки слоя
   useEffect(() => {
     if (!ready) return;
+    map.current?.hint?.close();          // подсказка не залипает, когда значок перерисовывается
     for (const [id, pm] of Object.entries(marks.current)) {
       pm.properties.set('selected', id === selected);
       pm.options.set('zIndex', id === selected ? 1200 : pm.properties.get('status') === 'alert' ? 1000 : 500);

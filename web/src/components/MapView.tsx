@@ -54,12 +54,12 @@ const memo = (key: string, make: () => L.DivIcon) => {
   return icons.get(key)!;
 };
 
-const buoyIcon = (b: Buoy, i: number, sel: boolean) => memo(`b|${b.id}|${b.status}|${b.name}|${i}|${sel}`, () => {
+const buoyIcon = (b: Buoy, i: number) => memo(`b|${b.id}|${b.status}|${b.name}|${i}`, () => {
   const s = b.status === 'alert' ? 24 : 18;
   const fx = b.status === 'alert' ? '<span class="pulse"></span><span class="pulse p2"></span>' : '';
   return L.divIcon({
     className: '',
-    html: `<div class="buoy buoy--${b.status}${sel ? ' buoy--selected' : ''}" style="--i:${i};--d:${((i * 0.83) % 3.6).toFixed(2)}s">${fx}<span class="map-label">${esc(b.name)}</span></div>`,
+    html: `<div class="buoy buoy--${b.status}" style="--i:${i};--d:${((i * 0.83) % 3.6).toFixed(2)}s">${fx}<span class="map-label">${esc(b.name)}</span></div>`,
     iconSize: [s, s], iconAnchor: [s / 2, s / 2],
   });
 });
@@ -146,6 +146,15 @@ function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
 /** Офлайн-схема дельты по OpenStreetMap — работает без интернета и без ключа. */
 export default function MapView({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
   const booting = useBooting();
+  // Выбор не пересоздаёт значок: на живом элементе переключается класс, и буй плавно
+  // увеличивается с кольцом (пересоздание мигало при загрузке и сбрасывало наведение).
+  const markers = useRef<Record<string, L.Marker>>({});
+  const statuses = state.buoys.map((b) => b.status).join();
+  useEffect(() => {
+    for (const [id, m] of Object.entries(markers.current)) {
+      m.getElement()?.querySelector('.buoy')?.classList.toggle('buoy--selected', id === selected);
+    }
+  }, [selected, statuses]);
 
   const area = useMemo(() => areaOf(state.sectors), [state.sectors]);
   const ticks = useMemo(() => gridTicks(state.sectors), [state.sectors]);
@@ -202,7 +211,8 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
         <Marker key={`l${s.n}-${hot.includes(s.n)}`} position={[s.north, s.west]} icon={sectorIcon(s.n, hot.includes(s.n))} interactive={false} />
       ))}
       {state.buoys.map((b, i) => (
-        <Marker key={`${b.id}-${b.status}`} position={[b.lat, b.lon]} icon={buoyIcon(b, i, b.id === selected)}
+        <Marker key={`${b.id}-${b.status}`} position={[b.lat, b.lon]} icon={buoyIcon(b, i)}
+          ref={(m) => { if (m) markers.current[b.id] = m; else delete markers.current[b.id]; }}
           zIndexOffset={b.id === selected ? 1200 : b.status === 'alert' ? 1000 : 0} eventHandlers={{ click: () => onSelect(b.id) }}>
           <Tooltip className="tip" direction="top" offset={[0, -12]}>
             {b.name} · {BUOY_STATUS[b.status]} · сектор {b.sector} · батарея {b.battery} %
