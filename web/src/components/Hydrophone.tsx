@@ -65,6 +65,7 @@ export default function Hydrophone({ mode }: { mode: Mode | null }) {
     const draw = (t: number) => {
       if (!still && !document.hidden) raf = requestAnimationFrame(draw);
       if (introCovering()) { prev = 0; return; }        // под заставкой не видно — не тратим кадр
+      if (prev && t - prev < 1000 / 60 - 3) return;      // не чаще 60 раз в секунду, даже на мониторе 144 Гц
       const dt = prev ? Math.min(0.1, (t - prev) / 1000) : 0;
       prev = t;
       if (!still) {

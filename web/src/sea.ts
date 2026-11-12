@@ -16,6 +16,8 @@ export const SPEED: Record<Mode, number> = { calm: 1, alertness: 1.2, alarm: 1.5
 const BEACON: Record<Mode, V3> = { calm: hex('#D2E4BF'), alertness: hex('#FFC46E'), alarm: hex('#FF6C5E'), intercept: hex('#FF6C5E') };
 
 const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+/** Растяжка кадра, нарисованного мельче (расфокус камеры в интро): одна выборка с линейной фильтрацией */
+const BLIT = 'precision mediump float;uniform sampler2D uSrc;uniform vec2 uK;uniform vec2 uRes;void main(){gl_FragColor=texture2D(uSrc,gl_FragCoord.xy/uRes*uK);}';
 // Своя стилистика — между реализмом и графикой, всё плавное: небо мягким градиентом, мягкое свечение
 // солнца и луны (луна в фазе), звёзды-точки, слоистые облака и дымка у горизонта, острова в дымке.
 // Вода — течения и зыбь, свет мягкими мазками, под светилом переливается дорожка, по воде бегут
@@ -327,13 +329,19 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, opts: { sca
   const shader = (type: number, src: string) => { const sh = gl.createShader(type)!; gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
   const prog = gl.createProgram()!;
   const fsh = shader(gl.FRAGMENT_SHADER, (opts.intro ? '#define INTRO\n' : '') + FRAGMENT);
-  gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERTEX));
+  const vsh = shader(gl.VERTEX_SHADER, VERTEX);
+  gl.attachShader(prog, vsh);
   gl.attachShader(prog, fsh);
+  gl.bindAttribLocation(prog, 0, 'p');
   gl.linkProgram(prog);
 
   let state: 'pending' | 'ok' | 'fail' = 'pending';
   let u: Record<string, WebGLUniformLocation | null> = {};
   const markTex = gl.createTexture();
+  // расфокус (интро): сцена рисуется в текстуру мельче и растягивается на холст — размер холста не меняется
+  let blit: { prog: WebGLProgram; uK: WebGLUniformLocation | null; uRes: WebGLUniformLocation | null } | null = null;
+  let fbo: WebGLFramebuffer | null = null, fboTex: WebGLTexture | null = null, fboW = 0, fboH = 0;
+  let focus = 1;
   const finish = () => {
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       console.warn('404: море не собралось —', gl.getShaderInfoLog(fsh) || gl.getProgramInfoLog(prog));
@@ -362,11 +370,23 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, opts: { sca
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
     gl.uniform1i(u.uNoise, 0);
     gl.uniform1i(u.uMarkTex, 1);
+    if (opts.intro) {
+      const bp = gl.createProgram()!;
+      gl.attachShader(bp, vsh);
+      gl.attachShader(bp, shader(gl.FRAGMENT_SHADER, BLIT));
+      gl.bindAttribLocation(bp, 0, 'p');
+      gl.linkProgram(bp);
+      if (gl.getProgramParameter(bp, gl.LINK_STATUS)) {
+        gl.useProgram(bp);
+        gl.uniform1i(gl.getUniformLocation(bp, 'uSrc'), 2);
+        blit = { prog: bp, uK: gl.getUniformLocation(bp, 'uK'), uRes: gl.getUniformLocation(bp, 'uRes') };
+        gl.useProgram(prog);
+      }
+    }
     state = 'ok';
   };
 
   let scale = opts.scale ?? 0.5;   // мягкая картинка: половины разрешения хватает
-  let lw = 0, lh = 0;
   /** Готов ли шейдер: проверка не ждёт видеокарту, если браузер умеет собирать в фоне */
   const status = () => {
     if (state === 'pending' && (!par || gl.getProgramParameter(prog, par.COMPLETION_STATUS_KHR))) finish();
@@ -375,18 +395,16 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, opts: { sca
   return {
     status,
     resize(w: number, h: number) {
-      lw = w; lh = h;
       canvas.width = Math.max(2, Math.round(Math.min(w, 2200) * scale));
       canvas.height = Math.max(2, Math.round((h * canvas.width) / Math.max(w, 1)));
       gl.viewport(0, 0, canvas.width, canvas.height);
     },
     lower(w: number, h: number) { scale = Math.min(scale, 0.34); this.resize(w, h); },
-    /** Расфокус камеры без CSS-размытия: картинка рисуется мельче и мягко растягивается — почти бесплатно */
-    setScale(k: number) {
-      if (Math.abs(k - scale) < 0.004) return;
-      scale = k;
-      if (lw) this.resize(lw, lh);
-    },
+    /**
+     * Расфокус камеры без CSS-размытия: сцена рисуется в текстуру мельче (k — доля разрешения) и мягко
+     * растягивается. Холст не пересоздаётся — раньше смена его размера каждый кадр и давала рывки.
+     */
+    setFocus(k: number) { focus = Math.min(1, Math.max(0.05, k)); },
     /** Знак для отражения и подводной части (интро): картинка с прозрачностью */
     setMark(img: TexImageSource) {
       gl.activeTexture(gl.TEXTURE1);
@@ -402,8 +420,32 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, opts: { sca
     },
     draw(f: Frame) {
       if (status() !== 'ok') return;
+      const cw = canvas.width, ch = canvas.height;
+      const soft = focus < 0.97 && blit != null;
+      let rw = cw, rh = ch;
+      if (soft) {
+        if (!fbo || fboW !== cw || fboH !== ch) {          // текстура под размер холста — один раз (и при смене окна)
+          fboTex = fboTex ?? gl.createTexture();
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, fboTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.activeTexture(gl.TEXTURE0);
+          fbo = fbo ?? gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+          fboW = cw; fboH = ch;
+        }
+        rw = Math.max(2, Math.round(cw * focus)); rh = Math.max(2, Math.round(ch * focus));
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.viewport(0, 0, rw, rh);
+      }
+      gl.useProgram(prog);
       const v3 = (n: string, c: V3) => gl.uniform3f(u[n], c[0], c[1], c[2]);
-      gl.uniform2f(u.uRes, canvas.width, canvas.height);
+      gl.uniform2f(u.uRes, rw, rh);
       gl.uniform1f(u.uT, f.t);
       gl.uniform2f(u.uPtr, f.ptr[0], f.ptr[1]);
       gl.uniform1f(u.uPower, f.power);
@@ -430,6 +472,17 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, opts: { sca
         gl.uniform1f(u.uFoam, it.foam);
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (soft && blit) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, cw, ch);
+        gl.useProgram(blit.prog);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, fboTex);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.uniform2f(blit.uK, rw / cw, rh / ch);
+        gl.uniform2f(blit.uRes, cw, ch);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
     },
     /**
      * Отдать контекст видеокарте сразу, не дожидаясь сборщика мусора (интро после себя).

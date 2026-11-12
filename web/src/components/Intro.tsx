@@ -25,22 +25,23 @@ const MH = 210, MW = MH * MARK_RATIO;
 const T_IN = 1.1;
 const T_PING = 2.8, T_WORD = 3.2, T_TAG = 3.8, T_OUT = 5.8, OUT = 0.9;
 
-// ---------- заброс: поплавок летит удочкой ----------
+// ---------- заброс: поплавок летит удочкой сверху ----------
 /**
- * Поплавок забрасывают с берега у камеры: он вылетает снизу слева, по дуге уходит вдаль
- * (уменьшается — перспектива), в полёте чуть кувыркается, за ним тянется леска.
- * Дуга подобрана так, что в момент касания воды скорость совпадает с физикой плавучести ниже.
+ * Удилище — над камерой, за верхним краем кадра. Поплавок влетает сверху крупным (он ещё близко),
+ * по дуге уходит вдаль и вниз к воде — уменьшается (перспектива). Леска тянет его макушкой назад,
+ * к удилищу; к воде он выпрямляется. Дуга подобрана так, что в момент касания скорость совпадает
+ * с физикой плавучести ниже.
  */
 const T_CAST = 0.3, T_HIT = 1.45, V_HIT = 1500;
 const FLIGHT = T_HIT - T_CAST;
 const PIV = 0.6;                                   // точка вращения — на 60 % высоты (там ватерлиния в покое)
-const LAUNCH = { x: -230, y: 975, s: 1.55 };       // откуда летит: у камеры, снизу слева
-const ROD = { x: -170, y: -150 };                  // кончик удилища — за кадром слева вверху
-/** На узком экране края кадра обрезаны — бросок и удилище привязаны к видимому левому краю */
+const LAUNCH = { x: CX - 250, y: -240, s: 2.1 };   // откуда летит: над кадром, чуть левее места падения
+const ROD = { x: CX - 430, y: -560 };              // кончик удилища — высоко над кадром
+/** На узком экране края кадра обрезаны — бросок и удилище не уходят за видимый левый край */
 function fitToView(vw: number, vh: number) {
-  const s = Math.max(vw / W, vh / H), x0 = Math.max(0, -((vw - W * s) / 2) / s);
-  LAUNCH.x = x0 - 230;
-  ROD.x = x0 - 170;
+  const [x0] = visibleX(vw, vh);
+  LAUNCH.x = Math.max(CX - 250, x0 + 70);
+  ROD.x = Math.max(CX - 430, x0 - 60);
 }
 const HIT_TOP = WATER - 0.78 * MH;                 // касание — когда в воду входит сердцевина
 const HIT_PY = HIT_TOP + PIV * MH;
@@ -99,8 +100,9 @@ function pose(t: number): Pose {
     const vx = ((CX - LAUNCH.x) * (1 + 0.45 * (1 - 2 * u))) / FLIGHT;
     const py = LAUNCH.y + VY0 * tau + 0.5 * G_ARC * tau * tau;
     const sc = 1 + (LAUNCH.s - 1) * (1 - u) ** 1.3;
-    // в полёте тянется за леской и чуть кувыркается, к воде выпрямляется
-    const tilt = -58 + (HIT_TILT + 58) * smooth(u) + 9 * Math.sin(u * Math.PI * 2.5) * (1 - u);
+    // в полёте леска тянет макушку к удилищу, поплавок чуть кувыркается; к воде выпрямляется
+    const aim = (Math.atan2(ROD.x - x, py - ROD.y) * 180) / Math.PI;
+    const tilt = aim + (HIT_TILT - aim) * smooth(u) + 7 * Math.sin(u * Math.PI * 2.5) * (1 - u);
     return { x, py, s: sc, tilt, vx, vy: VY0 + G_ARC * tau };
   }
   const tau = t - T_HIT;
@@ -236,7 +238,7 @@ function useScene() {
     // брызги: корона у места удара — вверх и в стороны, крупные капли ниже, мелкие выше
     const drops = Array.from({ length: 30 }, () => {
       const a = (35 + r() * 110) * (Math.PI / 180), sp = 260 + r() * 520;
-      return { x0: (r() - 0.5) * MW * 0.7, vx: Math.cos(a) * sp * 0.7 + 110, vy: -Math.sin(a) * sp, r: 1.2 + r() * 2.6 };
+      return { x0: (r() - 0.5) * MW * 0.7, vx: Math.cos(a) * sp * 0.7 + 50, vy: -Math.sin(a) * sp, r: 1.2 + r() * 2.6 };
     });
     const bubbles = Array.from({ length: 9 }, (_, i) => ({ t: T_HIT + 0.15 + i * 0.14 + r() * 0.12, dx: (r() - 0.5) * MW * 0.9, f: 600 + r() * 500 }));
     const shore = (x0: number, x1: number) => {
@@ -257,7 +259,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   moonRef.current = moon;
   const rootRef = useRef<HTMLDivElement>(null);
   const cvRef = useRef<HTMLCanvasElement>(null);
-  const sea = useRef<{ gfx: Sea; f: Frame; mask: MarkMask | null } | null>(null);
+  const sea = useRef<{ gfx: Sea; f: Frame; mask: MarkMask | null; tg: ReturnType<typeof targets> } | null>(null);
   const [gl, setGl] = useState<boolean | null>(null);
   const [t, setT] = useState(0);
   const [started, setStarted] = useState(false);
@@ -293,7 +295,9 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     setGl(!!gfx);
     if (!gfx) return () => { setIntroCover(false); setIntroPlaying(false); };
     const g = gfx;
-    const st: { gfx: Sea; f: Frame; mask: MarkMask | null } = { gfx: g, f: { ...frameFrom(targets('calm', moonRef.current), HZ), gain: 1 }, mask: null };
+    // небо за семь секунд заставки не меняется — светила и палитру считаем один раз
+    const tg = targets('calm', moonRef.current);
+    const st = { gfx: g, f: { ...frameFrom(tg, HZ), gain: 1 }, mask: null as MarkMask | null, tg };
     sea.current = st;
     // знак — текстурой для отражения и подводной части; его альфа — чтобы найти, где тело входит в воду
     const img = new Image();
@@ -322,7 +326,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     const k = ease((tt - T_OUT) / OUT);
     f.hz = v.hz + (HZ - v.hz) * k;
     const shift = f.hz - v.hz;
-    const tg = targets('calm', moonRef.current);
+    const tg = st.tg;
     Object.assign(f, { pal: tg.pal, moonC: tg.moonC, dark: tg.dark, beacon: tg.beacon });
     // светила заставки гаснут в начале растворения: под ней уже фон со своими солнцем и луной — не двоятся
     const gone = 1 - ease((tt - T_OUT) / (OUT * 0.35));
@@ -359,7 +363,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
     };
     f.t = freeze.current ?? seaClock();
     const blur = 16 * (1 - easeOut(tt / T_IN));               // наводка резкости; в конце море резкое, как фон под ним
-    st.gfx.setScale(0.45 * Math.max(0.12, 1 / (1 + blur * 0.35)));
+    st.gfx.setFocus(Math.max(0.12, 1 / (1 + blur * 0.35)));
     st.gfx.draw(f);
   };
 
@@ -449,8 +453,11 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const camBlur = 16 * (1 - inK) + 14 * outK;
   const camScale = 1.04 - 0.04 * inK + 0.05 * outK;
   const camOpacity = inK * (1 - outK);
-  const viewScale = Math.max(innerWidth / W, innerHeight / H);
-  const midBlur = gl && camBlur > 0.2 ? { filter: `blur(${camBlur}px)` } : undefined;
+  const vw = innerWidth, vh = innerHeight;
+  const viewScale = Math.max(vw / W, vh / H);
+  // средний план камыша: резкая и заранее размытая картинки сменяют друг друга прозрачностью —
+  // размытие посчитано один раз, а не каждый кадр
+  const midSoft = clamp01(camBlur / 3), midSharp = clamp01(1 - camBlur / 12);
 
   const markAt = (dx = 0, dy = 0) => (
     <g transform={`translate(${P.x + dx} ${P.py + dy}) rotate(${P.tilt}) scale(${P.s}) translate(${-MW / 2} ${-PIV * MH})`}>
@@ -475,18 +482,22 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
   const lineD = `M${ROD.x},${ROD.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${tip.x},${tip.y}`;
   const wordK = ease((t - T_WORD) / 1.0), tagK = ease((t - T_TAG) / 0.9);
   // взгляд вниз в конце: всё, что стоит на воде, поднимается вместе с горизонтом
-  const lift = gl ? (HZ - viewMap(innerWidth, innerHeight).hz) * outK * innerHeight : 0;
+  const lift = gl ? (HZ - viewMap(vw, vh).hz) * outK * vh : 0;
+  // надписи — обычным HTML поверх сцены в тех же координатах кадра: проявление из размытия
+  // делает видеокарта на готовой картинке, сцену под ними не перерисовываем
+  const stage = { transform: `translate(${(vw - W * viewScale) / 2}px, ${(vh - H * viewScale) / 2 - lift}px) scale(${viewScale})` };
+  const tagLs = 6 + 8 * (1 - tagK);
   const fb = C.body && C.body.y < HORIZON - 8 ? C.body : null;     // светило над горизонтом — есть блик
 
   return (
-    <div ref={rootRef} role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
-      style={{ background: `rgb(${C.fade} / ${1 - outK})` }}>
-      {/* камера: масштаб и прозрачность — на видеокарте; расфокус моря — мельче холст, сцены поверх — SVG-размытие
-          только по её содержимому (CSS-размытие всего экрана каждый кадр и давало лаги) */}
-      <div className="absolute inset-0" style={{ filter: gl === false && camBlur > 0.2 ? `blur(${camBlur}px)` : undefined, transform: `scale(${camScale})`, opacity: camOpacity }}>
+    <div ref={rootRef} role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden">
+      <div className="absolute inset-0" style={{ background: `rgb(${C.fade})`, opacity: 1 - outK, willChange: 'opacity' }} />
+      {/* камера: масштаб и прозрачность — на видеокарте; расфокус моря — сцена рисуется мельче и растягивается.
+          Никаких размытий всего экрана и SVG-фильтров по сцене: они пересчитывались каждый кадр и давали лаги */}
+      <div className="absolute inset-0" style={{ transform: `scale(${camScale})`, opacity: camOpacity, willChange: 'transform, opacity' }}>
         <canvas ref={cvRef} className="absolute inset-0 h-full w-full" style={{ display: gl === false ? 'none' : undefined }} />
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden
-          style={{ transform: lift ? `translateY(${-lift}px)` : undefined }}>
+          style={{ transform: lift ? `translateY(${-lift}px)` : undefined, willChange: 'transform' }}>
           <defs>
             <linearGradient id="i-sky" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor={C.skyTop} /><stop offset="0.55" stopColor={C.skyMid} /><stop offset="1" stopColor={C.skyHz} />
@@ -539,11 +550,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
               <rect x="0" y="0" width={W} height={WATER - 2.5} fill="#fff" />
               <rect x="0" y={WATER - 2.5} width={W} height="3" fill="url(#i-wl)" />
             </mask>
-            <filter id="i-word" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation={12 * (1 - wordK)} /></filter>
-            <filter id="i-tag" x="-20%" y="-150%" width="140%" height="400%"><feGaussianBlur stdDeviation={8 * (1 - tagK)} /></filter>
-            <filter id="i-cam" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation={camBlur / viewScale} /></filter>
           </defs>
-          <g filter={gl && camBlur > 0.2 ? 'url(#i-cam)' : undefined}>
 
           {/* без видеокарты — та же сцена в SVG: небо, светило, море, изобаты, дорожка, острова, буи, блик */}
           {gl === false && (
@@ -676,27 +683,31 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
             if (a < 0 || a > 0.45) return null;
             return <circle key={`b${i}`} cx={CX + b.dx} cy={WATER - 2 - a * 6} r={2 + a * 12} fill="none" stroke={C.primary} strokeWidth="1.2" opacity={0.7 * (1 - a / 0.45)} />;
           })}
-
-          {/* название проявляется из размытия */}
-          {t >= T_WORD && (
-            <g opacity={wordK} transform={`translate(0 ${(1 - wordK) * 16})`} filter={wordK < 0.99 ? 'url(#i-word)' : undefined}>
-              <image href={C.word} x={CX - 190} y={168} width={380} height={380 / 4.09} />
-            </g>
-          )}
-          {t >= T_TAG && (
-            <text x={CX} y={318} textAnchor="middle" fill={C.muted} fontFamily="Inter, sans-serif" fontSize="20" fontWeight="600"
-              letterSpacing={6 + 8 * (1 - tagK)} opacity={tagK} filter={tagK < 0.99 ? 'url(#i-tag)' : undefined}>
-              БРАКОНЬЕР НЕ НАЙДЕН
-            </text>
-          )}
-          </g>
         </svg>
+        {/* название проявляется из размытия */}
+        <div className="pointer-events-none absolute left-0 top-0 origin-top-left" style={{ width: W, height: H, ...stage }} aria-hidden>
+          <img src={C.word} alt="" draggable={false} className="absolute"
+            style={{ left: CX - 190, top: 168, width: 380, height: 380 / 4.09, opacity: wordK, willChange: 'transform, opacity, filter',
+              transform: `translateY(${(1 - wordK) * 16}px)`, filter: wordK > 0 && wordK < 0.99 ? `blur(${12 * (1 - wordK)}px)` : undefined }} />
+          <div className="absolute left-0 whitespace-nowrap text-center font-semibold"
+            style={{ top: 301, width: W, fontSize: 20, lineHeight: '20px', color: C.muted, letterSpacing: tagLs, paddingLeft: tagLs, opacity: tagK,
+              willChange: 'opacity, filter', filter: tagK > 0 && tagK < 0.99 ? `blur(${8 * (1 - tagK)}px)` : undefined }}>
+            БРАКОНЬЕР НЕ НАЙДЕН
+          </div>
+        </div>
         {/* виньетка — вне сцены: при взгляде вниз сцена поднимается, а края кадра остаются */}
         <div className="absolute inset-0" style={{ background: `radial-gradient(75% 75% at 50% 48%, rgb(0 0 0 / 0) 55%, rgb(0 0 0 / ${C.vignette * (gl ? 0.6 : 1)}) 100%)` }} />
 
         {/* камыш: средний план чуть мягче, передний — сильно размыт (глубина резкости) */}
-        <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(1.2, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={midBlur} />
-        <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(1.2, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={midBlur} />
+        {/* все картинки на месте с первого кадра (декодированы до старта), лишние — прозрачны */}
+        {gl !== false && (
+          <>
+            <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(10, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ opacity: midSoft }} />
+            <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(10, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={{ opacity: midSoft }} />
+          </>
+        )}
+        <ReedsImage side="left" seed={11} count={12} color={C.reedMid} blur={reedBlur(1.2, 46)} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ opacity: gl === false ? 1 : midSharp }} />
+        <ReedsImage side="right" seed={23} count={12} color={C.reedMid} blur={reedBlur(1.2, 42)} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={{ opacity: gl === false ? 1 : midSharp }} />
         <ReedsImage side="left" seed={5} count={14} color={C.reedNear} blur={reedBlur(7, 82)} className="absolute bottom-[-8vh] left-[-6vw] h-[82vh] w-auto" />
         <ReedsImage side="right" seed={17} count={14} color={C.reedNear} blur={reedBlur(7, 78)} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto" />
       </div>

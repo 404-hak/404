@@ -13,6 +13,8 @@ import { introCovering } from '../introBus';
  * (настороженность — янтарь, тревога — красный) и ускоряет волны.
  * Без видеокарты или при «уменьшить движение» — тихий запасной фон.
  */
+const PAL_KEYS = ['top', 'hz', 'far', 'near', 'line', 'isle', 'sun'] as const;
+
 export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mode; quiet?: boolean; moon?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const live = useRef({ mode, quiet, moon });
@@ -29,12 +31,15 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
     const force = new URLSearchParams(location.search).has('sea');   // для проверки на машине без видеокарты
     let sea: ReturnType<typeof createSea> = null;
     try { sea = reducedMotion() ? null : createSea(cv, force); } catch { sea = null; }
-    if (!sea) { cv.style.display = 'none'; return; }
+    if (!sea) { cv.style.display = 'none'; cv.parentElement?.classList.add('still'); return; }
     const gfx = sea;
 
     let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0, cap = 0, lowered = false, ready = false;
     const startAt = performance.now();
-    const f = { ...frameFrom(targets(live.current.mode, live.current.moon), HZ), speed: 1 };
+    // цели неба (светила по настоящему времени, палитра) — 4 раза в секунду: солнце и луна за это время
+    // сдвигаются на доли пикселя, а расчёт положения светил каждый кадр стоил заметно
+    let tg = targets(live.current.mode, live.current.moon), tgAt = 0, tgKey = '';
+    const f = { ...frameFrom(tg, HZ), speed: 1 };
     const fadeSun = { on: false }, fadeMoon = { on: false };
     const ptr = { tx: 0.5, ty: 0.5, moved: -1e9 };
 
@@ -43,15 +48,19 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       raf = requestAnimationFrame(frame);
       if (document.hidden) { prev = 0; return; }
       const { mode: m, quiet: q, moon: mp } = live.current;
-      // кадры: каждый кадр монитора; если компьютер не успевает — 30 в секунду; на карте фон почти закрыт — 12
-      if (now - quietAt < (q ? 80 : cap) - 2) return;
+      // кадры: вода движется медленно — в покое 30 в секунду (глазу не отличить, видеокарте вдвое легче);
+      // пока двигается мышь, идёт волна или открывается страница — до 60 (не чаще, даже на мониторе 144 Гц);
+      // на карте фон почти закрыт — 12; если компьютер не успевает — 30 всегда, потом меньше точек
+      const busy = now - ptr.moved < 2200 || pulse.current != null || now - startAt < 2500;
+      const gap = q ? 80 : Math.max(cap, busy ? 1000 / 60 : 1000 / 30);
+      if (now - quietAt < gap - 3) return;
       quietAt = now;
       const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;
       prev = now;
       if (introCovering()) { f.t = seaClock(); return; }  // под заставкой не рисуем; вода — по общим часам
       if (!ready) {                                        // шейдер собирается в фоне — страница не замирает
         const st = gfx.status();
-        if (st === 'fail') { cancelAnimationFrame(raf); cv.style.display = 'none'; return; }
+        if (st === 'fail') { cancelAnimationFrame(raf); cv.style.display = 'none'; cv.parentElement?.classList.add('still'); return; }
         if (st === 'pending') return;
         ready = true;
         cv.parentElement?.classList.add('has-water');
@@ -60,9 +69,10 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       f.speed += (SPEED[m] - f.speed) * follow(0.6, dt);
       f.t += dt * f.speed;
       // цвета неба и воды мягко идут к цели (смена режима и темы); светила — точно по дуге
-      const tg = targets(m, mp);
+      const key = `${m}|${mp}`;
+      if (now - tgAt > 250 || key !== tgKey) { tg = targets(m, mp); tgAt = now; tgKey = key; }
       const kc = follow(1.2, dt);
-      (['top', 'hz', 'far', 'near', 'line', 'isle', 'sun'] as const).forEach((n) => lerp3(f.pal[n], tg.pal[n], kc));
+      for (const n of PAL_KEYS) lerp3(f.pal[n], tg.pal[n], kc);
       lerp3(f.moonC, tg.moonC, kc);
       lerp3(f.beacon, tg.beacon, kc);
       f.dark += (tg.dark - f.dark) * kc;
@@ -86,9 +96,9 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       } else f.pulse = [0, 0, 0, 0];
       gfx.draw(f);
 
-      // не успеваем (кадр дольше 25 мс, на 30 к/с — дольше 50): сначала 30 кадров, потом меньше точек
+      // не успеваем (кадр заметно дольше задуманного): сначала 30 кадров всегда, потом меньше точек
       if (!q && !lowered) {
-        slow = dt > (cap ? 0.05 : 0.025) ? slow + 1 : Math.max(0, slow - 2);
+        slow = dt * 1000 > gap * 1.5 + 4 ? slow + 1 : Math.max(0, slow - 2);
         if (slow > 40) { slow = 0; if (!cap) cap = 33; else { gfx.lower(w, h); lowered = true; } }
       }
     };
