@@ -14,7 +14,7 @@ const ORDER: Basemap[] = ['photo', 'scheme', '3d'];
 function Btn({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" title={title} aria-label={title} onClick={onClick}
-      className="grid h-9 w-9 place-items-center text-primary hover:bg-white/5 [&+&]:border-t [&+&]:border-line">
+      className="map-ctl-btn grid h-9 w-9 place-items-center text-primary hover:bg-white/5 [&+&]:border-t [&+&]:border-line">
       {children}
     </button>
   );
@@ -39,8 +39,9 @@ function useWidth(ref: RefObject<HTMLElement>) {
 }
 
 /** Широкая карта — легенда строкой внизу; узкая — карточка по кнопке «Что на карте?». */
-function Legend({ intercept, inline, links = true }: { intercept: boolean; inline: boolean; links?: boolean }) {
-  const [open, setOpen] = useState<boolean | null>(null);
+function Legend({ intercept, inline, links = true, folded = false }: { intercept: boolean; inline: boolean; links?: boolean; folded?: boolean }) {
+  // в «Карте — всё» легенда свёрнута в кнопку: карта не должна закрываться
+  const [open, setOpen] = useState<boolean | null>(folded ? false : null);
   const shown = open ?? inline;
   const row = 'flex items-center gap-2 whitespace-nowrap';
   // в строке подписи короче, в карточке — полные
@@ -68,7 +69,7 @@ function Legend({ intercept, inline, links = true }: { intercept: boolean; inlin
   if (!shown) {
     return (
       <button type="button" onClick={() => setOpen(true)}
-        className="pointer-events-auto rounded-[9px] border border-line bg-bg/90 px-3 py-2 text-[12px] font-medium">
+        className="map-legend-btn pointer-events-auto rounded-[9px] border border-line bg-bg/90 px-3 py-2 text-[12px] font-medium">
         Что на карте?
       </button>
     );
@@ -100,12 +101,14 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
 } & Selection) {
   // в «Карте — всё» по умолчанию схема: на ней течёт живая дельта; спутник — по кнопке
   const [basemap, setBasemap] = useState<Basemap>(hasYandexKey && !live ? 'photo' : 'scheme');
-  const pad: FitPad | undefined = insets && { tl: [insets.left + 28, insets.top + 36], br: [insets.right + 64, insets.bottom + 36] };
+  // район вписывается так, чтобы его не закрывали переключатель сверху, буи масштаба справа и «Что на карте?» снизу
+  const pad: FitPad | undefined = insets && { tl: [insets.left + 28, insets.top + 64], br: [insets.right + 64, insets.bottom + 72] };
   const margin = insets && [insets.top + 36, insets.right + 64, insets.bottom + 36, insets.left + 28];
   const [notice, setNotice] = useState<string | null>(null);
   const intercept = state.alerts.some((a) => a.status === 'intercept');
   const root = useRef<HTMLDivElement>(null);
-  const inline = useWidth(root) >= 1000;
+  // строкой — только если свободной части карты хватает на одну строку
+  const inline = useWidth(root) - (insets ? insets.left + insets.right : 0) >= (insets ? 760 : 1000);
 
   const seg = (on: boolean) =>
     `ui-seg-btn relative z-10 h-8 w-[78px] text-[12px] font-medium rounded-[7px] ${on ? 'text-bg' : 'text-muted hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-40`;
@@ -133,11 +136,11 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
       <div className="map-vignette pointer-events-none absolute inset-0 z-[1050]" />
       <div className="map-glow pointer-events-none absolute inset-0 z-[1050]" />
 
-      <div className="pointer-events-none absolute inset-0 z-[1100]" style={insets && { top: insets.top, right: insets.right, bottom: insets.bottom, left: insets.left }}>
+      <div className="pointer-events-none absolute inset-0 z-[1100] transition-[inset] duration-500 ease-[cubic-bezier(.2,.8,.2,1)]" style={insets && { top: insets.top, right: insets.right, bottom: insets.bottom, left: insets.left }}>
         {/* подложка: светлая плашка переезжает к выбранной кнопке */}
-        <div className="fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_var(--c-shadow)]"
+        <div className="map-seg fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_var(--c-shadow)]"
           role="group" aria-label="Подложка карты">
-          <span aria-hidden className="absolute bottom-[3px] left-[3px] top-[3px] w-[78px] rounded-[7px] bg-primary transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+          <span aria-hidden className="map-seg-plate absolute bottom-[3px] left-[3px] top-[3px] w-[78px] rounded-[7px] bg-primary transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
             style={{ transform: `translateX(${ORDER.indexOf(basemap) * 78}px)` }} />
           <button type="button" className={seg(basemap === 'photo')} disabled={!hasYandexKey}
             onClick={() => { setNotice(null); setBasemap('photo'); }}
@@ -156,7 +159,7 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
         )}
 
         {/* масштаб */}
-        <div className="fade-in pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 shadow-[0_8px_24px_var(--c-shadow)]">
+        <div className="map-ctl fade-in pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 shadow-[0_8px_24px_var(--c-shadow)]">
           <Btn title="Приблизить" onClick={() => handle.current?.zoomIn()}>
             <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.6"><path d="M7 1v12M1 7h12" /></svg>
           </Btn>
@@ -170,8 +173,8 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
           </Btn>
         </div>
 
-        <div className={`fade-in absolute left-3 ${inline ? 'bottom-8 right-16' : 'top-3'}`} style={{ animationDelay: '1.2s' }}>
-          <Legend intercept={intercept} inline={inline} links={!live} />
+        <div className={`fade-in absolute left-3 ${inline ? 'bottom-8 right-16' : live ? 'bottom-8' : 'top-3'}`} style={{ animationDelay: '1.2s' }}>
+          <Legend intercept={intercept} inline={inline} links={!live} folded={live} />
         </div>
       </div>
     </div>

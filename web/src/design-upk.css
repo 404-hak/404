@@ -234,3 +234,88 @@ html[data-design="upk"] nav.md\:hidden button > span.absolute.top-0 { background
 .float.is-text .float-beam { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .float-bob, .float-ring { animation: none !important; } }
 @media print { .float, .ripple { display: none; } }
+
+/* ================= кнопки «с водой»: свой почерк вместо шаблонных =================
+   Мотив сайта — поплавок и круги на воде. В каждой кнопке стоит вода с волнистой кромкой:
+   обычная — у дна тонкая ватерлиния, под курсором вода поднимается и колышется;
+   главная и тревожная — налиты до краёв, по верху бежит волна; нажатие — всплеск (уровень проседает).
+   Активный пункт дока и выбранная подложка карты — тоже вода; черта под вкладкой — волна. */
+:root {
+  --wave-fill: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4C5 1.4 15 1.4 20 4S35 6.6 40 4V8H0Z'/%3E%3C/svg%3E");
+  --wave-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 6'%3E%3Cpath d='M0 3C2.5 .9 7.5 .9 10 3S17.5 5.1 20 3' fill='none' stroke='black' stroke-width='1.7'/%3E%3C/svg%3E");
+}
+html[data-design="upk"] .btn-shine::before { display: none; }   /* шаблонный блик заменён водой */
+html[data-design="upk"] .ui-btn { position: relative; isolation: isolate; overflow: hidden; --lvl: 84%; --water: rgb(var(--rgb-primary) / .13); }
+html[data-design="upk"] .ui-btn::after {
+  content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: 0; z-index: -1; pointer-events: none; background: var(--water);
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 34px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 34px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+  transform: translateY(var(--lvl)); transition: transform .6s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes water-drift { to { -webkit-mask-position: 34px 0, 0 7.5px; mask-position: 34px 0, 0 7.5px; } }
+html[data-design="upk"] .ui-btn:hover:not(:disabled)::after,
+html[data-design="upk"] .ui-btn:focus-visible::after { --lvl: 0%; animation: water-drift 2.2s linear infinite; }
+html[data-design="upk"] .ui-btn:active:not(:disabled)::after { --lvl: 26%; transition-duration: .18s; }
+html[data-design="upk"] .ui-btn-ghost { --lvl: 100%; }
+html[data-design="upk"] .ui-btn-ghost:hover:not(:disabled)::after { --lvl: 38%; }
+html[data-design="upk"] .ui-btn-soft { --lvl: 66%; }
+/* главная и тревожная: налиты до краёв, по верху — волна; под курсором волна бежит */
+html[data-design="upk"] .ui-btn-primary { --water: var(--c-primary); --lvl: 13%; background: rgb(var(--rgb-primary) / .16) !important; }
+html[data-design="upk"] .ui-btn-danger { --water: var(--c-alert); --lvl: 13%; background: rgb(var(--rgb-alert) / .2) !important; }
+html[data-design="upk"] .ui-btn-primary:hover:not(:disabled)::after,
+html[data-design="upk"] .ui-btn-danger:hover:not(:disabled)::after { --lvl: 9%; animation-duration: 1.6s; }
+html[data-design="upk"] .ui-btn-primary:active:not(:disabled)::after,
+html[data-design="upk"] .ui-btn-danger:active:not(:disabled)::after { --lvl: 24%; }
+html[data-design="upk"] .ui-btn:disabled::after { animation: none; }
+
+/* вкладки: под выбранной — волна, а не прямая черта */
+html[data-design="upk"] .ui-tab-bar {
+  height: 6px; bottom: -3px; border-radius: 0; background: var(--c-text);
+  -webkit-mask: var(--wave-line) repeat-x 0 50% / 20px 6px; mask: var(--wave-line) repeat-x 0 50% / 20px 6px;
+  animation: line-drift 3s linear infinite;
+}
+@keyframes line-drift { to { -webkit-mask-position: 20px 50%; mask-position: 20px 50%; } }
+
+/* переключатель «Спутник · Схема · 3D»: выбранное — плашка-вода с волной по верху */
+html[data-design="upk"] .map-seg { border-radius: 12px; }
+html[data-design="upk"] .map-seg-plate {
+  border-radius: 0 0 8px 8px; top: 1px !important;
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
+  animation: seg-drift 2.6s linear infinite;
+}
+@keyframes seg-drift { to { -webkit-mask-position: 26px 0, 0 5.5px; mask-position: 26px 0, 0 5.5px; } }
+html[data-design="upk"] .map-seg .ui-seg-btn { padding-top: 3px; }
+
+/* кнопки масштаба — буи: круглые, с кольцом; под курсором буй «слушает» — кольцо расходится */
+html[data-design="upk"] .map-ctl { gap: 8px; overflow: visible; border: 0; border-radius: 0; background: none; box-shadow: none; }
+html[data-design="upk"] .map-ctl-btn {
+  position: relative; width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid rgb(var(--rgb-primary) / .24) !important;
+  background: var(--c-surface); box-shadow: 0 6px 18px var(--c-shadow); transition: border-color .25s, color .2s, scale .2s var(--ease-out);
+}
+html[data-design="upk"] .map-ctl-btn:hover { border-color: var(--c-accent) !important; background: var(--c-surface); }
+html[data-design="upk"] .map-ctl-btn::after { content: ''; position: absolute; inset: -1.5px; border-radius: 50%; border: 1.5px solid var(--c-accent); opacity: 0; pointer-events: none; }
+html[data-design="upk"] .map-ctl-btn:hover::after { animation: buoy-listen 1.6s ease-out infinite; }
+html[data-design="upk"] .map-ctl-btn:active { scale: .9; }
+@keyframes buoy-listen { from { transform: scale(1); opacity: .75; } to { transform: scale(1.75); opacity: 0; } }
+/* «Что на карте?» — со значком буя */
+html[data-design="upk"] .map-legend-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px 0 11px; border-radius: 999px; background: var(--c-surface); box-shadow: 0 6px 18px var(--c-shadow); }
+html[data-design="upk"] .map-legend-btn::before { content: ''; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; border: 2.5px solid var(--c-accent);
+  background: radial-gradient(circle, var(--c-accent) 0 1.6px, transparent 2px); }
+@media (prefers-reduced-motion: reduce) {
+  html[data-design="upk"] .ui-btn::after, html[data-design="upk"] .ui-tab-bar, html[data-design="upk"] .map-seg-plate, html[data-design="upk"] .map-ctl-btn::after { animation: none !important; }
+}
+/* переключатели на страницах («7 · 14 · 30 ночей»): выбранное — та же вода с волной по верху */
+html[data-design="upk"] .ui-seg .ui-seg-btn { position: relative; isolation: isolate; overflow: hidden; }
+html[data-design="upk"] .ui-seg .ui-seg-btn[aria-pressed="true"],
+html[data-design="upk"] .ui-seg .ui-seg-btn[aria-checked="true"] { background: transparent; box-shadow: none; }
+html[data-design="upk"] .ui-seg .ui-seg-btn::after {
+  content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: 0; z-index: -1; pointer-events: none; background: var(--c-surface); border-radius: 0 0 8px 8px;
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
+  transform: translateY(100%); transition: transform .5s cubic-bezier(.2, .8, .2, 1);
+}
+html[data-design="upk"] .ui-seg .ui-seg-btn:hover::after { transform: translateY(78%); }
+html[data-design="upk"] .ui-seg .ui-seg-btn[aria-pressed="true"]::after,
+html[data-design="upk"] .ui-seg .ui-seg-btn[aria-checked="true"]::after { transform: translateY(14%); animation: seg-drift 2.6s linear infinite; }
+html[data-design="upk"][data-theme="day"] .ui-seg .ui-seg-btn::after { background: #fff; }

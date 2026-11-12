@@ -320,3 +320,45 @@ nav.md\:flex { padding-top: env(safe-area-inset-top); }
 .in-app input, .in-app textarea { -webkit-user-select: text; user-select: text; }
 .in-app img, .in-app svg { -webkit-user-drag: none; }
 .in-app a, .in-app button { -webkit-touch-callout: none; }
+
+/* ---------- снимок места тревоги со спутника (SatSnap.tsx) ---------- */
+.sat-snap { position: relative; overflow: hidden; isolation: isolate; border-radius: 14px; background: #0E1A1C; box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / .1); }
+.sat-snap .leaflet-container, .sat-big-frame .leaflet-container { background: #0E1A1C; }
+.sat-snap.is-loading::before { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .06) 50%, transparent 70%) 0 0 / 220% 100%; animation: sat-shimmer 1.6s linear infinite; }
+@keyframes sat-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.sat-snap .leaflet-control-attribution, .sat-big-frame .leaflet-control-attribution { font-size: 9px; line-height: 13px; background: rgb(11 22 40 / .6); color: #CBD5E1; }
+.sat-snap .leaflet-control-attribution a, .sat-big-frame .leaflet-control-attribution a { color: #E2E8F0; }
+.sat-cap { position: absolute; left: 8px; top: 8px; z-index: 900; padding: 3px 9px; border-radius: 999px; font-size: 11px; line-height: 16px; font-weight: 600;
+  color: #E2E8F0; background: rgb(11 22 40 / .66); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); pointer-events: none; }
+.sat-note { position: absolute; inset: 0; z-index: 800; display: grid; place-items: center; padding: 0 20px; text-align: center; font-size: 12.5px; line-height: 18px; color: #CBD5E1; pointer-events: none; }
+.sat-open { position: absolute; right: 8px; top: 8px; z-index: 900; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  color: #E2E8F0; background: rgb(11 22 40 / .66); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: background-color .2s, scale .2s; }
+.sat-open:hover { background: rgb(11 22 40 / .85); }
+.sat-open:active { scale: .92; }
+/* метка места: кольцо буя и круги по воде */
+.sat-mark { position: absolute; left: 50%; top: 50%; z-index: 850; width: 0; height: 0; pointer-events: none; --tone: #EF4444; }
+.sat-mark.is-warn { --tone: #E2B65E; }
+.sat-mark b { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--tone);
+  background: radial-gradient(circle, var(--tone) 0 2.5px, rgb(11 22 40 / .55) 3px); box-shadow: 0 0 0 1px rgb(0 0 0 / .35), 0 0 12px var(--tone); }
+.sat-mark i { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--tone); opacity: 0; animation: sat-ring 2.4s ease-out infinite; }
+.sat-mark i:nth-child(2) { animation-delay: .8s; }
+.sat-mark i:nth-child(3) { animation-delay: 1.6s; }
+@keyframes sat-ring { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(5.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sat-mark i, .sat-snap.is-loading::before { animation: none; } }
+/* крупно */
+.sat-big { position: fixed; inset: 0; z-index: 2147482000; display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgb(5 10 20 / .74); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); animation: sat-fade .25s ease both; }
+@keyframes sat-fade { from { opacity: 0; } }
+.sat-big-frame { position: relative; width: min(1100px, 100%); height: min(760px, 100%); overflow: hidden; isolation: isolate; border-radius: 20px; background: #0E1A1C;
+  box-shadow: 0 30px 80px rgb(0 0 0 / .5); animation: sat-rise .35s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes sat-rise { from { transform: translateY(16px) scale(.98); } }
+.sat-big-head { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 900; display: flex; align-items: center; justify-content: space-between; gap: 12px; pointer-events: none; }
+.sat-big-head > * { pointer-events: auto; }
+.sat-big-head > span { padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; color: #E2E8F0; background: rgb(11 22 40 / .7); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.sat-big-frame .leaflet-top.leaflet-left { top: 56px; }
+.sat-big-frame .leaflet-bar { border: 0; box-shadow: none; display: flex; flex-direction: column; gap: 8px; }
+.sat-big-frame .leaflet-bar a { width: 40px; height: 40px; line-height: 38px; border-radius: 50% !important; border: 1.5px solid rgb(255 255 255 / .22); color: #E2E8F0;
+  background: rgb(11 22 40 / .72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font: 400 22px/37px var(--font-sans); }
+.sat-big-frame .leaflet-bar a:hover { background: rgb(11 22 40 / .9); border-color: #7A866F; color: #fff; }

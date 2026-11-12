@@ -5,6 +5,7 @@ import { BUOY_STATUS, sectorCenter, type MapHandle, type Selection } from '../ge
 import { api } from '../live';
 import { useTween } from '../motion';
 import Moon from './Moon';
+import SatSnap from './SatSnap';
 
 type Handle = MutableRefObject<MapHandle | null>;
 
@@ -102,6 +103,10 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
       <h2 className="enter mt-3 flex items-center gap-2.5 text-[19px] font-semibold leading-[24px] text-primary" style={{ animationDelay: '60ms' }}>
         {KIND_TITLE[a.kind]} у буя {a.buoy_name}
       </h2>
+      {/* сразу видно, что там: снимок места тревоги со спутника */}
+      <div className="enter mt-3" style={{ animationDelay: '90ms' }}>
+        <SatSnap lat={a.lat} lon={a.lon} title={`${KIND_TITLE[a.kind]} у буя ${a.buoy_name}`} tone={a.kind === 'silence' ? 'warn' : 'alert'} />
+      </div>
       <p className="enter mt-2 text-[14px] leading-[21px] text-primary/90" style={{ animationDelay: '120ms' }}>{a.message}</p>
 
       <div className="enter mt-4 grid grid-cols-3 gap-2" style={{ animationDelay: '180ms' }}>
@@ -292,7 +297,7 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; labe
             {t.label}
           </button>
         ))}
-        <span className="absolute -bottom-px left-0 h-0.5 rounded-full bg-primary transition-[transform,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+        <span className="ui-tab-bar absolute -bottom-px left-0 h-0.5 rounded-full bg-primary transition-[transform,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
           style={{ width: bar.w, transform: `translateX(${bar.x}px)` }} />
       </div>
     </div>

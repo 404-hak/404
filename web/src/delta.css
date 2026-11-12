@@ -80,6 +80,9 @@ html[data-layout="delta"] .delta-grab { display: none; }
     padding-bottom: calc(70px + env(safe-area-inset-bottom));
   }
   html[data-layout="delta"] .delta-sheet.is-tall { height: calc(100% - 72px - env(safe-area-inset-top)); }
+  /* лист опущен: видна только верхняя строка, карта почти вся */
+  html[data-layout="delta"] .delta-sheet.is-peek { height: calc(150px + env(safe-area-inset-bottom)); }
+  html[data-layout="delta"] .delta-grab { touch-action: none; height: 28px; }
   html[data-layout="delta"] .delta-grab {
     display: grid; place-items: center; height: 22px; flex: none; position: relative; z-index: 2; background: none; border: 0;
   }
@@ -98,7 +101,19 @@ html[data-layout="delta"] .delta-dock-item {
 }
 html[data-layout="delta"] .delta-dock-item:hover { color: var(--c-text); }
 html[data-layout="delta"] .delta-dock-item:active { scale: .96; }
-html[data-layout="delta"] .delta-dock-item[aria-current="page"] { background: rgb(var(--rgb-accent) / .24); color: var(--c-text); }
+html[data-layout="delta"] .delta-dock-item[aria-current="page"] { color: var(--c-text); }
+/* выбранный раздел — «налит водой»: волна по верху медленно бежит; под курсором вода у дна поднимается */
+html[data-layout="delta"] .delta-dock-item { isolation: isolate; overflow: hidden; --lvl: 100%; }
+html[data-layout="delta"] .delta-dock-item::after {
+  content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: 0; z-index: -1; pointer-events: none; background: rgb(var(--rgb-accent) / .34);
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 30px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 30px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+  transform: translateY(var(--lvl)); transition: transform .6s cubic-bezier(.2, .8, .2, 1);
+}
+html[data-layout="delta"] .delta-dock-item:hover::after { --lvl: 70%; }
+html[data-layout="delta"] .delta-dock-item[aria-current="page"]::after { --lvl: 16%; animation: dock-drift 3.2s linear infinite; }
+@keyframes dock-drift { to { -webkit-mask-position: 30px 0, 0 7.5px; mask-position: 30px 0, 0 7.5px; } }
+@media (prefers-reduced-motion: reduce) { html[data-layout="delta"] .delta-dock-item::after { animation: none !important; } }
 html[data-layout="delta"] .delta-dock-item[aria-current="page"] svg { color: var(--c-accent); }
 html[data-layout="delta"][data-theme="day"] .delta-dock-item[aria-current="page"] svg { color: var(--c-text); }
 @media (max-width: 767px) {
@@ -121,7 +136,36 @@ html[data-layout="delta"] .delta-haze button {
   height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--c-text-2); font-size: 13px; font-weight: 600; text-align: left; white-space: nowrap;
 }
 html[data-layout="delta"] .delta-haze button[aria-checked="true"] { background: rgb(var(--rgb-accent) / .26); color: var(--c-text); }
+/* на телефоне не показываем: перекрывал переключатель карты; выбирают на компьютере */
+@media (max-width: 767px) { html[data-layout="delta"] .delta-haze { display: none; } }
+
+/* ---------- лист на компьютере сворачивается к краю — карта целиком ---------- */
+/* уехавший за край лист не должен прокручивать экран вбок (фокус, поиск по странице) */
+html[data-layout="delta"] .app.delta { overflow: clip; }
+@media (min-width: 768px) {
+  html[data-layout="delta"] .delta-sheet { transition: width .55s var(--ease-out), height .55s var(--ease-out), transform .55s var(--ease-out), opacity .4s; }
+  html[data-layout="delta"] .delta-sheet.is-folded { transform: translateX(calc(100% + 40px)); opacity: 0; pointer-events: none; visibility: hidden;
+    transition: transform .55s var(--ease-out), opacity .4s, visibility 0s .55s; }
+}
+html[data-layout="delta"] .delta-fold {
+  position: absolute; z-index: 1310; top: calc((76px + env(safe-area-inset-top) + 100% - 92px) / 2); right: 400px; translate: 0 -50%;
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--c-surface); color: var(--c-text-2);
+  transition: right .55s var(--ease-out), color .2s, scale .2s var(--ease-out);
+}
+html[data-layout="delta"] .delta-fold > svg { position: relative; z-index: 1; }
+html[data-layout="delta"] .delta-fold:hover { color: var(--c-text); }
+html[data-layout="delta"] .delta-fold:active { scale: .9; }
+html[data-layout="delta"] .delta-fold.is-folded { right: 24px; width: 40px; height: 40px; }
+html[data-layout="delta"] .delta-fold-dot { position: absolute; z-index: 2; right: 2px; top: 2px; width: 9px; height: 9px; border-radius: 50%; background: var(--c-alert); box-shadow: 0 0 0 2px var(--c-surface); }
+
+/* ---------- тревога в другом разделе: снимок места со спутника всплывает сразу ---------- */
+html[data-layout="delta"] .delta-pop {
+  position: absolute; z-index: 1450; right: 24px; bottom: 96px; width: 340px; padding: 12px 12px 14px; border-radius: 20px; background: var(--c-surface);
+  animation: pop-in .5s cubic-bezier(.2, .8, .2, 1) both;
+}
+html[data-layout="delta"] .delta-pop > * { position: relative; z-index: 1; }
+html[data-layout="delta"] .delta-pop-head { display: flex; align-items: center; gap: 10px; padding: 0 2px 10px 4px; font-size: 14.5px; }
+@keyframes pop-in { from { transform: translateY(24px) scale(.97); opacity: 0; } }
 @media (max-width: 767px) {
-  html[data-layout="delta"] .delta-haze { left: 8px; right: 8px; bottom: auto; top: calc(66px + env(safe-area-inset-top)); flex-direction: row; overflow-x: auto; }
-  html[data-layout="delta"] .delta-haze > span { display: none; }
+  html[data-layout="delta"] .delta-pop { left: 10px; right: 10px; width: auto; bottom: auto; top: calc(70px + env(safe-area-inset-top)); }
 }

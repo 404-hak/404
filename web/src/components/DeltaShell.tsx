@@ -1,4 +1,4 @@
-import { useEffect, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import type { State } from '../types';
 import type { MapHandle } from '../geo';
 import type { Route } from '../route';
@@ -9,6 +9,8 @@ import { MODE } from './TopBar';
 import { showIntro } from '../introBus';
 import { useTween } from '../motion';
 import { HAZES, hazePicker, setHaze, useHaze } from './MapHaze';
+import SatSnap from './SatSnap';
+import { KIND_TITLE } from '../format';
 
 const TZ = 'Europe/Astrakhan';
 const dayFmt = new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, day: 'numeric', month: 'long' });
@@ -33,6 +35,25 @@ function useViewport() {
   }, []);
   return v;
 }
+
+/** Отступы под вырез и «домашнюю» полосу iPhone: шапка и лист выше на столько же — карта считает это */
+function useSafeArea() {
+  const [v, setV] = useState({ top: 0, bottom: 0 });
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;left:0;top:0;width:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+    document.body.append(el);
+    const read = () => { const cs = getComputedStyle(el); setV({ top: parseFloat(cs.paddingTop) || 0, bottom: parseFloat(cs.paddingBottom) || 0 }); };
+    read();
+    window.addEventListener('resize', read);
+    return () => { window.removeEventListener('resize', read); el.remove(); };
+  }, []);
+  return v;
+}
+
+type Snap = 'peek' | 'half' | 'tall';
+const FOLD_KEY = '404-sheet-folded';
+const readFold = () => { try { return localStorage.getItem(FOLD_KEY) === '1'; } catch { return false; } };
 
 const Play = () => (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden><path d="M6 4.2v11.6c0 .6.7 1 1.2.6l8.6-5.8a.75.75 0 0 0 0-1.2L7.2 3.6c-.5-.4-1.2 0-1.2.6z" /></svg>
@@ -63,17 +84,74 @@ export default function DeltaShell({ state, online, route, go, badges, page, han
     const t = window.setInterval(() => setNow(new Date()), 15_000);
     return () => window.clearInterval(t);
   }, []);
-  // ручка листа на телефоне: карта — лист внизу, разделы — во весь экран; нажатие меняет местами
-  const [flip, setFlip] = useState(false);
-  useEffect(() => setFlip(false), [route]);
-  const tall = (route !== 'map') !== flip;
+  const safe = useSafeArea();
+  // лист на телефоне: «peek» — только заголовок (карта почти вся), «half» — половина, «tall» — во весь экран.
+  // Нажатие на ручку: половина ⇄ весь экран; ручку можно тянуть — лист встаёт на ближайшее положение.
+  const [snap, setSnap] = useState<Snap>(route === 'map' ? 'half' : 'tall');
+  useEffect(() => setSnap(route === 'map' ? 'half' : 'tall'), [route]);
+  // на компьютере лист на карте можно свернуть к краю — карта целиком; выбор запоминается
+  const [folded, setFolded] = useState(readFold);
+  const fold = (v: boolean) => { setFolded(v); try { localStorage.setItem(FOLD_KEY, v ? '1' : '0'); } catch { /* только в этой вкладке */ } };
+  const isFolded = folded && route === 'map' && !phone;
+
+  // новая тревога: лист раскрывается, а если открыт другой раздел — сверху всплывает снимок места со спутника
+  const known = useRef<Set<string> | null>(null);
+  const [pop, setPop] = useState<string | null>(null);
+  useEffect(() => {
+    const fresh = state.alerts.filter((a) => a.status === 'new');
+    if (known.current) {
+      const nu = fresh.find((a) => !known.current!.has(a.id));
+      if (nu) {
+        setFolded(false);
+        setSnap((v) => (v === 'peek' ? 'half' : v));
+        setPop(nu.id);
+      }
+    }
+    known.current = new Set(state.alerts.map((a) => a.id));
+  }, [state.alerts]);
+  useEffect(() => { if (route === 'map') setPop(null); }, [route]);   // на карте тревога и так в листе
+  const popAlert = pop ? state.alerts.find((a) => a.id === pop && a.status === 'new') : undefined;
 
   const m = online ? MODE[state.mode] : null;
   const risk = useTween(state.forecast.risk * 100, 1100);
+  const peekH = 150 + safe.bottom;
   const insets: Insets = phone
-    ? { top: 64, right: 0, bottom: Math.round(vp.h * 0.44), left: 0 }
-    : { top: 76, right: 432, bottom: 92, left: vp.w >= 1180 ? 330 : 16 };
+    ? { top: 64 + safe.top, right: 0, bottom: snap === 'peek' ? peekH : Math.round(vp.h * 0.44), left: 0 }
+    : { top: 76 + safe.top, right: isFolded ? 76 : 432, bottom: 92, left: vp.w >= 1180 ? 330 : 16 };
   const items = NAV.flatMap((s) => s.items);
+
+  // ручку листа тянут пальцем: высота идёт за пальцем, на отпускании — ближайшее положение (с учётом броска)
+  const sheet = useRef<HTMLElement>(null);
+  const drag = useRef<{ y: number; h: number; t: number; moved: boolean } | null>(null);
+  const heights = () => ({ peek: peekH, half: vp.h * 0.44, tall: vp.h - 72 - safe.top });
+  const onGrabDown = (e: RPointerEvent<HTMLButtonElement>) => {
+    if (!phone || !sheet.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { y: e.clientY, h: sheet.current.getBoundingClientRect().height, t: performance.now(), moved: false };
+  };
+  const onGrabMove = (e: RPointerEvent<HTMLButtonElement>) => {
+    const d = drag.current, el = sheet.current;
+    if (!d || !el) return;
+    const dy = e.clientY - d.y;
+    if (!d.moved && Math.abs(dy) < 6) return;
+    d.moved = true;
+    const H = heights();
+    el.style.transition = 'none';
+    el.style.height = `${Math.max(H.peek - 30, Math.min(H.tall, d.h - dy))}px`;
+  };
+  const onGrabUp = (e: RPointerEvent<HTMLButtonElement>) => {
+    const d = drag.current, el = sheet.current;
+    drag.current = null;
+    if (!d || !el) return;
+    el.style.transition = '';
+    el.style.height = '';
+    if (!d.moved) { setSnap(snap === 'tall' ? 'half' : 'tall'); return; }
+    const H = heights();
+    const v = (e.clientY - d.y) / Math.max(1, performance.now() - d.t);   // пикселей в мс, вниз — плюс
+    const h = d.h - (e.clientY - d.y) - v * 220;                          // бросок докатывает лист
+    const order: Snap[] = ['peek', 'half', 'tall'];
+    setSnap(order.reduce((best, k) => (Math.abs(H[k] - h) < Math.abs(H[best] - h) ? k : best), 'half' as Snap));
+  };
 
   return (
     <>
@@ -117,14 +195,41 @@ export default function DeltaShell({ state, online, route, go, badges, page, han
         </section>
       )}
 
-      <section className={`delta-sheet lit ${route === 'map' ? '' : 'is-wide'} ${tall ? 'is-tall' : ''}`} aria-label="Раздел">
-        <button type="button" className="delta-grab" onClick={() => setFlip(!flip)} aria-label={tall ? 'Показать карту' : 'Развернуть'} aria-expanded={tall}>
+      <section ref={sheet} className={`delta-sheet lit ${route === 'map' ? '' : 'is-wide'} ${snap === 'tall' ? 'is-tall' : snap === 'peek' ? 'is-peek' : ''} ${isFolded ? 'is-folded' : ''}`}
+        aria-label="Раздел" aria-hidden={isFolded || undefined}>
+        <button type="button" className="delta-grab" onPointerDown={onGrabDown} onPointerMove={onGrabMove} onPointerUp={onGrabUp} onPointerCancel={onGrabUp}
+          aria-label={snap === 'tall' ? 'Показать карту' : 'Развернуть'} aria-expanded={snap === 'tall'}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSnap(snap === 'tall' ? 'half' : 'tall'); } }}>
           <span />
         </button>
         <div key={route} className="delta-sheet-body page-in">
           {route === 'map' ? <SidePanel state={state} handle={handle} selected={selected} onSelect={onSelect} /> : page}
         </div>
       </section>
+
+      {/* свернуть лист к краю — вся карта видна; вернуть — та же кнопка */}
+      {route === 'map' && !phone && (
+        <button type="button" className={`delta-fold lit ${isFolded ? 'is-folded' : ''}`} onClick={() => fold(!isFolded)}
+          aria-label={isFolded ? 'Показать журнал' : 'Свернуть журнал — вся карта'} title={isFolded ? 'Показать журнал' : 'Свернуть журнал — вся карта'}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d={isFolded ? 'M10 3.5 5.5 8l4.5 4.5' : 'M6 3.5 10.5 8 6 12.5'} />
+          </svg>
+          {isFolded && state.alerts.some((a) => a.status !== 'resolved') && <span className="delta-fold-dot" />}
+        </button>
+      )}
+
+      {/* тревога, пока открыт другой раздел: снимок места со спутника всплывает сразу */}
+      {popAlert && route !== 'map' && (
+        <aside className="delta-pop lit" role="alert" key={popAlert.id}>
+          <div className="delta-pop-head">
+            <span className="ping-dot h-2 w-2 shrink-0 rounded-full bg-alert" />
+            <span className="min-w-0 flex-1 truncate font-semibold">{KIND_TITLE[popAlert.kind]} у буя {popAlert.buoy_name}</span>
+            <button type="button" onClick={() => setPop(null)} aria-label="Скрыть" title="Скрыть" className="-mr-1 grid h-8 w-8 place-items-center rounded-full text-muted hover:text-primary">✕</button>
+          </div>
+          <SatSnap lat={popAlert.lat} lon={popAlert.lon} height={phone ? 150 : 180} title={`${KIND_TITLE[popAlert.kind]} у буя ${popAlert.buoy_name}`} tone={popAlert.kind === 'silence' ? 'warn' : 'alert'} />
+          <button type="button" className="ui-btn ui-btn-danger mt-3 w-full bg-alert text-bg" onClick={() => { setPop(null); go('map'); }}>Открыть тревогу</button>
+        </aside>
+      )}
 
       {hazePicker && route === 'map' && <HazePicker />}
 

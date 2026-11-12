@@ -4,6 +4,7 @@ import { KIND_TITLE, fmtDM, fmtHM, isToday, km, pct } from '../format';
 import { api } from '../live';
 import { Kpi, Page } from './common';
 import { scrambleRef } from '../upkMotion';
+import SatSnap from '../components/SatSnap';
 
 const COLS: { id: AlertStatus; title: string; hint: string; dot: string }[] = [
   { id: 'new', title: 'Ждут решения', hint: 'Начните перехват или отметьте ложную тревогу', dot: 'bg-alert' },
@@ -25,6 +26,9 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
         <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_DOT[a.kind]} ${a.status === 'new' ? 'ping-dot' : ''}`} />{KIND_TITLE[a.kind]}
       </h3>
       <p className="mt-1 text-[13px] text-muted">у буя {a.buoy_name} · сектор {a.sector}</p>
+      {a.status === 'new' && (
+        <div className="mt-3"><SatSnap lat={a.lat} lon={a.lon} height={140} title={`${KIND_TITLE[a.kind]} у буя ${a.buoy_name}`} tone={a.kind === 'silence' ? 'warn' : 'alert'} /></div>
+      )}
       <div className="ui-meta mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted">
         <span>уверенность {pct(a.confidence)}</span>
         {a.distance_km != null && <span>{km(a.distance_km)} от катера</span>}

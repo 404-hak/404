@@ -8,11 +8,12 @@ import { reducedMotion } from '../motion';
 
 /**
  * Живая дымка над картой — плавная, как дымка на прошлом сайте команды, но про воду.
- * Четыре варианта (выбор запоминается, показать переключатель — ?haze в адресе):
+ * Четыре варианта (по умолчанию 2 «Течение»; выбор запоминается, переключатель — ?haze в адресе):
  *   1 «Туман над водой» — переливающийся туман медленно тянется к морю, расступается у курсора;
  *   2 «Течение»         — тонкие шёлковые струи вытянуты вдоль течения дельты и плывут к морю;
  *   3 «Сияние глубины»  — большие мягкие пятна цвета неспешно перетекают друг в друга;
  *   4 «Дыхание буёв»    — от каждого буя поднимается и тает дымка, у буя с тревогой — красная.
+ * «Течение» не мешает читать карту: над районом дежурства оно втрое тише, у буёв и их подписей расступается.
  * Клик по карте пускает по дымке волну. Один холст WebGL, полразрешения, 30 кадров в секунду.
  */
 export const HAZES = [
@@ -22,15 +23,16 @@ export const HAZES = [
   { id: 4, name: 'Дыхание буёв' },
 ] as const;
 
-const KEY = '404-haze';
+const KEY = '404-haze-2';   // новый ключ: у всех по умолчанию «Течение», даже если раньше смотрели другие
 const subs = new Set<() => void>();
 let variant = (() => {
   try {
     const q = new URLSearchParams(location.search).get('haze');
     if (q && /^[0-4]$/.test(q)) localStorage.setItem(KEY, q);
     const v = Number(localStorage.getItem(KEY));
-    return v >= 0 && v <= 4 ? v : 1;
-  } catch { return 1; }
+    const raw = localStorage.getItem(KEY);
+    return raw != null && v >= 0 && v <= 4 ? v : 2;
+  } catch { return 2; }
 })();
 /** Переключатель вариантов виден, если в адресе есть ?haze */
 export const hazePicker = (() => { try { return new URLSearchParams(location.search).has('haze'); } catch { return false; } })();
@@ -44,7 +46,7 @@ export const useHaze = () => useSyncExternalStore((f) => { subs.add(f); return (
 const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 const FRAGMENT = `precision highp float;
 uniform vec2 uRes;uniform float uT;uniform vec2 uPtr;uniform float uPower;uniform vec4 uPulse;
-uniform vec3 uA;uniform vec3 uB;uniform vec3 uC;uniform float uV;uniform float uGain;uniform vec4 uBuoy[12];uniform float uGlow;
+uniform vec3 uA;uniform vec3 uB;uniform vec3 uC;uniform float uV;uniform float uGain;uniform vec4 uBuoy[12];uniform float uGlow;uniform vec4 uArea;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
@@ -71,14 +73,18 @@ void main(){
     // течение: поле вытянуто вдоль дельты, шёлковые струи плывут к морю
     vec2 s=mat2(.82,-.57,.57,.82)*(uv*asp);
     s.x*=.38;
-    s+=vec2(-t*.05,0.);
-    vec2 q=vec2(fbm(s*3.+vec2(0.,t*.06)),fbm(s*3.+vec2(3.1,7.)+t*.05));
+    s+=vec2(-t*.035,0.);
+    vec2 q=vec2(fbm(s*3.+vec2(0.,t*.045)),fbm(s*3.+vec2(3.1,7.)+t*.04));
     float f=fbm(s*3.4+q*2.2);
     float fil=0.;
     for(int k=0;k<4;k++){float c=.38+float(k)*.09;fil+=(1.-smoothstep(0.,.022,abs(f-c)))*(1.-float(k)*.18);}
     col=mix(uC,uA,clamp(q.x*1.4-.1,0.,1.));
-    a=fil*.36+smoothstep(.45,.8,f)*.14;
+    a=fil*.22+smoothstep(.45,.8,f)*.08;
     a*=1.-.7*exp(-d*d*12.)*uPower;
+    // не мешает: над районом дежурства втрое тише, у буёв и их подписей (справа от буя) расступается
+    vec2 out2=max(max(uArea.xy-uv,uv-uArea.zw),0.)*asp;
+    a*=1.-.68*(1.-smoothstep(0.,.1,length(out2)));
+    for(int i=0;i<12;i++){vec4 b=uBuoy[i];if(b.z>.5){vec2 rel=(uv-b.xy-vec2(.03,0.))*asp;rel.x*=.42;a*=1.-.85*exp(-dot(rel,rel)*800.);}}
   }else if(uV<3.5){
     // сияние: три больших мягких пятна цвета медленно перетекают
     vec2 p=uv*asp;
@@ -157,7 +163,7 @@ export default function MapHaze({ buoys }: { buoys: Buoy[] }) {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     const U = (n: string) => gl.getUniformLocation(prog, n);
-    const u = { glow: U('uGlow'), res: U('uRes'), t: U('uT'), ptr: U('uPtr'), power: U('uPower'), pulse: U('uPulse'), a: U('uA'), b: U('uB'), c: U('uC'), v: U('uV'), gain: U('uGain'), buoy: U('uBuoy') };
+    const u = { glow: U('uGlow'), res: U('uRes'), t: U('uT'), ptr: U('uPtr'), power: U('uPower'), pulse: U('uPulse'), a: U('uA'), b: U('uB'), c: U('uC'), v: U('uV'), gain: U('uGain'), buoy: U('uBuoy'), area: U('uArea') };
     const scale = 0.5;
     let w = 0, h = 0, raf = 0, last = 0, power = 0, moved = -1e9;
     const ptr = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
@@ -182,11 +188,16 @@ export default function MapHaze({ buoys }: { buoys: Buoy[] }) {
       ptr.x += (ptr.tx - ptr.x) * k; ptr.y += (ptr.ty - ptr.y) * k;
       power += ((now - moved < 1800 ? 1 : 0) - power) * (1 - Math.exp(-2.5 * dt));
       buoyData.fill(0);
+      let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
       bs.slice(0, 12).forEach((b, i) => {
-        if (b.status === 'offline') return;
         const p = map.latLngToContainerPoint(L.latLng(b.lat, b.lon));
-        buoyData.set([p.x / w, 1 - p.y / h, b.status === 'alert' ? 2 : 1, 0], i * 4);
+        const x = p.x / w, y = 1 - p.y / h;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        if (b.status !== 'offline') buoyData.set([x, y, b.status === 'alert' ? 2 : 1, 0], i * 4);
       });
+      // район дежурства — рамка вокруг буёв с запасом
+      const mx = (x1 - x0) * 0.18 + 0.02, my = (y1 - y0) * 0.18 + 0.02;
+      gl.uniform4f(u.area, x0 - mx, y0 - my, x1 + mx, y1 + my);
       gl.uniform2f(u.res, cv.width, cv.height);
       gl.uniform1f(u.t, now / 1000);
       gl.uniform2f(u.ptr, ptr.x, ptr.y);

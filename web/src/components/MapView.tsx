@@ -100,15 +100,20 @@ function Bounded({ area, handle, focus, booting, fitPad }: {
   area: Bounds; handle: MutableRefObject<MapHandle | null>; focus?: { id: string; lat: number; lon: number }; booting: boolean; fitPad?: FitPad;
 }) {
   const map = useMap();
+  // отступы меняются (лист свернули, на телефоне его опустили) — функции берут свежие
+  const padRef = useRef(fitPad);
+  padRef.current = fitPad;
+  const limitRef = useRef<() => void>();
   useEffect(() => {
     // в «Карте — всё» часть экрана занята листом и шапкой: границы шире, чтобы район можно было вписать в свободную часть
     const view = L.latLngBounds(pad(area, fitPad ? 3 : 0.12));
     // зазор вокруг района, чтобы была видна его граница; сверху, справа и снизу — под кнопки и легенду
-    const fit = { paddingTopLeft: fitPad?.tl ?? [28, 64] as [number, number], paddingBottomRight: fitPad?.br ?? [64, 64] as [number, number] };
+    const fit = () => { const p = padRef.current; return { paddingTopLeft: p?.tl ?? [28, 64] as [number, number], paddingBottomRight: p?.br ?? [64, 64] as [number, number] }; };
     // меньше этого масштаба отдалить нельзя: весь район с небольшим запасом
     const limit = () => {
+      const p = padRef.current;
       map.setMinZoom(0);
-      map.setMinZoom(fitPad ? map.getBoundsZoom(area, false, L.point(fitPad.tl[0] + fitPad.br[0], fitPad.tl[1] + fitPad.br[1])) - 0.6 : map.getBoundsZoom(view, false));
+      map.setMinZoom(p ? map.getBoundsZoom(area, false, L.point(p.tl[0] + p.br[0], p.tl[1] + p.br[1])) - 0.6 : map.getBoundsZoom(view, false));
     };
     const labels = () => map.getContainer().classList.toggle('compact', isCompact(map.getSize().x, map.getZoom()));
     // Центр полёта сразу поджимается внутрь границ: иначе после полёта к бую у края
@@ -116,21 +121,24 @@ function Bounded({ area, handle, focus, booting, fitPad }: {
     const inside = (lat: number, lon: number, zoom: number) => {
       const size = map.getSize(), half = size.divideBy(2);
       const nw = map.project(view.getNorthWest(), zoom), se = map.project(view.getSouthEast(), zoom);
-      const p = map.project([lat, lon], zoom);
+      // точка встаёт в середину свободной части карты, а не под лист или шапку
+      const fp = padRef.current;
+      const p = map.project([lat, lon], zoom).subtract(fp ? L.point((fp.tl[0] - fp.br[0]) / 2, (fp.tl[1] - fp.br[1]) / 2) : L.point(0, 0));
       const x = se.x - nw.x <= size.x ? (nw.x + se.x) / 2 : Math.min(Math.max(p.x, nw.x + half.x), se.x - half.x);
       const y = se.y - nw.y <= size.y ? (nw.y + se.y) / 2 : Math.min(Math.max(p.y, nw.y + half.y), se.y - half.y);
       return map.unproject([x, y], zoom);
     };
     map.setMaxBounds(view);
+    limitRef.current = limit;
     limit();
-    map.fitBounds(area, { ...fit, animate: false });
+    map.fitBounds(area, { ...fit(), animate: false });
     labels();
     map.on('resize', limit);
     map.on('zoomend resize', labels);
     handle.current = {
       zoomIn: () => map.zoomIn(),
       zoomOut: () => map.zoomOut(),
-      fitArea: () => map.flyToBounds(area, { ...fit, duration: 0.7 }),
+      fitArea: () => map.flyToBounds(area, { ...fit(), duration: 0.7 }),
       flyTo: (lat, lon, zoom = 11.5) => map.flyTo(inside(lat, lon, zoom), zoom, { duration: 0.9, easeLinearity: 0.2 }),
     };
     return () => {
@@ -143,6 +151,19 @@ function Bounded({ area, handle, focus, booting, fitPad }: {
   useEffect(() => {
     map.getContainer().classList.toggle('booting', booting);
   }, [map, booting]);
+
+  // свободная часть карты изменилась — вписываем район (или тревогу) заново
+  const padKey = fitPad ? `${fitPad.tl}|${fitPad.br}` : '';
+  const firstPad = useRef(true);
+  useEffect(() => {
+    if (firstPad.current) { firstPad.current = false; return; }
+    const t = window.setTimeout(() => {
+      map.invalidateSize();
+      limitRef.current?.();
+      if (focus) handle.current?.flyTo(focus.lat, focus.lon, 11.5); else handle.current?.fitArea();
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [padKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // к новой тревоге — подлёт, после её закрытия — обратно ко всему району
   const seen = useRef(false);
