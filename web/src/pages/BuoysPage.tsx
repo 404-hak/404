@@ -35,8 +35,8 @@ export default function BuoysPage({ state, toBuoy }: { state: State; toBuoy: (id
             style={{ animationDelay: `${100 + i * 40}ms` }}>
             <div className="flex items-start gap-3">
               <span className={`relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full border-[3px] ${RING[b.status]}`}>
-                <span className={`h-2.5 w-2.5 rounded-full ${DOT[b.status]} ${b.status === 'alert' ? 'live-dot' : ''}`} />
-                {b.status !== 'offline' && <span className="buoy-ring" style={{ animationDelay: `${(i * 0.7) % 3}s` }} />}
+                <span className={`h-2.5 w-2.5 rounded-full ${DOT[b.status]} ${b.status === 'alert' ? 'ping-dot' : ''}`} />
+                {b.status !== 'offline' && <span className={`buoy-ring ${TONE[b.status]}`} style={{ animationDelay: `${(i * 0.7) % 5}s` }} />}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-2">

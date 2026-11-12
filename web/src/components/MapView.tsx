@@ -198,7 +198,7 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
             pathOptions={{ color: alarm ? C.alert : C.accent, opacity: alarm ? 0.6 : 0.5, weight: 1.2, dashArray: '2 5', className: 'fade-in' }} />,
           <Polyline key={`${a}-${b}-p-${alarm}`} positions={path} interactive={false}
             eventHandlers={svgPath(100, alarm ? (i % 3) * 0.4 : (i * 0.61) % 3.4)}
-            pathOptions={{ color: alarm ? C.alert : C.signal, opacity: 0.95, weight: 2.5, lineCap: 'round', className: `packet${alarm ? ' packet--alert' : ''}` }} />,
+            pathOptions={{ color: alarm ? C.alert : C.signal, opacity: 0.9, weight: 2, lineCap: 'round', className: `packet${alarm ? ' packet--alert' : ''}` }} />,
         ];
       })}
 

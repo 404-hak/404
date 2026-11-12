@@ -21,7 +21,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
         <span>{isToday(a.ts, now) ? fmtHM(a.ts) : `${fmtDM(a.ts)} · ${fmtHM(a.ts)}`}</span>
       </div>
       <h3 className="mt-2 flex items-center gap-2 text-[15px] font-semibold leading-5">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_DOT[a.kind]} ${a.status === 'new' ? 'live-dot' : ''}`} />{KIND_TITLE[a.kind]}
+        <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_DOT[a.kind]} ${a.status === 'new' ? 'ping-dot' : ''}`} />{KIND_TITLE[a.kind]}
       </h3>
       <p className="mt-1 text-[13px] text-muted">у буя {a.buoy_name} · сектор {a.sector}</p>
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted">

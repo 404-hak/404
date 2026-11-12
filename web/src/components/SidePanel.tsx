@@ -14,8 +14,6 @@ const LEVEL = {
   high: { word: 'высокий', text: 'text-warn', tip: '#F59E0B' },
 } as const;
 
-/** Звук услышан: живой эквалайзер. */
-const Eq = () => <span className="eq" aria-hidden><i /><i /><i /><i /></span>;
 
 const Stat = ({ label, value, icon, tone = '' }: { label: string; value: string; icon?: ReactNode; tone?: string }) => (
   <div className="rounded-[10px] border border-line bg-white/[.02] px-2.5 py-2 transition-colors hover:border-white/25 hover:bg-white/[.04]">
@@ -97,12 +95,12 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
     <section className="alert-flash border-b border-alert/30 p-5">
       <div className="enter flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-[12px] font-semibold text-alert">
-          <span className="live-dot h-2 w-2 rounded-full bg-alert" />{intercept ? 'Перехват — катер в пути' : 'Тревога — нужно ваше решение'}
+          <span className="ping-dot h-2 w-2 rounded-full bg-alert" />{intercept ? 'Перехват — катер в пути' : 'Тревога — нужно ваше решение'}
         </div>
         <span className="font-mono text-[11px] text-muted">{fmtTime(a.ts)}</span>
       </div>
       <h2 className="enter mt-3 flex items-center gap-2.5 text-[19px] font-semibold leading-[24px] text-primary" style={{ animationDelay: '60ms' }}>
-        <span className="text-alert"><Eq /></span>{KIND_TITLE[a.kind]} у буя {a.buoy_name}
+        {KIND_TITLE[a.kind]} у буя {a.buoy_name}
       </h2>
       <p className="enter mt-2 text-[14px] leading-[21px] text-primary/90" style={{ animationDelay: '120ms' }}>{a.message}</p>
 
@@ -151,7 +149,7 @@ function BuoyCard({ b, state, handle, onClose, alert }: { b: Buoy; state: State;
       {alert && (
         <button type="button" onClick={onClose}
           className="flex w-full items-center gap-2 bg-alert/15 px-5 py-2 text-left text-[12px] font-medium text-alert hover:bg-alert/25">
-          <span className="live-dot h-1.5 w-1.5 rounded-full bg-alert" />Тревога у буя {alert.buoy_name} — вернуться к ней
+          <span className="ping-dot h-1.5 w-1.5 rounded-full bg-alert" />Тревога у буя {alert.buoy_name} — вернуться к ней
         </button>
       )}
       <div className="p-5">
@@ -255,7 +253,7 @@ function BuoyList({ buoys, handle, selected, onSelect }: { buoys: Buoy[]; handle
         <li key={b.id} className="row-in" style={delay(i)}>
           <button type="button" onClick={() => { onSelect(b.id); handle.current?.flyTo(b.lat, b.lon, 12); }} aria-pressed={b.id === selected}
             className={`group grid w-full grid-cols-[18px_1fr_auto_auto] items-center gap-3 border-b border-line py-2.5 text-left text-[13px] leading-[18px] hover:bg-white/[.03] ${b.id === selected ? 'bg-white/[.06]' : ''}`}>
-            <span className={`relative h-3.5 w-3.5 rounded-full border-[2.5px] transition-transform group-hover:scale-125 ${RING[b.status]} ${b.status === 'alert' ? 'live-dot bg-alert' : ''}`} />
+            <span className={`relative h-3.5 w-3.5 rounded-full border-[2.5px] transition-transform group-hover:scale-125 ${RING[b.status]} ${b.status === 'alert' ? 'ping-dot bg-alert' : ''}`} />
             <span>
               <span className="font-medium">{b.name}</span>
               <span className="block text-[12px] text-muted">сектор {b.sector} · {BUOY_STATUS[b.status]}</span>

@@ -22,7 +22,7 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
   const m = mode && online ? MODE[mode] : null;
   const btn = 'h-8 whitespace-nowrap rounded-[8px] px-3 text-[12px] font-medium';
   return (
-    <header className="relative z-20 shrink-0 bg-surface/70 backdrop-blur">
+    <header className="mode-line relative z-20 shrink-0 bg-surface/70 backdrop-blur">
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
           <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0 md:hidden" />
@@ -36,7 +36,7 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
           {m ? (
             <div key={mode} className={`pill relative flex h-8 items-center gap-2 rounded-full border px-3 ${m.pill}`}
               title={`Режим: ${m.label.toLowerCase()} — ${m.hint}`} role="status" aria-live="polite">
-              <span className={`live-dot h-2 w-2 shrink-0 rounded-full ${m.dot}`} />
+              <span className={`${mode === 'alarm' || mode === 'intercept' ? 'ping-dot' : 'live-dot'} h-2 w-2 shrink-0 rounded-full ${m.dot}`} />
               <span className={`text-[12px] font-semibold ${m.text}`}>{m.label}</span>
               <span className="hidden text-[12px] text-muted lg:inline">· {m.hint}</span>
             </div>
@@ -54,6 +54,9 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
           <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>
           <SoundToggle />
 
+          <div className="hidden items-center gap-2 rounded-[8px] border border-line px-2 py-1 lg:flex" title="Гидрофон: что сейчас слышат буи">
+            <Hydrophone mode={online ? mode : null} />
+          </div>
           <div className="hidden flex-col items-end leading-none sm:flex" title="Время астраханское">
             <span className="font-mono text-[13px] font-medium tabular-nums">{fmtTime(now)}</span>
             <span className={`mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-[.1em] ${online ? 'text-accent' : 'text-grey'}`}>
@@ -62,7 +65,6 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
           </div>
         </div>
       </div>
-      <Hydrophone mode={online ? mode : null} />
     </header>
   );
 }
