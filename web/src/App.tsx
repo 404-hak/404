@@ -14,6 +14,7 @@ import { plural } from './format';
 import type { MapHandle } from './geo';
 import { useRoute, type Route } from './route';
 import { sound } from './sound';
+import { haptic } from './native';
 import { useSurfaces } from './motion';
 import Intro from './components/Intro';
 import { INTRO_EVENT, appSettled } from './introBus';
@@ -59,7 +60,7 @@ export default function App() {
   // звук тревоги на каждую новую
   useEffect(() => {
     const fresh = state?.alerts.find((a) => a.status === 'new');
-    if (fresh && lastAlert.current !== null && fresh.id !== lastAlert.current) sound.alarm();
+    if (fresh && lastAlert.current !== null && fresh.id !== lastAlert.current) { sound.alarm(); haptic('error'); }
     lastAlert.current = fresh?.id ?? lastAlert.current ?? '';
   }, [state]);
 

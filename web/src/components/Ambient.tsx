@@ -50,9 +50,10 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       const { mode: m, quiet: q, moon: mp } = live.current;
       // кадры: вода движется медленно — в покое 30 в секунду (глазу не отличить, видеокарте вдвое легче);
       // пока двигается мышь, идёт волна или открывается страница — до 60 (не чаще, даже на мониторе 144 Гц);
-      // на карте фон почти закрыт — 12; если компьютер не успевает — 30 всегда, потом меньше точек
+      // на карте фон почти закрыт, а видеокарта нужна самой карте (приближение, перетаскивание) — 4;
+      // если компьютер не успевает — 30 всегда, потом меньше точек
       const busy = now - ptr.moved < 2200 || pulse.current != null || now - startAt < 2500;
-      const gap = q ? 80 : Math.max(cap, busy ? 1000 / 60 : 1000 / 30);
+      const gap = q ? 250 : Math.max(cap, busy ? 1000 / 60 : 1000 / 30);
       if (now - quietAt < gap - 3) return;
       quietAt = now;
       const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;

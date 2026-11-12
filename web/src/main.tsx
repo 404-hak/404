@@ -7,6 +7,7 @@ import '@fontsource/inter/600.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
 import 'leaflet/dist/leaflet.css';
+import './native';
 import './index.css';
 import App from './App';
 import { initTheme } from './theme';

@@ -62,6 +62,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   // раньше «загрузка» отсчитывалась от открытия страницы и успевала кончиться до появления буёв)
   const boot = useRef(!reducedMotion());
   const anims = useRef<(() => void)[]>([]);
+  const moving = useRef(false);
   const selRef = useRef(selected);
   selRef.current = selected;
   /** Выделение — классом на живом значке: без пересоздания он плавно увеличивается, как на схеме */
@@ -79,10 +80,12 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   // если Яндекс сам перерисует значок (смена статуса, масштаб), выделение возвращается на новый
   useEffect(() => {
     if (!el.current) return;
-    let raf = 0;
-    const mo = new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintSelection(); }); });
+    // Яндекс при приближении без конца добавляет и убирает плитки — обход всего дерева на каждый кадр тормозил;
+    // проверяем выделение не чаще раза в 200 мс
+    let timer = 0;
+    const mo = new MutationObserver(() => { if (!timer) timer = window.setTimeout(() => { timer = 0; paintSelection(); }, 200); });
     mo.observe(el.current, { childList: true, subtree: true });
-    return () => { mo.disconnect(); cancelAnimationFrame(raf); anims.current.forEach((c) => c()); };
+    return () => { mo.disconnect(); window.clearTimeout(timer); anims.current.forEach((c) => c()); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // создание карты
@@ -115,6 +118,9 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         m.container.events.add('sizechange', limit);
         m.events.add('click', () => pick.current(null));
         m.events.add('boundschange', labels);
+        // пока карта едет или приближается, лишнее не перерисовываем
+        m.events.add('actionbegin', () => { moving.current = true; });
+        m.events.add('actionend', () => { moving.current = false; });
 
         layouts.current = {
           buoy: y.templateLayoutFactory.createClass(
@@ -129,9 +135,13 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
           lon: y.templateLayoutFactory.createClass('<span class="tick tick--lon">{{ properties.text }}</span>'),
         };
 
-        // всё за пределами района — затемнено, сам район обведён
+        // всё за пределами района — затемнено, сам район обведён; снимок внутри чуть приглушён тёмной заливкой
+        // (вместо CSS-фильтра на плитках: он пересчитывался каждый кадр и тормозил приближение)
         m.geoObjects.add(new y.Polygon(maskRings(area), {}, {
           fillColor: C.mask, fillOpacity: 0.72, strokeWidth: 0, fillRule: 'evenOdd', interactivityModel: 'default#transparent',
+        }));
+        m.geoObjects.add(new y.Rectangle(area, {}, {
+          fillColor: C.mask, fillOpacity: 0.3, strokeWidth: 0, interactivityModel: 'default#transparent',
         }));
         // рамка района прорисовывается по периметру, как на схеме
         const ring: [number, number][] = [[area[0][0], area[0][1]], [area[1][0], area[0][1]], [area[1][0], area[1][1]], [area[0][0], area[1][1]], [area[0][0], area[0][1]]];
@@ -212,12 +222,12 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         ...flat, strokeColor: C.primary, strokeWidth: 3, strokeStyle: 'dash',
       });
       g.add(route);
-      // пунктир маршрута бежит к цели, как на схеме; 25 кадров в секунду — Яндексу хватает и это дёшево
+      // пунктир маршрута бежит к цели, как на схеме; каждая смена стиля перерисовывает линию в Яндексе, поэтому редко
       if (!reducedMotion()) {
         let raf = 0, last = 0;
         const run = (now: number) => {
           raf = requestAnimationFrame(run);
-          if (now - last < 40) return;
+          if (now - last < 80 || moving.current) return;      // 12 кадров в секунду; пока карта двигается — стоит
           last = now;
           try {
             route.options.set('strokeStyle', { style: 'dash', offset: -((now / 1000) * 5) % 7 });

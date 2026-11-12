@@ -712,7 +712,7 @@ export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon
         <ReedsImage side="right" seed={17} count={14} color={C.reedNear} blur={reedBlur(7, 78)} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto" />
       </div>
 
-      <div className="absolute right-4 top-4 flex items-center gap-2" style={{ opacity: 1 - outK }}>
+      <div className="absolute right-4 top-4 flex items-center gap-2" style={{ opacity: 1 - outK, marginTop: 'env(safe-area-inset-top)', marginRight: 'env(safe-area-inset-right)' }}>
         {needsTap && soundOn && (
           <button type="button" className="flex items-center gap-1.5 rounded-chip border border-accent/60 bg-accent/15 px-3 py-1.5 text-[12px] font-medium text-primary hover:bg-accent/30">
             <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

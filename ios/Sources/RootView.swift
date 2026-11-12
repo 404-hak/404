@@ -13,7 +13,7 @@ struct RootView: View {
         ZStack {
             background.ignoresSafeArea()
             if let url, !changing {
-                WebScreen(url: url, onTheme: { color, isDark in
+                WebScreen(url: url, background: background, onTheme: { color, isDark in
                     background = color
                     dark = isDark
                 }, onChangeServer: { changing = true })

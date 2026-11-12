@@ -1,9 +1,10 @@
 import SwiftUI
 import WebKit
 
-/// Состояние загрузки страницы: ошибка и перезагрузка.
+/// Состояние загрузки страницы: ошибка, готовность и перезагрузка.
 final class WebModel: ObservableObject {
     @Published var error: String?
+    @Published var loaded = false
     weak var webView: WKWebView?
 
     func reload(_ url: URL) {
@@ -12,9 +13,10 @@ final class WebModel: ObservableObject {
     }
 }
 
-/// Сайт на весь экран плюс сообщение, если сервер не отвечает.
+/// Сайт на весь экран, от края до края (под вырезом и «домашней» полосой), плюс сообщение, если сервер не отвечает.
 struct WebScreen: View {
     let url: URL
+    let background: Color
     let onTheme: (Color, Bool) -> Void
     let onChangeServer: () -> Void
     @StateObject private var model = WebModel()
@@ -22,6 +24,15 @@ struct WebScreen: View {
     var body: some View {
         ZStack {
             WebView(url: url, model: model, onTheme: onTheme, onChangeServer: onChangeServer)
+                .ignoresSafeArea(.container)   // клавиатура по-прежнему поднимает содержимое
+
+            // пока страница грузится — цвет запуска, потом плавно открывается сайт (без белой вспышки)
+            background
+                .ignoresSafeArea()
+                .opacity(model.loaded || model.error != nil ? 0 : 1)
+                .animation(.easeOut(duration: 0.45), value: model.loaded)
+                .allowsHitTesting(false)
+
             if let message = model.error {
                 VStack(spacing: 14) {
                     Text("Нет связи с сервером")
@@ -39,7 +50,7 @@ struct WebScreen: View {
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(UIColor.systemBackground).opacity(0.96))
+                .background(Color(UIColor.systemBackground).ignoresSafeArea())
             }
         }
     }
@@ -69,8 +80,11 @@ struct WebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
+        // метка в User-Agent: сайт понимает, что он внутри приложения, и включает стили приложения и вибрацию
+        config.applicationNameForUserAgent = "404App/1.0"
         let controller = WKUserContentController()
         controller.add(context.coordinator, name: "theme")
+        controller.add(context.coordinator, name: "haptic")
         controller.addUserScript(WKUserScript(source: Self.themeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         config.userContentController = controller
 
@@ -79,10 +93,18 @@ struct WebView: UIViewRepresentable {
         view.uiDelegate = context.coordinator
         view.isOpaque = false
         view.backgroundColor = .clear
-        view.scrollView.backgroundColor = .clear
-        view.scrollView.bounces = false
-        view.scrollView.contentInsetAdjustmentBehavior = .never
+        view.allowsLinkPreview = false                       // без превью по долгому нажатию на ссылку
         view.allowsBackForwardNavigationGestures = false
+        let scroll = view.scrollView
+        scroll.backgroundColor = .clear
+        scroll.bounces = false                               // без «резинки» у краёв страницы
+        scroll.contentInsetAdjustmentBehavior = .never       // отступы под вырез делает сам сайт (safe-area)
+        scroll.keyboardDismissMode = .interactive
+        scroll.showsHorizontalScrollIndicator = false
+        // масштаб страницы щипком отключён: щипок — только для карты (иначе страница и карта спорят за жест, отсюда лаги)
+        scroll.minimumZoomScale = 1
+        scroll.maximumZoomScale = 1
+        scroll.pinchGestureRecognizer?.isEnabled = false
         if #available(iOS 16.4, *) { view.isInspectable = true }   // отладка: Safari → Разработка → iPhone
 
         // тайный жест: двойное касание тремя пальцами — сменить адрес сервера
@@ -104,18 +126,45 @@ struct WebView: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "theme")
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "haptic")
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UIGestureRecognizerDelegate {
         var parent: WebView
-        init(_ parent: WebView) { self.parent = parent }
+        private let light = UIImpactFeedbackGenerator(style: .light)
+        private let medium = UIImpactFeedbackGenerator(style: .medium)
+        private let notify = UINotificationFeedbackGenerator()
 
-        // MARK: тема
+        init(_ parent: WebView) {
+            self.parent = parent
+            light.prepare()
+        }
+
+        // MARK: сообщения от сайта
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "theme", let css = message.body as? String, let rgb = Self.parseColor(css) else { return }
-            let color = Color(red: rgb.0, green: rgb.1, blue: rgb.2)
-            let luminance = 0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2
-            DispatchQueue.main.async { self.parent.onTheme(color, luminance < 0.5) }
+            switch message.name {
+            case "theme":
+                guard let css = message.body as? String, let rgb = Self.parseColor(css) else { return }
+                let color = Color(red: rgb.0, green: rgb.1, blue: rgb.2)
+                let luminance = 0.2126 * rgb.0 + 0.7152 * rgb.1 + 0.0722 * rgb.2
+                DispatchQueue.main.async { self.parent.onTheme(color, luminance < 0.5) }
+            case "haptic":
+                guard let kind = message.body as? String else { return }
+                DispatchQueue.main.async { self.haptic(kind) }
+            default:
+                break
+            }
+        }
+
+        /// Тактильный отклик: лёгкий — на нажатия, сильнее и «сигналом» — на тревоги
+        private func haptic(_ kind: String) {
+            switch kind {
+            case "medium": medium.impactOccurred(); medium.prepare()
+            case "success": notify.notificationOccurred(.success); notify.prepare()
+            case "warning": notify.notificationOccurred(.warning); notify.prepare()
+            case "error": notify.notificationOccurred(.error); notify.prepare()
+            default: light.impactOccurred(); light.prepare()
+            }
         }
 
         /// «rgb(11 22 40)», «rgb(11, 22, 40)» или «#0B1628»
@@ -131,7 +180,10 @@ struct WebView: UIViewRepresentable {
 
         // MARK: загрузка
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            DispatchQueue.main.async { self.parent.model.error = nil }
+            DispatchQueue.main.async {
+                self.parent.model.error = nil
+                self.parent.model.loaded = true
+            }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail(error) }
