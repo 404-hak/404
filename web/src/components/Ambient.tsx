@@ -12,8 +12,9 @@ const COLORS: Record<Mode, { a: [number, number, number]; b: [number, number, nu
 const SPEED: Record<Mode, number> = { calm: 1, alertness: 1.2, alarm: 1.55, intercept: 1.4 };
 
 const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
-// Мягкое свечение воды: течения из искажённого шума, вытянутые по горизонтали, сквозь них —
-// плавные полосы волн. Свет у курсора и кольцо от клика. Без бликов и точек — не реалистично, а спокойно.
+// Стилизованное ночное море: мягкая дымка неба и горизонт, вода в перспективе — к горизонту
+// всё сжимается, свет ложится вытянутыми мазками, широкие полосы зыби катятся к зрителю,
+// под источником света — дорожка из размытых мазков. Течения — как в фоне 404-upk.
 const FRAGMENT = `precision highp float;
 uniform vec2 uRes;uniform float uT;uniform vec2 uPtr;uniform float uPower;
 uniform vec3 uA;uniform vec3 uB;uniform float uGain;uniform vec4 uPulse;
@@ -22,32 +23,45 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
 float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);
   for(int i=0;i<3;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
+const float HZ=.8;
+vec2 plane(vec2 uv,float asp){float below=max(HZ-uv.y,.001);float d=1./(below+.06);return vec2((uv.x-.5)*asp*d*.35,d);}
 void main(){
   vec2 uv=gl_FragCoord.xy/uRes;
-  vec2 asp=vec2(uRes.x/uRes.y,1.);
-  vec2 ptr=vec2(uPtr.x,1.-uPtr.y);
-  float d=distance(uv*asp,ptr*asp);
-  vec2 p=uv*asp*vec2(1.,2.1);
-  p+=(ptr-uv)*asp*.4*exp(-d*d*5.)*uPower;
-  float t=uT*.07;
-  vec2 q=vec2(fbm(p+vec2(t*1.4,0.)),fbm(p+vec2(5.2,1.3)-vec2(t,0.)));
-  vec2 r=vec2(fbm(p+2.4*q+vec2(1.7,9.2)+vec2(t*1.2,0.)),fbm(p+2.4*q+vec2(8.3,2.8)-vec2(t*.8,0.)));
-  float f=fbm(p+3.*r);
-  float band=.5+.5*sin(p.y*5.5+f*5.-uT*.42+r.x*3.);
-  float light=smoothstep(.32,.84,f)*mix(.62,1.,smoothstep(.15,.9,band));
-  light*=mix(.45,1.,smoothstep(.12,.85,distance(uv,vec2(.5,.52))*1.3));
-  float glow=exp(-d*d*10.)*.3*uPower;
-  float ring=0.;
-  if(uPulse.w>0.){
-    float pd=distance(uv*asp,vec2(uPulse.x,1.-uPulse.y)*asp);
-    float w=(pd-uPulse.z*.6)*8.;
-    ring=exp(-w*w)*exp(-uPulse.z*1.4)*uPulse.w;
+  float asp=uRes.x/uRes.y;
+  float below=HZ-uv.y;
+  vec3 deep=uB*.55;
+  vec3 haze=uB*1.05+uA*.09;
+  // небо: от глубины к светлой дымке у горизонта
+  vec3 col=mix(haze,deep*.9,smoothstep(HZ,1.,uv.y));
+  if(below>0.){
+    vec2 w=plane(uv,asp);
+    float t=uT;
+    if(uPulse.w>0.){
+      vec2 c=plane(vec2(uPulse.x,uPulse.y),asp);
+      float r=uPulse.z*1.6;
+      float dw=distance(w*vec2(1.,.55),c*vec2(1.,.55));
+      float k=(dw-r)*2.2;
+      w+=normalize(w-c+1e-4)*sin((dw-r)*9.)*exp(-k*k)*exp(-uPulse.z*1.1)*uPulse.w*.18;
+    }
+    vec2 q=vec2(fbm(w*.6+vec2(t*.03,0.)),fbm(w*.6+vec2(5.2,1.3)-vec2(0.,t*.02)));
+    float f=fbm(w*.6+2.*q+vec2(0.,-t*.05));
+    float swell=.5+.5*sin(w.y*2.2-t*.85+f*3.);
+    float nearK=mix(2.,1.,clamp((w.y-1.)/5.,0.,1.));        // у зрителя рябь мельче и чаще, не пятнами
+    float s1=noise(vec2(w.x*3.,w.y*6.)*nearK+q*2.+vec2(t*.12,-t*.55));
+    float streak=smoothstep(.56,.86,s1)*smoothstep(.15,.95,swell);
+    float lx=(uv.x-uPtr.x)*asp;
+    float wd=mix(.05,.42,clamp(below/HZ,0.,1.));
+    float path=exp(-lx*lx/(wd*wd));
+    vec3 water=mix(deep,uB*.95,smoothstep(.3,.8,f));
+    water+=uA*swell*.05;
+    water+=uA*streak*(.09+.42*path*uPower);
+    // к горизонту вода тонет в дымке
+    col=mix(water,haze,smoothstep(.14,0.,below)*.75);
   }
-  vec3 col=mix(uB,uA,clamp(r.x*1.2+glow*1.5+ring,0.,1.));
-  float alpha=clamp(light*.5+glow+ring*.5,0.,.9)*uGain;
-  alpha+=(hash(gl_FragCoord.xy+fract(uT))-.5)/120.*step(.002,alpha);
-  alpha=max(alpha,0.);
-  gl_FragColor=vec4(col*alpha,alpha);
+  col+=uA*exp(-pow((uv.y-HZ)*70.,2.))*.1;                 // светлая кромка горизонта
+  col*=mix(.7,1.,smoothstep(1.2,.3,distance(uv,vec2(.5,.55))));
+  col+=(hash(gl_FragCoord.xy+fract(uT))-.5)/255.;          // против полос на градиенте
+  gl_FragColor=vec4(col*uGain,1.);
 }`;
 
 /** Доля пути к цели за кадр — одинаковая плавность на 60 и на 144 Гц. */
@@ -57,7 +71,7 @@ interface Frame { t: number; ptr: number[]; power: number; a: number[]; b: numbe
 
 function createGlow(canvas: HTMLCanvasElement, force: boolean) {
   const gl = canvas.getContext('webgl', {
-    alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: 'low-power',
+    alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'low-power',
     failIfMajorPerformanceCaveat: !force,                 // на программном рендере — запасной фон
   });
   if (!gl) return null;
@@ -95,17 +109,15 @@ function createGlow(canvas: HTMLCanvasElement, force: boolean) {
       gl.uniform3f(u.uB, f.b[0], f.b[1], f.b[2]);
       gl.uniform1f(u.uGain, f.gain);
       gl.uniform4f(u.uPulse, f.pulse[0], f.pulse[1], f.pulse[2], f.pulse[3]);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     },
   };
 }
 
 /**
- * Живой фон — мягкое свечение воды. Течения медленно перетекают по горизонтали, сквозь них идут
- * плавные полосы волн. Свет сам бродит по экрану, при движении мыши идёт за курсором; клик — кольцо света.
- * Режим меняет цвет (синева → тёплый → красноватый) и скорость течения.
+ * Живой фон — стилизованное ночное море: горизонт в дымке, свет на воде мягкими мазками,
+ * зыбь катится к зрителю, под светом — дорожка. Свет сам бродит, при движении мыши идёт за курсором;
+ * клик пускает по воде кольцо. Режим меняет цвет (синева → тёплый → красноватый) и скорость моря.
  * Без видеокарты или при «уменьшить движение» — тихий запасной фон.
  */
 export default function Ambient({ mode, quiet = false }: { mode: Mode; quiet?: boolean; moon?: number }) {
@@ -115,7 +127,7 @@ export default function Ambient({ mode, quiet = false }: { mode: Mode; quiet?: b
   live.current = { mode, quiet };
 
   useEffect(() => {
-    if (mode === 'alarm' || mode === 'alertness') pulse.current = { x: 0.5, y: 0.5, t0: performance.now(), k: mode === 'alarm' ? 0.9 : 0.55 };
+    if (mode === 'alarm' || mode === 'alertness') pulse.current = { x: 0.5, y: 0.35, t0: performance.now(), k: mode === 'alarm' ? 1 : 0.6 };
   }, [mode]);
 
   useEffect(() => {
@@ -176,7 +188,7 @@ export default function Ambient({ mode, quiet = false }: { mode: Mode; quiet?: b
     const onMove = (e: PointerEvent) => { ptr.tx = e.clientX / innerWidth; ptr.ty = e.clientY / innerHeight; ptr.moved = performance.now(); };
     const onDown = (e: PointerEvent) => {
       if (live.current.quiet) return;
-      pulse.current = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, t0: performance.now(), k: 0.5 };
+      pulse.current = { x: e.clientX / innerWidth, y: 1 - e.clientY / innerHeight, t0: performance.now(), k: 0.7 };
     };
     resize();
     raf = requestAnimationFrame(frame);
