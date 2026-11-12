@@ -1,0 +1,53 @@
+# Проект iOS-приложения 404 (обёртка над дашбордом). Xcode-проект генерируется из этого файла:
+#   brew install xcodegen && cd ios && xcodegen generate
+# На GitHub это делает .github/workflows/ios.yml — он же собирает неподписанный .ipa.
+name: App404
+options:
+  bundleIdPrefix: dev.hak404
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SERVER_URL: ""            # адрес сервера по умолчанию; пусто — приложение спросит при первом запуске
+targets:
+  App404:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hak404.dashboard
+        PRODUCT_NAME: App404
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: "404"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ServerURL: $(SERVER_URL)
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true   # сервер может быть и по http в локальной сети
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Приложению нужен доступ к серверу 404 в вашей сети.

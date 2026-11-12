@@ -1,0 +1,4 @@
+# создаётся xcodegen из project.yml
+*.xcodeproj
+Config/
+build/

@@ -1,0 +1,59 @@
+name: iOS · неподписанный .ipa
+
+# Собирает приложение 404 (обёртка над дашбордом) на macOS-раннере и кладёт .ipa в «Artifacts» запуска.
+# Подписывает и ставит на iPhone iLoader / Sideloadly (нужен Apple ID): см. раздел «iPhone» в README.
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: Адрес сервера, вшиваемый в приложение (пусто — приложение спросит при первом запуске)
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml']
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      # приоритет: поле при ручном запуске → переменная репозитория SERVER_URL (Settings → Variables)
+      SERVER_URL: ${{ github.event.inputs.server_url || vars.SERVER_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: Генерация проекта
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Сборка (без подписи)
+        run: |
+          xcodebuild \
+            -project ios/App404.xcodeproj \
+            -scheme App404 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SERVER_URL="$SERVER_URL" \
+            clean build | tail -n 40
+
+      - name: Упаковка в .ipa
+        run: |
+          APP=$(find build/Build/Products -maxdepth 2 -name '*.app' | head -n 1)
+          test -n "$APP" || { echo "Сборка не создала .app"; exit 1; }
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry 404.ipa Payload
+          ls -lh 404.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 404-ios-ipa
+          path: 404.ipa
+          if-no-files-found: error
