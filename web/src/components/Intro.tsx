@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SeaSound } from '../introSound';
 import { useSoundOn } from '../sound';
 import Reeds from './Reeds';
-import { currentSky, type Sky } from '../theme';
+import { HZ, currentSky, type Sky } from '../theme';
 import { hex, palAt, type V3 } from '../skyPalette';
+import { createSea, frameFrom, introCover, seaClock, targets, type Frame, type Sea } from '../sea';
 
 /**
- * Интро: ночное море дельты, камера наводит резкость, знак падает, как поплавок, — смаз движения,
- * бульк, брызги штрихами, круги и пузыри; игла уходит под воду, щит покачивается и отражается;
- * буй подаёт сигнал, из размытия проявляется «404 · Браконьер не найден», сцена растворяется в дашборде.
+ * Интро: то же море, что на фоне сайта (один рисовальщик, sea.ts), только ракурс ниже и с бликом
+ * объектива от солнца или луны. Камера наводит резкость, знак падает, как поплавок, — смаз движения,
+ * бульк, по воде расходится волна, брызги штрихами, круги и пузыри; щит покачивается и отражается;
+ * буй подаёт сигнал, из размытия проявляется «404 · Браконьер не найден». В конце камера опускает
+ * взгляд к воде — горизонт встаёт туда, где он на фоне, и сцена растворяется в дашборде.
  * Стартует сам. Звук — если браузер разрешит; иначе по первому касанию (кнопка «Включить звук»).
+ * Без видеокарты — та же сцена в SVG.
  */
 
 const W = 1600, H = 900, HORIZON = 470, WATER = 610, CX = 800;
@@ -25,22 +29,43 @@ const mixV = (a: V3, b: V3, k: number) => a.map((v, i) => v + (b[i] - v) * k) as
 /** Светило не прячем за надписью «404»: в интро сдвигаем его за край названия (в фоне — точное место) */
 const clearOfTitle = (x: number, y: number) => (y < 360 && Math.abs(x - CX) < 290 ? CX + (x >= CX ? 1 : -1) * 290 : x);
 
-function buildPalette(sky: Sky) {
+/** Видимая по ширине часть кадра (на узком экране «slice» обрезает края) */
+function visibleX(vw: number, vh: number) {
+  const s = Math.max(vw / W, vh / H), ox = (vw - W * s) / 2;
+  return [Math.max(0, -ox / s), Math.min(W, (vw - ox) / s)];
+}
+/**
+ * Светило на небе интро: та же дуга, что на фоне (theme.toScreen), только неба в кадре больше.
+ * По ширине — в видимой части кадра, чтобы на телефоне солнце и луна не уходили за край.
+ */
+function introBody(x: number, y: number, vw = innerWidth, vh = innerHeight) {
+  const [x0, x1] = visibleX(vw, vh), m = (x1 - x0) * 0.0875;
+  const by = HORIZON - ((y - HZ) / 0.13) * (HORIZON - 120);   // ниже нуля — за горизонтом, скрыто водой
+  const bx = x0 + m + x * (x1 - x0 - 2 * m);
+  return { x: x1 - x0 > 900 ? clearOfTitle(bx, by) : bx, y: by };
+}
+/** Кадр интро (viewBox, обрезка «slice») → доли экрана для шейдера, y — снизу */
+function viewMap(vw: number, vh: number) {
+  const s = Math.max(vw / W, vh / H), ox = (vw - W * s) / 2, oy = (vh - H * s) / 2;
+  const toUv = (x: number, y: number) => [(ox + x * s) / vw, 1 - (oy + y * s) / vh];
+  return { toUv, hz: toUv(0, HORIZON)[1] };
+}
+
+function buildPalette(sky: Sky, moon: number) {
   const p = palAt(sky.sunAlt);
   const light = sky.ui >= 0.5;
   const useSun = sky.sun.visible >= sky.moon.visible && sky.sun.visible > 0.2;
   const b = useSun ? sky.sun : sky.moon;
   const seen = useSun ? sky.sun.visible : sky.moon.visible;
   const skyBands = [0, 1, 2, 3].map((i) => css(mixV(p.hz, p.top, i / 3)));
-  // та же дуга, что на фоне (theme.toScreen): ниже нуля светило уходит за горизонт и скрыто водой
-  const by = HORIZON - ((b.y - 0.8) / 0.13) * (HORIZON - 120);
+  const { x: bx, y: by } = introBody(b.x, b.y);
   const band = skyBands[Math.min(3, Math.floor(((HORIZON - by) / HORIZON) * 4))];
   return {
     light, skyBands, band,
     skyTop: css(p.top), skyMid: css(mixV(p.hz, p.top, 0.45)), skyHz: css(p.hz), seaFar: css(p.far), seaNear: css(p.near),
     seaBands: [0, 1, 2, 3].map((i) => css(mixV(p.far, p.near, i / 3))),
     line: css(p.line), island: css(p.isle), stars: p.stars, horizon: css(mixV(p.hz, [1, 1, 1], 0.35)),
-    body: seen > 0.05 ? { x: clearOfTitle(140 + b.x * (W - 280), by), y: by, sun: useSun, seen, illum: sky.moon.illum >= 0 ? sky.moon.illum : 0.75, waxing: sky.moon.waxing } : null,
+    body: seen > 0.05 ? { x: bx, y: by, sun: useSun, seen, illum: sky.moon.illum >= 0 ? sky.moon.illum : moon, waxing: sky.moon.waxing } : null,
     bodyC: useSun ? css(p.sun) : css(mixV(hex('#F2C79A'), hex('#EEF1F8'), Math.min(1, Math.max(0, sky.moon.alt / 14)))),
     primary: '#FFFFFF', accent: light ? '#5E6A57' : '#8E9C80', muted: light ? '#505968' : '#B4BAC4',
     vignette: 0.12 + 0.4 * (1 - sky.day),
@@ -107,10 +132,15 @@ function useScene() {
   }, []);
 }
 
-export default function Intro({ onDone }: { onDone: () => void }) {
+export default function Intro({ onDone, moon = 0.3 }: { onDone: () => void; moon?: number }) {
   const scene = useScene();
   const soundOn = useSoundOn();
-  const [C] = useState(() => buildPalette(currentSky()));   // небо на момент показа
+  const [C] = useState(() => buildPalette(currentSky(), moon));   // небо на момент показа
+  const moonRef = useRef(moon);
+  moonRef.current = moon;
+  const cvRef = useRef<HTMLCanvasElement>(null);
+  const sea = useRef<{ gfx: Sea; f: Frame } | null>(null);
+  const [gl, setGl] = useState<boolean | null>(null);
   const [t, setT] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
   const born = useRef(performance.now());
@@ -133,12 +163,55 @@ export default function Intro({ onDone }: { onDone: () => void }) {
     if (now() < T_OUT) born.current = performance.now() - T_OUT * 1000;
   };
 
+  // море — тем же рисовальщиком, что фон сайта; сам фон под заставкой пока не рисует
+  useLayoutEffect(() => {
+    introCover.on = true;
+    let gfx: Sea | null = null;
+    try { gfx = cvRef.current ? createSea(cvRef.current, new URLSearchParams(location.search).has('sea'), 0.6) : null; } catch { gfx = null; }
+    setGl(!!gfx);
+    if (!gfx) return () => { introCover.on = false; };
+    const g = gfx;
+    sea.current = { gfx: g, f: { ...frameFrom(targets('calm', moonRef.current), HZ), gain: 1 } };
+    const resize = () => g.resize(innerWidth, innerHeight);
+    resize();
+    window.addEventListener('resize', resize);
+    return () => { window.removeEventListener('resize', resize); g.dispose(); sea.current = null; introCover.on = false; };
+  }, []);
+
+  /** Кадр моря: ракурс интро; в конце взгляд опускается к воде — горизонт и светила встают как на фоне */
+  const drawSea = (tt: number) => {
+    const st = sea.current;
+    if (!st) return;
+    const f = st.f;
+    const v = viewMap(innerWidth, innerHeight);
+    const k = ease((tt - T_OUT) / OUT);
+    f.hz = v.hz + (HZ - v.hz) * k;
+    const tg = targets('calm', moonRef.current);
+    Object.assign(f, { pal: tg.pal, moonC: tg.moonC, dark: tg.dark, beacon: tg.beacon });
+    const place = (b: number[]) => {
+      const p = introBody(b[0], b[1]);
+      const [ux, uy] = v.toUv(p.x, p.y);
+      return [ux + (b[0] - ux) * k, uy + (b[1] - uy) * k, b[2], b[3]];
+    };
+    f.sun = place(tg.sun);
+    f.moon = place(tg.moon);
+    f.bodyK = 1.4 - 0.4 * k;                     // в интро светила крупнее — ближе к кадру
+    f.flare = 1 - k;                             // блик объектива — только в заставке
+    const tau = tt - T_HIT;
+    const [ix, iy] = v.toUv(CX, WATER);
+    f.pulse = tau > 0 && tau < 4.5 ? [ix, iy + (f.hz - v.hz), tau, 0.9] : [0, 0, 0, 0];   // волна от удара поплавка
+    f.t = freeze.current ?? seaClock();
+    st.gfx.draw(f);
+  };
+
   // анимация
   useEffect(() => {
     let raf = 0;
     const loop = () => {
       const tt = now();
       setT(tt);
+      drawSea(tt);
+      if (tt >= T_OUT) introCover.on = false;     // сцена растворяется — под ней уже живой фон
       if (tt >= T_OUT + OUT && freeze.current == null) finish();
       else raf = requestAnimationFrame(loop);
     };
@@ -188,7 +261,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
   // камера: наводка резкости в начале, растворение в конце
   const inK = easeOut(t / T_IN), outK = ease((t - T_OUT) / OUT);
-  const camBlur = 16 * (1 - inK) + 18 * outK;
+  const camBlur = 16 * (1 - inK) + 14 * outK;
   const camScale = 1.04 - 0.04 * inK + 0.05 * outK;
   const camOpacity = inK * (1 - outK);
 
@@ -198,12 +271,17 @@ export default function Intro({ onDone }: { onDone: () => void }) {
     </g>
   );
   const wordK = ease((t - T_WORD) / 1.0), tagK = ease((t - T_TAG) / 0.9);
+  // взгляд вниз в конце: всё, что стоит на воде, поднимается вместе с горизонтом
+  const lift = gl ? (HZ - viewMap(innerWidth, innerHeight).hz) * outK * innerHeight : 0;
+  const fb = C.body && C.body.y < HORIZON - 8 ? C.body : null;     // светило над горизонтом — есть блик
 
   return (
     <div role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
       style={{ background: `rgb(${C.fade} / ${1 - outK})` }}>
       <div className="absolute inset-0" style={{ filter: camBlur > 0.2 ? `blur(${camBlur}px)` : undefined, transform: `scale(${camScale})`, opacity: camOpacity }}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden>
+        <canvas ref={cvRef} className="absolute inset-0 h-full w-full" style={{ display: gl === false ? 'none' : undefined }} />
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden
+          style={{ transform: lift ? `translateY(${-lift}px)` : undefined }}>
           <defs>
             <linearGradient id="i-sky" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor={C.skyTop} /><stop offset="0.55" stopColor={C.skyMid} /><stop offset="1" stopColor={C.skyHz} />
@@ -223,6 +301,10 @@ export default function Intro({ onDone }: { onDone: () => void }) {
               <stop offset="0" stopColor={C.line} stopOpacity="0" /><stop offset="0.5" stopColor={C.line} stopOpacity="1" /><stop offset="1" stopColor={C.line} stopOpacity="0" />
             </linearGradient>
             <filter id="i-soft2" x="-10%" y="-60%" width="120%" height="220%"><feGaussianBlur stdDeviation="1.1" /></filter>
+            <radialGradient id="i-streak">
+              <stop offset="0" stopColor={C.bodyC} stopOpacity="0.55" /><stop offset="0.35" stopColor={C.bodyC} stopOpacity="0.14" /><stop offset="1" stopColor={C.bodyC} stopOpacity="0" />
+            </radialGradient>
+            <filter id="i-ghost" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" /></filter>
             <clipPath id="i-skyClip"><rect x="0" y="0" width={W} height={HORIZON} /></clipPath>
             {C.body && !C.body.sun && (
               <mask id="i-phase" maskUnits="userSpaceOnUse">
@@ -231,10 +313,6 @@ export default function Intro({ onDone }: { onDone: () => void }) {
               </mask>
             )}
             <filter id="i-disc" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6" /></filter>
-            <radialGradient id="i-vignette" cx="50%" cy="48%" r="75%">
-              <stop offset="0.55" stopColor="#000" stopOpacity="0" />
-              <stop offset="1" stopColor="#000" stopOpacity={C.vignette} />
-            </radialGradient>
             <linearGradient id="i-reflFade" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="#fff" stopOpacity="1" />
               <stop offset="1" stopColor="#fff" stopOpacity="0" />
@@ -253,53 +331,81 @@ export default function Intro({ onDone }: { onDone: () => void }) {
             <filter id="i-tag" x="-20%" y="-150%" width="140%" height="400%"><feGaussianBlur stdDeviation={8 * (1 - tagK)} /></filter>
           </defs>
 
-          {/* небо: мягкий градиент, звёзды-точки, солнце или луна с мягким ореолом */}
-          <rect width={W} height={HORIZON} fill="url(#i-sky)" />
-          {C.stars > 0.02 && scene.stars.map((s, i) => (
-            <circle key={i} cx={s.x} cy={s.y} r={s.s} fill="#F4F6FB" opacity={(0.25 + 0.55 * (0.5 + 0.5 * Math.sin(T * s.sp * 0.6 + s.ph))) * C.stars} />
-          ))}
-          {C.body && (
-            <g clipPath="url(#i-skyClip)" opacity={Math.min(1, C.body.seen * 1.2)}>
-              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 230 : 170} fill="url(#i-bodyGlow)" />
-              <g filter="url(#i-disc)">
-                {!C.body.sun && <circle cx={C.body.x} cy={C.body.y} r="29" fill={C.bodyC} opacity="0.07" />}
-                <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 34 : 29} fill={C.bodyC} mask={C.body.sun ? undefined : 'url(#i-phase)'} />
+          {/* без видеокарты — та же сцена в SVG: небо, светило, море, изобаты, дорожка, острова, буи, блик */}
+          {gl === false && (
+            <>
+            {/* небо: мягкий градиент, звёзды-точки, солнце или луна с мягким ореолом */}
+            <rect width={W} height={HORIZON} fill="url(#i-sky)" />
+            {C.stars > 0.02 && scene.stars.map((s, i) => (
+              <circle key={i} cx={s.x} cy={s.y} r={s.s} fill="#F4F6FB" opacity={(0.25 + 0.55 * (0.5 + 0.5 * Math.sin(T * s.sp * 0.6 + s.ph))) * C.stars} />
+            ))}
+            {C.body && (
+              <g clipPath="url(#i-skyClip)" opacity={Math.min(1, C.body.seen * 1.2)}>
+                <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 230 : 170} fill="url(#i-bodyGlow)" />
+                <g filter="url(#i-disc)">
+                  {!C.body.sun && <circle cx={C.body.x} cy={C.body.y} r="29" fill={C.bodyC} opacity="0.07" />}
+                  <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 34 : 29} fill={C.bodyC} mask={C.body.sun ? undefined : 'url(#i-phase)'} />
+                </g>
               </g>
-            </g>
-          )}
+            )}
 
-          {/* море: мягкий градиент, зыбь катится к зрителю, изобаты, переливающаяся дорожка под светилом */}
-          <rect y={HORIZON} width={W} height={H - HORIZON} fill="url(#i-sea)" />
-          {Array.from({ length: 10 }, (_, i) => {
-            const p = ((i / 10 + T * 0.03) % 1);
-            const k = p ** 1.9;
-            const h = 2 + 44 * k;
-            return <rect key={`sw${i}`} x="0" y={HORIZON + (H - HORIZON) * k - h / 2} width={W} height={h} fill="url(#i-swell)" opacity={0.06 * Math.sin(Math.PI * p)} />;
-          })}
-          {Array.from({ length: 13 }, (_, i) => {
-            const p = ((i / 13 + T * 0.012) % 1);
-            const k = p ** 1.7;
-            const y = HORIZON + 10 + (H - HORIZON - 10) * k;
-            const A = 2 + 9 * k, L = 140 + 260 * k, ph = T * 0.35 + i * 1.7;
-            let d = `M-40,${y + A * Math.sin(ph)}`;
-            for (let x = 0; x <= W + 40; x += 40) d += ` L${x},${(y + A * Math.sin((x / L) * Math.PI * 2 + ph)).toFixed(1)}`;
-            return <path key={`iso${i}`} d={d} fill="none" stroke={C.line} strokeWidth={0.8 + 1.2 * k} opacity={0.1 * Math.sin(Math.PI * p)} />;
-          })}
-          {C.body && (
-            <g filter="url(#i-soft2)">
-              {scene.glints.map((g, i) => {
-                const k = (g.y - HORIZON) / (H - HORIZON);
-                const len = 8 + k * 95 * (0.4 + g.j);
-                const x = C.body!.x + Math.sin(T * 0.7 + g.ph) * (4 + k * 40) - len / 2;
-                return <rect key={`gl${i}`} x={x} y={g.y} width={len} height={1.5 + k * 2.4} rx="1.5" fill={C.bodyC}
-                  opacity={(0.15 + 0.6 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.45) * (C.body!.sun ? 1 : 0.85) * Math.min(1, C.body!.seen * 1.2)} />;
+            {/* море: мягкий градиент, зыбь катится к зрителю, изобаты, переливающаяся дорожка под светилом */}
+            <rect y={HORIZON} width={W} height={H - HORIZON} fill="url(#i-sea)" />
+            {Array.from({ length: 10 }, (_, i) => {
+              const p = ((i / 10 + T * 0.03) % 1);
+              const k = p ** 1.9;
+              const h = 2 + 44 * k;
+              return <rect key={`sw${i}`} x="0" y={HORIZON + (H - HORIZON) * k - h / 2} width={W} height={h} fill="url(#i-swell)" opacity={0.06 * Math.sin(Math.PI * p)} />;
+            })}
+            {Array.from({ length: 13 }, (_, i) => {
+              const p = ((i / 13 + T * 0.012) % 1);
+              const k = p ** 1.7;
+              const y = HORIZON + 10 + (H - HORIZON - 10) * k;
+              const A = 2 + 9 * k, L = 140 + 260 * k, ph = T * 0.35 + i * 1.7;
+              let d = `M-40,${y + A * Math.sin(ph)}`;
+              for (let x = 0; x <= W + 40; x += 40) d += ` L${x},${(y + A * Math.sin((x / L) * Math.PI * 2 + ph)).toFixed(1)}`;
+              return <path key={`iso${i}`} d={d} fill="none" stroke={C.line} strokeWidth={0.8 + 1.2 * k} opacity={0.1 * Math.sin(Math.PI * p)} />;
+            })}
+            {C.body && (
+              <g filter="url(#i-soft2)">
+                {scene.glints.map((g, i) => {
+                  const k = (g.y - HORIZON) / (H - HORIZON);
+                  const len = 8 + k * 95 * (0.4 + g.j);
+                  const x = C.body!.x + Math.sin(T * 0.7 + g.ph) * (4 + k * 40) - len / 2;
+                  return <rect key={`gl${i}`} x={x} y={g.y} width={len} height={1.5 + k * 2.4} rx="1.5" fill={C.bodyC}
+                    opacity={(0.15 + 0.6 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.45) * (C.body!.sun ? 1 : 0.85) * Math.min(1, C.body!.seen * 1.2)} />;
+                })}
+              </g>
+            )}
+
+            {/* горизонт: светлая дымка и острова в лёгкой дымке */}
+            <rect y={HORIZON - 40} width={W} height="80" fill="url(#i-haze)" />
+            <g filter="url(#i-soft2)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} opacity="0.92" />)}</g>
+              {/* буи сети вдали с огоньками */}
+              {[[0.13, 10.5], [0.31, 7], [0.69, 12.5], [0.875, 6.2]].map(([bx, d], i) => {
+                const [x0, x1] = visibleX(innerWidth, innerHeight);
+                const k = 10 / d, y = HORIZON + (1 / d - 0.06) * H, x = x0 + bx * (x1 - x0);
+                const br = 0.22 + 0.78 * (0.5 + 0.5 * Math.sin(T * 0.7 + i * 2.4)) ** 3;
+                return (
+                  <g key={`bu${i}`}>
+                    <rect x={x - 0.7 * k} y={y - 7.5 * k} width={1.4 * k} height={7.5 * k} fill={C.island} opacity="0.85" />
+                    <ellipse cx={x} cy={y} rx={2 * k} ry={1.1 * k} fill={C.island} opacity="0.85" />
+                    <circle cx={x} cy={y - 8 * k} r={4 * k} fill="#D2E4BF" opacity={0.25 * br * (0.3 + 0.7 * C.stars)} filter="url(#i-ghost)" />
+                    <circle cx={x} cy={y - 8 * k} r={1.1 * k} fill="#D2E4BF" opacity={br * (0.3 + 0.7 * C.stars)} />
+                  </g>
+                );
               })}
-            </g>
+              {/* блик объектива: тонкий луч через светило и призраки по линии к центру кадра */}
+              {fb && (
+                <g opacity={Math.min(1, fb.seen * 1.2) * (fb.sun ? 1 : 0.5)}>
+                  <ellipse cx={fb.x} cy={fb.y} rx="640" ry="5" fill="url(#i-streak)" />
+                  {([[0.58, 26, C.bodyC, 0.1], [1.32, 64, '#A9D1B6', 0.06], [1.72, 17, '#B9C4FF', 0.1], [2.15, 110, C.bodyC, 0.035]] as const).map(([k, r, c, o], i) => (
+                    <circle key={`gh${i}`} cx={fb.x + (CX - fb.x) * k} cy={fb.y + (450 - fb.y) * k} r={r} fill={c} opacity={o} filter="url(#i-ghost)" />
+                  ))}
+                </g>
+              )}
+            </>
           )}
-
-          {/* горизонт: светлая дымка и острова в лёгкой дымке */}
-          <rect y={HORIZON - 40} width={W} height="80" fill="url(#i-haze)" />
-          <g filter="url(#i-soft2)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} opacity="0.92" />)}</g>
 
           {/* круги от падения и сигнал буя */}
           {tau > 0 && [0, 0.22, 0.44].map((d, k) => {
@@ -368,8 +474,9 @@ export default function Intro({ onDone }: { onDone: () => void }) {
               БРАКОНЬЕР НЕ НАЙДЕН
             </text>
           )}
-          <rect width={W} height={H} fill="url(#i-vignette)" />
         </svg>
+        {/* виньетка — вне сцены: при взгляде вниз сцена поднимается, а края кадра остаются */}
+        <div className="absolute inset-0" style={{ background: `radial-gradient(75% 75% at 50% 48%, rgb(0 0 0 / 0) 55%, rgb(0 0 0 / ${C.vignette * (gl ? 0.6 : 1)}) 100%)` }} />
 
         {/* камыш: средний план чуть мягче, передний — сильно размыт (глубина резкости) */}
         <Reeds side="left" seed={11} count={12} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ filter: 'blur(1.2px)', color: C.reedMid }} />

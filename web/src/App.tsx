@@ -132,7 +132,7 @@ export default function App() {
         <BottomNav route={route} go={navigate} badges={badges} />
       </div>
       {intro && (
-        <Intro onDone={() => {
+        <Intro moon={state?.forecast.moon_illumination ?? 0.3} onDone={() => {
           try { sessionStorage.setItem('404-intro', 'seen'); } catch { /* приватный режим */ }
           setIntro(false);
         }} />
