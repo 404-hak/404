@@ -119,9 +119,11 @@ export default function App() {
             <div className="-mt-8 flex flex-col items-center gap-3">
               {/* знак на воде: едва покачивается, под ним дрожит отражение */}
               <div className="flex flex-col items-center">
-                <img src="/brand/404-logo-cream.svg" alt="" className="bob h-14 w-auto opacity-90" />
+                <img src="/brand/404-logo-cream.svg" alt="" className="on-night bob h-14 w-auto opacity-90" />
+                <img src="/brand/404-logo-dark.svg" alt="" className="on-day bob h-14 w-auto opacity-90" />
                 <div className="mt-1 h-px w-24 bg-gradient-to-r from-transparent via-[#96B4CD]/50 to-transparent" />
-                <img src="/brand/404-logo-cream.svg" alt="" aria-hidden className="reflect h-14 w-auto" />
+                <img src="/brand/404-logo-cream.svg" alt="" aria-hidden className="on-night reflect h-14 w-auto" />
+                <img src="/brand/404-logo-dark.svg" alt="" aria-hidden className="on-day reflect h-14 w-auto" />
               </div>
               <div className="text-[13px] text-muted">Подключаюсь к буям…</div>
             </div>

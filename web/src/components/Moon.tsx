@@ -16,8 +16,8 @@ export default function Moon({ illumination, phase, size = 18 }: { illumination:
     : `M10 2 A${r} ${r} 0 0 ${outer} 10 18 A${rx.toFixed(2)} ${r} 0 0 ${inner} 10 2 Z`;
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden className="shrink-0">
-      <circle cx="10" cy="10" r={r} fill="rgba(226,232,240,.08)" stroke="rgba(226,232,240,.35)" strokeWidth="1" />
-      {d && <path d={d} fill="#E2E8F0" />}
+      <circle cx="10" cy="10" r={r} style={{ fill: 'rgb(var(--rgb-primary) / .08)', stroke: 'rgb(var(--rgb-primary) / .35)' }} strokeWidth="1" />
+      {d && <path d={d} style={{ fill: 'var(--c-primary)' }} />}
     </svg>
   );
 }

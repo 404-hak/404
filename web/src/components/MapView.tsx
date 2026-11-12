@@ -6,12 +6,19 @@ import type { Buoy, State } from '../types';
 import { km } from '../format';
 import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
+import { useTheme } from '../theme';
 
-const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', 
-  water: '#0A1628', coast: 'rgba(132,170,205,.32)', reeds: 'rgba(122,134,111,.16)' };
+/** Цвета схемы по теме: ночью вода темнее суши, днём — синее, вне района — затемнение или высветление */
+const PALETTE = {
+  night: { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', maskOpacity: 0.62,
+    water: '#0A1628', coast: 'rgba(132,170,205,.32)', reeds: 'rgba(122,134,111,.16)' },
+  day: { accent: '#5E6A57', warn: '#8F5406', alert: '#C02626', primary: '#0B1628', mask: '#F4F7FA', maskOpacity: 0.6,
+    water: '#B4CADC', coast: 'rgba(60,95,130,.4)', reeds: 'rgba(94,106,87,.24)' },
+};
+type Palette = (typeof PALETTE)['night'];
 
 /** Подложка дельты из OpenStreetMap: море, русла, протоки, плавни. Толщина проток растёт с масштабом. */
-const DELTA_STYLE = (kind: string, z: number): L.PathOptions => {
+const DELTA_STYLE = (kind: string, z: number, C: Palette): L.PathOptions => {
   const k = Math.max(0.6, Math.min(2.2, (z - 8.5) / 2));
   switch (kind) {
     case 'sea': return { stroke: true, color: C.coast, weight: 1, fillColor: C.water, fillOpacity: 1 };
@@ -22,13 +29,18 @@ const DELTA_STYLE = (kind: string, z: number): L.PathOptions => {
   }
 };
 
-function DeltaLayer() {
+function DeltaLayer({ c }: { c: Palette }) {
   const map = useMap();
+  const pal = useRef(c);
+  const ref = useRef<L.GeoJSON | null>(null);
+  pal.current = c;
+  // смена темы — перекрасить уже загруженную подложку
+  useEffect(() => { ref.current?.setStyle((f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom(), c)); }, [c, map]);
   useEffect(() => {
     let layer: L.GeoJSON | null = null;
     let alive = true;
     const renderer = L.canvas({ pane: 'land', padding: 0.4 });
-    const restyle = () => layer?.setStyle((f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom()));
+    const restyle = () => layer?.setStyle((f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom(), pal.current));
     fetch('/geo/delta-osm.geojson').then((r) => r.json()).then((fc: FeatureCollection) => {
       if (!alive) return;
       // порядок слоёв: плавни, море, водоёмы, затем линии рек поверх
@@ -37,8 +49,9 @@ function DeltaLayer() {
       layer = L.geoJSON(fc, {
         renderer, interactive: false,
         attribution: '© <a href="https://www.openstreetmap.org/copyright">участники OpenStreetMap</a>',
-        style: (f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom()),
+        style: (f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom(), pal.current),
       } as L.GeoJSONOptions).addTo(map);
+      ref.current = layer;
       layer.getPane('land')?.classList.add('fade-in');
     }).catch(() => { /* без подложки карта всё равно работает */ });
     map.on('zoomend', restyle);
@@ -146,6 +159,7 @@ function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
 /** Офлайн-схема дельты по OpenStreetMap — работает без интернета и без ключа. */
 export default function MapView({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
   const booting = useBooting();
+  const C = PALETTE[useTheme().theme];
   // Выбор не пересоздаёт значок: на живом элементе переключается класс, и буй плавно
   // увеличивается с кольцом (пересоздание мигало при загрузке и сбрасывало наведение).
   const markers = useRef<Record<string, L.Marker>>({});
@@ -170,10 +184,10 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
       <Bounded area={area} handle={handle} focus={active} booting={booting} />
       <ClickAway onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
-      <Pane name="land" style={{ zIndex: 350 }}><DeltaLayer /></Pane>
+      <Pane name="land" style={{ zIndex: 350 }}><DeltaLayer c={C} /></Pane>
 
       {/* всё за пределами района — приглушено */}
-      <Polygon positions={maskRings(area)} interactive={false} pathOptions={{ stroke: false, fillColor: C.mask, fillOpacity: 0.62 }} />
+      <Polygon positions={maskRings(area)} interactive={false} pathOptions={{ stroke: false, fillColor: C.mask, fillOpacity: C.maskOpacity }} />
 
       {state.sectors.map((s) => (
         <Rectangle key={s.n} bounds={[[s.south, s.west], [s.north, s.east]]} interactive={false}

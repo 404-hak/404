@@ -33,7 +33,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
       <div className="mt-3 flex gap-2">
         {a.status === 'new' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-[#F25555]">Начать перехват</button>
+            className="btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-alert/90">Начать перехват</button>
         )}
         {a.status !== 'resolved' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved')}

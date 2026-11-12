@@ -1,4 +1,4 @@
-/* 404 · дизайн-токены · версия 2.0 */
+/* 404 · дизайн-токены · версия 2.1 · темы «Ночь» (по умолчанию) и «День» */
 :root {
   /* бренд */
   --c-bg: #0B1628;        /* Ночной · фон интерфейса */
@@ -17,6 +17,11 @@
   --c-text-2: #A2A9B4;    /* Primary 70 % — мелкие подписи на тёмном */
   --c-line: rgba(226, 232, 240, 0.15);
 
+  /* каналы RGB — для прозрачности в Tailwind (bg-surface/70) */
+  --rgb-bg: 11 22 40; --rgb-surface: 20 34 54; --rgb-primary: 226 232 240;
+  --rgb-grey: 100 116 139; --rgb-accent: 122 134 111; --rgb-warn: 245 158 11; --rgb-alert: 239 68 68;
+  --rgb-veil: 255 255 255;   /* светлая вуаль подсветок */
+
   /* шрифты */
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -24,6 +29,19 @@
   /* форма */
   --r-card: 18px;
   --r-chip: 6px;
+  color-scheme: dark;
+}
+
+/* тема «День»: инверсная версия бренда, статусные цвета затемнены для светлого фона */
+:root[data-theme="day"] {
+  --c-bg: #E2E8F0; --c-surface: #F4F7FA; --c-primary: #0B1628; --c-grey: #64748B; --c-accent: #5E6A57;
+  --c-ok: #5E6A57; --c-warn: #8F5406; --c-alert: #C02626;
+  --c-text-2: #505968;
+  --c-line: rgba(11, 22, 40, 0.14);
+  --rgb-bg: 226 232 240; --rgb-surface: 244 247 250; --rgb-primary: 11 22 40;
+  --rgb-grey: 100 116 139; --rgb-accent: 94 106 87; --rgb-warn: 143 84 6; --rgb-alert: 192 38 38;
+  --rgb-veil: 11 22 40;      /* тёмная вуаль подсветок */
+  color-scheme: light;
 }
 
 body {

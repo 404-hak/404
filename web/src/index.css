@@ -13,14 +13,43 @@
   --spring-soft: linear(0, .006, .025 2.8%, .101 6.1%, .539 18.9%, .721 25.3%, .849 31.5%, .937 38.1%, .968 41.8%, .991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.9%, 1);
 }
 
+/* ---------- темы: «Ночь» (по умолчанию) и «День»; бренд-цвета — в brand/tokens/tokens.css ---------- */
+:root {
+  --c-card: rgba(18, 31, 50, .78);
+  --c-spot: rgba(226, 232, 240, .07);
+  --c-shadow: rgba(0, 0, 0, .35);
+  --c-vignette: rgba(5, 11, 22, .5);
+  --c-land: #17293F;
+  --c-bar: #8E9C80; --c-bar-strong: #C9D4BC; --rgb-heat: 169 183 156;
+  --c-sea-1: #0B1628; --c-sea-2: #0A1526; --c-sea-3: #08111F;
+  --c-reed: #030812; --reed-opacity: .95;
+  --c-mist: rgba(226, 232, 240, .07);
+}
+:root[data-theme="day"] {
+  --c-card: rgba(247, 249, 251, .8);
+  --c-spot: rgba(255, 255, 255, .7);
+  --c-shadow: rgba(11, 22, 40, .14);
+  --c-vignette: rgba(11, 22, 40, .12);
+  --c-land: #E3E9E1;
+  --c-bar: #A9B49C; --c-bar-strong: #5E6A57; --rgb-heat: 94 106 87;
+  --c-sea-1: #CFDCE8; --c-sea-2: #B9CDDD; --c-sea-3: #9FB9CF;
+  --c-reed: #24301F; --reed-opacity: .5;
+  --c-mist: rgba(255, 255, 255, .45);
+}
+/* смена темы — плавно перетекают фон, текст и рамки */
+.theme-anim, .theme-anim *, .theme-anim *::before, .theme-anim *::after {
+  transition: background-color .7s ease, border-color .7s ease, color .7s ease, fill .7s ease, stroke .7s ease, box-shadow .7s ease !important; }
+/* логотип: светлый ночью, тёмный днём */
+:root[data-theme="day"] .on-night, :root:not([data-theme="day"]) .on-day { display: none !important; }
+
 html, body, #root { height: 100%; }
 body { -webkit-font-smoothing: antialiased; }
 
 .app { transition: --mode 1.2s var(--ease-inout);
   background: radial-gradient(1100px 520px at 0% 0%, color-mix(in srgb, var(--mode) 9%, transparent), transparent 70%), var(--c-bg); }
-.mode-calm { --mode: #7A866F; }
-.mode-alertness { --mode: #F59E0B; }
-.mode-alarm, .mode-intercept { --mode: #EF4444; }
+.mode-calm { --mode: var(--c-accent); }
+.mode-alertness { --mode: var(--c-warn); }
+.mode-alarm, .mode-intercept { --mode: var(--c-alert); }
 
 .cap { font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--c-text-2); }
 
@@ -56,9 +85,9 @@ body { -webkit-font-smoothing: antialiased; }
 @property --my { syntax: '<length-percentage>'; inherits: false; initial-value: 50%; }
 .card { position: relative; transition: border-color .35s, box-shadow .35s, transform .45s var(--ease-out); }
 .card::after { --mx: inherit; --my: inherit; content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .45s;
-  background: radial-gradient(380px circle at var(--mx) var(--my), rgba(226, 232, 240, .07), transparent 68%); }
+  background: radial-gradient(380px circle at var(--mx) var(--my), var(--c-spot), transparent 68%); }
 .card.is-lit::after { opacity: 1; }
-.card.is-lit { border-color: rgba(226, 232, 240, .22); }
+.card.is-lit { border-color: rgb(var(--rgb-primary) / .22); }
 
 /* главные кнопки: блик при наведении, волна от нажатия */
 .btn-shine { position: relative; overflow: hidden; isolation: isolate; }
@@ -106,7 +135,7 @@ body { -webkit-font-smoothing: antialiased; }
 @keyframes ripple { 50% { transform: scaleY(-.55) skewX(3deg) translateX(1px); opacity: .1; } }
 
 /* ---------- разделы ---------- */
-.card { border-radius: 18px; border: 1px solid var(--c-line); background: rgba(18, 31, 50, .78); padding: 20px;
+.card { border-radius: 18px; border: 1px solid var(--c-line); background: var(--c-card); padding: 20px;
   -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); }
 .page-in { animation: page-in .7s var(--ease-out) both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(12px); filter: blur(3px); } 60% { filter: blur(0); } }
@@ -119,15 +148,15 @@ body { -webkit-font-smoothing: antialiased; }
 
 /* ---------- карта: общее ---------- */
 .leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
-.map-scheme.leaflet-container { background: #17293F; } /* суша на схеме; вода темнее */
-.leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }
+.map-scheme.leaflet-container { background: var(--c-land); } /* суша на схеме; вода темнее (днём — синее) */
+.leaflet-control-attribution { background: rgb(var(--rgb-bg) / .78) !important; color: var(--c-text-2) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--c-text-2) !important; }
-.leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+.leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: 0 8px 24px var(--c-shadow);
   font-size: 12px; padding: 4px 8px; }
 .leaflet-tooltip.tip::before { display: none; }
 
 /* глубина и тонкая рамка в цвете режима по краю карты */
-.map-vignette { background: radial-gradient(ellipse at center, transparent 58%, rgba(5, 11, 22, .5) 100%); }
+.map-vignette { background: radial-gradient(ellipse at center, transparent 58%, var(--c-vignette) 100%); }
 .map-glow::after { content: ''; position: absolute; inset: 0; pointer-events: none;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mode) 40%, transparent), inset 0 0 70px color-mix(in srgb, var(--mode) 10%, transparent);
   opacity: .7; transition: opacity .8s; }
@@ -145,9 +174,9 @@ body { -webkit-font-smoothing: antialiased; }
 
 /* номер сектора — в верхнем левом углу ячейки */
 .sector-label { display: inline-flex; align-items: center; height: 20px; min-width: 20px; padding: 0 6px; box-sizing: border-box; justify-content: center;
-  border-radius: 5px; background: rgba(11, 22, 40, .78); border: 1px solid rgba(226, 232, 240, .18);
+  border-radius: 5px; background: rgb(var(--rgb-bg) / .8); border: 1px solid rgb(var(--rgb-primary) / .18);
   font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--c-text-2); white-space: nowrap; transition: color .4s, border-color .4s; }
-.sector-label.hot { color: var(--c-warn); border-color: rgba(245, 158, 11, .7); background: rgba(11, 22, 40, .88); }
+.sector-label.hot { color: var(--c-warn); border-color: rgb(var(--rgb-warn) / .7); background: rgb(var(--rgb-bg) / .9); }
 .sector-label span { margin-left: 4px; font-family: var(--font-sans); font-size: 11px; }
 
 /* координаты по краю района, как на морской карте */
@@ -173,7 +202,7 @@ body { -webkit-font-smoothing: antialiased; }
 .buoy::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent); }
 .buoy--warn { border-color: var(--c-warn); }
 .buoy--warn::after { background: var(--c-warn); }
-.buoy--offline { border-color: var(--c-grey); background: rgba(11, 22, 40, .7); }
+.buoy--offline { border-color: var(--c-grey); background: rgb(var(--rgb-bg) / .7); }
 .buoy--offline::after { background: var(--c-grey); }
 .buoy--alert { width: 24px; height: 24px; border-width: 4px; border-color: var(--c-alert); }
 .buoy--alert::after { width: 7px; height: 7px; background: var(--c-alert); }
@@ -196,19 +225,19 @@ body { -webkit-font-smoothing: antialiased; }
 
 /* вы — катер инспектора: светлая точка с ровным кольцом */
 .inspector { position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); border: 2px solid var(--c-bg);
-  box-sizing: border-box; box-shadow: 0 0 0 4px rgba(226, 232, 240, .2); }
+  box-sizing: border-box; box-shadow: 0 0 0 4px rgb(var(--rgb-primary) / .2); }
 .inspector .map-label { left: calc(100% + 8px); font-weight: 600; }
 
 .route-label { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; background: var(--c-surface); color: var(--c-text);
   border: 1px solid var(--c-line); border-radius: 6px; padding: 3px 7px; font-size: 12px; font-family: var(--font-mono);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .35); animation: fade-in .8s ease both; }
+  box-shadow: 0 6px 18px var(--c-shadow); animation: fade-in .8s ease both; }
 
 /* ---------- спутник (Яндекс): снимок приглушён, чтобы швы мозаики не спорили со слоем 404 ---------- */
 .map-photo [class*="-ground-pane"] { filter: saturate(.55) brightness(.78) contrast(1.06); }
-.map-photo .map-label, .map-photo .tick { text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); }
+.map-photo .map-label, .map-photo .tick { color: #E2E8F0; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); } /* снимок тёмный в любой теме */
 
 /* ---------- фон-вода: запасной вариант без видеокарты — тихое свечение глубины ---------- */
-.sea { z-index: 0; overflow: hidden; background: linear-gradient(180deg, #0B1628 0%, #0A1526 55%, #08111F 100%); }
+.sea { z-index: 0; overflow: hidden; background: linear-gradient(180deg, var(--c-sea-1) 0%, var(--c-sea-2) 55%, var(--c-sea-3) 100%); }
 .sea::before, .sea::after { content: ''; position: absolute; border-radius: 50%; will-change: transform; }
 .sea::before { width: 90vmax; height: 50vmax; left: 20vmax; top: 30vh;
   background: radial-gradient(closest-side, rgba(70, 110, 150, .14), transparent 72%); animation: drift-a 26s ease-in-out infinite alternate; }
@@ -227,11 +256,11 @@ body { -webkit-font-smoothing: antialiased; }
 /* камыш дельты: интро и фон */
 .reed { transform-box: fill-box; transform-origin: 50% 100%; animation: reed-sway 6s ease-in-out infinite alternate; }
 @keyframes reed-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.8deg); } }
-.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: #030812; opacity: .95; filter: blur(2px); }
+.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); filter: blur(2px); transition: color 1s, opacity 1s; }
 .sea .reeds-left { left: -1vw; }
 .sea .reeds-right { right: -1vw; }
 .sea .mist { position: absolute; left: -15%; right: -15%; top: calc(20% - 6vh); height: 12vh; pointer-events: none;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(226, 232, 240, .07), rgba(226, 232, 240, 0) 70%); filter: blur(10px);
+  background: radial-gradient(50% 50% at 50% 50%, var(--c-mist), transparent 70%); filter: blur(10px);
   animation: mist 46s ease-in-out infinite alternate; }
 @keyframes mist { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
 @media (prefers-reduced-motion: reduce) { .reed, .sea .mist { animation: none; } }

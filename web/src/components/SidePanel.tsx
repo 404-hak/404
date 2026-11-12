@@ -9,9 +9,9 @@ import Moon from './Moon';
 type Handle = MutableRefObject<MapHandle | null>;
 
 const LEVEL = {
-  low: { word: 'низкий', text: 'text-accent', tip: '#7A866F' },
-  elevated: { word: 'повышенный', text: 'text-warn', tip: '#F59E0B' },
-  high: { word: 'высокий', text: 'text-warn', tip: '#F59E0B' },
+  low: { word: 'низкий', text: 'text-accent', tip: 'var(--c-accent)' },
+  elevated: { word: 'повышенный', text: 'text-warn', tip: 'var(--c-warn)' },
+  high: { word: 'высокий', text: 'text-warn', tip: 'var(--c-warn)' },
 } as const;
 
 
@@ -36,7 +36,7 @@ const Wind = () => (
 /** Шкала риска: от шалфея к янтарю и коралловому, пороги 40 % и 70 %, кончик светится. */
 function RiskBar({ value, tip }: { value: number; tip: string }) {
   const v = Math.max(0, Math.min(100, value));
-  const grad = 'linear-gradient(90deg, #7A866F 0%, #A39A5E 30%, #F59E0B 62%, #EF4444 100%)';
+  const grad = 'linear-gradient(90deg, var(--c-accent) 0%, color-mix(in srgb, var(--c-accent), var(--c-warn)) 30%, var(--c-warn) 62%, var(--c-alert) 100%)';
   return (
     <div>
       <div className="relative h-1.5 rounded-full">
@@ -118,7 +118,7 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
       <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
         {!intercept && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-[#F25555]">
+            className="btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-alert/90">
             Начать перехват
           </button>
         )}

@@ -1,9 +1,14 @@
 import { useEffect, useRef } from 'react';
+import { currentTheme } from '../theme';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 
 const COLOR: Record<Mode, [number, number, number]> = {
   calm: [140, 160, 128], alertness: [245, 158, 11], alarm: [239, 68, 68], intercept: [239, 68, 68],
+};
+/** Днём волна темнее — на светлой шапке */
+const COLOR_DAY: Record<Mode, [number, number, number]> = {
+  calm: [94, 106, 87], alertness: [143, 84, 6], alarm: [192, 38, 38], intercept: [192, 38, 38],
 };
 /** Громкость шума воды и сила «мотора» (ритмичные пачки) по режиму. */
 const LEVEL: Record<Mode, { noise: number; motor: number }> = {
@@ -65,7 +70,8 @@ export default function Hydrophone({ mode }: { mode: Mode | null }) {
         while (acc >= COL) { buf[head] = next(); head = (head + 1) % buf.length; acc -= COL; }
       }
       const m = modeRef.current;
-      for (let k = 0; k < 3; k++) cur.col[k] += (COLOR[m][k] - cur.col[k]) * 0.05;
+      const pal = currentTheme() === 'day' ? COLOR_DAY : COLOR;
+      for (let k = 0; k < 3; k++) cur.col[k] += (pal[m][k] - cur.col[k]) * 0.05;
       const [r, gg, b] = cur.col.map(Math.round);
       g.clearRect(0, 0, w, h);
       const fade = g.createLinearGradient(0, 0, w, 0);

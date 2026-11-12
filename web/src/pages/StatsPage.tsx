@@ -57,7 +57,7 @@ export default function StatsPage({ state }: { state: State }) {
                   key: n.date, label: day(n.date).short, value: n.events, strong: n.risk >= 0.7,
                   tip: <><b>{day(n.date).wd}, {day(n.date).d} {day(n.date).m}</b><br />{n.events ? Object.entries(n.by_kind).map(([k, v]) => `${KIND_TITLE[k].toLowerCase()} ${v}`).join(', ') : 'тихо'}</>,
                 }))} />
-              <p className="mt-3 text-[12px] text-muted"><span className="mr-1.5 inline-block h-2 w-3 rounded-[2px] bg-[#C9D4BC] align-middle" />светлые столбики — ночи с высоким риском</p>
+              <p className="mt-3 text-[12px] text-muted"><span className="mr-1.5 inline-block h-2 w-3 rounded-[2px] bg-[var(--c-bar-strong)] align-middle" />выделенные столбики — ночи с высоким риском</p>
             </div>
           </Card>
 

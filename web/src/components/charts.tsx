@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode } from 'react';
 /** Подсказка над отметкой графика. */
 function Tip({ x, children }: { x: number; children: ReactNode }) {
   return (
-    <div className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[8px] border border-line bg-bg/95 px-2.5 py-1.5 text-[12px] leading-4 shadow-[0_8px_24px_rgba(0,0,0,.4)]"
+    <div className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[8px] border border-line bg-bg/95 px-2.5 py-1.5 text-[12px] leading-4 shadow-[0_8px_24px_var(--c-shadow)]"
       style={{ left: `${Math.min(92, Math.max(8, x))}%` }}>
       {children}
     </div>
@@ -32,7 +32,7 @@ export function Bars({ data, height = 140, every = 1, label }: { data: Bar[]; he
           <button key={d.key} type="button" tabIndex={0} aria-label={`${d.label}: ${d.value}`}
             onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} onBlur={() => setHover(null)}
             className="group relative flex h-full flex-1 items-end outline-none">
-            <span className={`bar-grow block w-full rounded-t-[4px] transition-colors ${d.strong ? 'bg-[#C9D4BC]' : 'bg-[#8E9C80]'} ${hover === i ? '!bg-primary' : ''}`}
+            <span className={`bar-grow block w-full rounded-t-[4px] transition-colors ${d.strong ? 'bg-[var(--c-bar-strong)]' : 'bg-[var(--c-bar)]'} ${hover === i ? '!bg-primary' : ''}`}
               style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value ? 3 : 0, animationDelay: `${i * 18}ms` }} />
           </button>
         ))}
@@ -72,16 +72,16 @@ export function AreaLine({ data, height = 120, every = 1, label, refLines = [] }
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
           <defs>
             <linearGradient id="area-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor="#E2E8F0" stopOpacity=".22" /><stop offset="1" stopColor="#E2E8F0" stopOpacity="0" />
+              <stop offset="0" style={{ stopColor: 'var(--c-primary)', stopOpacity: 0.22 }} /><stop offset="1" style={{ stopColor: 'var(--c-primary)', stopOpacity: 0 }} />
             </linearGradient>
           </defs>
-          {[0, 0.5, 1].map((t) => <line key={t} x1="0" x2={W} y1={y(t)} y2={y(t)} stroke="rgba(226,232,240,.07)" vectorEffect="non-scaling-stroke" />)}
+          {[0, 0.5, 1].map((t) => <line key={t} x1="0" x2={W} y1={y(t)} y2={y(t)} style={{ stroke: 'rgb(var(--rgb-primary) / .08)' }} vectorEffect="non-scaling-stroke" />)}
           {refLines.map((r) => (
-            <line key={r.at} x1="0" x2={W} y1={y(r.at)} y2={y(r.at)} stroke="rgba(245,158,11,.45)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+            <line key={r.at} x1="0" x2={W} y1={y(r.at)} y2={y(r.at)} style={{ stroke: 'rgb(var(--rgb-warn) / .5)' }} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
           ))}
           <path d={area} fill="url(#area-fill)" className="fade-in" />
-          <path d={line} fill="none" stroke="#E2E8F0" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" pathLength={1} className="line-draw" />
-          {hover != null && <line x1={x(hover)} x2={x(hover)} y1="0" y2={H} stroke="rgba(226,232,240,.35)" vectorEffect="non-scaling-stroke" />}
+          <path d={line} fill="none" style={{ stroke: 'var(--c-primary)' }} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" pathLength={1} className="line-draw" />
+          {hover != null && <line x1={x(hover)} x2={x(hover)} y1="0" y2={H} style={{ stroke: 'rgb(var(--rgb-primary) / .35)' }} vectorEffect="non-scaling-stroke" />}
         </svg>
         {refLines.map((r) => (
           <span key={r.at} className="pointer-events-none absolute right-0 -translate-y-full pb-0.5 text-[10px] text-warn" style={{ top: `${(1 - r.at) * 100}%` }}>{r.text}</span>
@@ -117,7 +117,7 @@ export function HBars({ data }: { data: { key: string; label: ReactNode; value: 
         <li key={d.key}>
           <div className="mb-1 flex items-center justify-between text-[13px]"><span>{d.label}</span><span className="font-mono text-[12px] text-muted">{d.value}</span></div>
           <div className="h-2 rounded-full bg-white/[.06]">
-            <div className="bar-grow-x h-full rounded-full bg-[#8E9C80]" style={{ width: `${(d.value / max) * 100}%`, animationDelay: `${i * 60}ms` }} />
+            <div className="bar-grow-x h-full rounded-full bg-[var(--c-bar)]" style={{ width: `${(d.value / max) * 100}%`, animationDelay: `${i * 60}ms` }} />
           </div>
         </li>
       ))}
@@ -135,7 +135,7 @@ export function HeatGrid({ counts, hot, onPick }: { counts: Record<string, numbe
         return (
           <button key={n} type="button" onClick={() => onPick?.(n)} title={`Сектор ${n}: ${v} событий`}
             className="group relative aspect-[4/3] p-2.5 text-left transition-transform hover:z-10 hover:scale-[1.04]"
-            style={{ background: `rgba(169,183,156,${(0.05 + k * 0.55).toFixed(3)})` }}>
+            style={{ background: `rgb(var(--rgb-heat) / ${(0.05 + k * 0.55).toFixed(3)})` }}>
             <span className={`font-mono text-[11px] ${k > 0.55 ? 'text-bg' : 'text-muted'}`}>{n}</span>
             <span className={`absolute bottom-2 right-2.5 font-mono text-[18px] font-medium ${k > 0.55 ? 'text-bg' : 'text-primary'}`}>{v}</span>
             {hot.includes(n) && <span className="absolute right-2 top-2 rounded-[4px] border border-warn/70 bg-bg/80 px-1 text-[9px] font-semibold uppercase tracking-[.06em] text-warn">риск</span>}

@@ -34,7 +34,7 @@ export default function ForecastPage() {
       {!nights ? <Loading /> : !nights.length ? <p className="text-muted">Прогноз недоступен.</p> : (
         <>
           {worst && (
-            <section className="card enter mb-4 flex flex-wrap items-center gap-5 !border-warn/40" style={{ background: 'linear-gradient(120deg, rgba(245,158,11,.12), transparent 60%), rgba(20,34,54,.7)' }}>
+            <section className="card enter mb-4 flex flex-wrap items-center gap-5 !border-warn/40" style={{ background: 'linear-gradient(120deg, rgb(var(--rgb-warn) / .12), transparent 60%), var(--c-card)' }}>
               <Moon illumination={worst.moon_illumination} phase={worst.moon_phase} size={56} />
               <div className="min-w-0 flex-1">
                 <div className="cap !text-warn">Самая опасная ночь</div>
@@ -81,7 +81,7 @@ export default function ForecastPage() {
                 {FACTORS.map((f) => (
                   <li key={f.title}>
                     <div className="flex items-baseline justify-between text-[13px]"><span className="font-medium">{f.title}</span><span className="font-mono text-[12px] text-muted">до +{f.max}</span></div>
-                    <div className="mt-1 h-1.5 rounded-full bg-white/[.06]"><div className="bar-grow-x h-full rounded-full bg-[#8E9C80]" style={{ width: `${(f.max / 35) * 100}%` }} /></div>
+                    <div className="mt-1 h-1.5 rounded-full bg-white/[.06]"><div className="bar-grow-x h-full rounded-full bg-[var(--c-bar)]" style={{ width: `${(f.max / 35) * 100}%` }} /></div>
                     <p className="mt-1 text-[12px] leading-4 text-muted">{f.text}</p>
                   </li>
                 ))}

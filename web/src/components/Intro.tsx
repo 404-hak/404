@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SeaSound } from '../introSound';
 import { useSoundOn } from '../sound';
 import Reeds from './Reeds';
+import { currentTheme } from '../theme';
 
 /**
  * Интро: ночное море дельты, камера наводит резкость, знак падает, как поплавок, — смаз движения,
@@ -17,7 +18,19 @@ const SETTLED = WATER - 0.8 * MH;         // в покое над водой щ�
 const START = -MH - 60, IMPACT = WATER - MH;
 const T_IN = 1.1, T_DROP = 0.7, FALL = 0.8, T_HIT = T_DROP + FALL;
 const T_PING = 2.8, T_WORD = 3.2, T_TAG = 3.8, T_OUT = 5.8, OUT = 0.9;
-const C = { primary: '#E2E8F0', accent: '#7A866F', muted: '#A2A9B4', moon: '#E8EDF4' };
+/** Ночь — луна и звёзды; день — солнце, голубая вода, тёмный знак (инверсная версия бренда) */
+const NIGHT = {
+  primary: '#E2E8F0', accent: '#7A866F', muted: '#A2A9B4', moon: '#E8EDF4', ink: '#E2E8F0',
+  sky: ['#060D1A', '#0B1628', '#1C3050'], sea: ['#1C3050', '#0F1E36', '#050C17'], island: '#0A1424',
+  glow: 0.4, glint: 1, stars: true, vignette: 0.55, reedMid: '#07101F', reedNear: '#02060D', fade: '7, 15, 29',
+  mark: '/brand/404-logo-cream.svg', word: '/brand/404-wordmark-cream.svg', crescent: true,
+};
+const DAY = {
+  primary: '#FFFFFF', accent: '#5E6A57', muted: '#505968', moon: '#FFF8E6', ink: '#0B1628',
+  sky: ['#5D86B4', '#93B5D4', '#DDE8F1'], sea: ['#CADBE8', '#86A8C4', '#2D5070'], island: '#6B8173',
+  glow: 0.75, glint: 1.35, stars: false, vignette: 0.22, reedMid: '#4A5A42', reedNear: '#25311F', fade: '226, 232, 240',
+  mark: '/brand/404-logo-dark.svg', word: '/brand/404-wordmark-dark.svg', crescent: false,
+};
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const ease = (x: number) => { const t = clamp01(x); return t * t * (3 - 2 * t); };
@@ -78,6 +91,7 @@ function useScene() {
 export default function Intro({ onDone }: { onDone: () => void }) {
   const scene = useScene();
   const soundOn = useSoundOn();
+  const [C] = useState(() => (currentTheme() === 'day' ? DAY : NIGHT));   // тема на момент показа
   const [t, setT] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
   const born = useRef(performance.now());
@@ -161,29 +175,29 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
   const markG = (
     <g transform={`rotate(${tilt} ${CX} ${WATER}) translate(${CX - MW / 2} ${top})`}>
-      <image href="/brand/404-logo-cream.svg" width={MW} height={MH} />
+      <image href={C.mark} width={MW} height={MH} />
     </g>
   );
   const wordK = ease((t - T_WORD) / 1.0), tagK = ease((t - T_TAG) / 0.9);
 
   return (
     <div role="dialog" aria-label="Заставка 404" className="fixed inset-0 z-[3000] overflow-hidden"
-      style={{ background: `rgba(7, 15, 29, ${1 - outK})` }}>
+      style={{ background: `rgba(${C.fade}, ${1 - outK})` }}>
       <div className="absolute inset-0" style={{ filter: camBlur > 0.2 ? `blur(${camBlur}px)` : undefined, transform: `scale(${camScale})`, opacity: camOpacity }}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden>
           <defs>
             <linearGradient id="i-sky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#060D1A" />
-              <stop offset="0.7" stopColor="#0B1628" />
-              <stop offset="1" stopColor="#1C3050" />
+              <stop offset="0" stopColor={C.sky[0]} />
+              <stop offset="0.7" stopColor={C.sky[1]} />
+              <stop offset="1" stopColor={C.sky[2]} />
             </linearGradient>
             <linearGradient id="i-sea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#1C3050" />
-              <stop offset="0.2" stopColor="#0F1E36" />
-              <stop offset="1" stopColor="#050C17" />
+              <stop offset="0" stopColor={C.sea[0]} />
+              <stop offset="0.2" stopColor={C.sea[1]} />
+              <stop offset="1" stopColor={C.sea[2]} />
             </linearGradient>
             <radialGradient id="i-moonGlow">
-              <stop offset="0" stopColor={C.moon} stopOpacity="0.4" />
+              <stop offset="0" stopColor={C.moon} stopOpacity={C.glow} />
               <stop offset="0.35" stopColor={C.moon} stopOpacity="0.1" />
               <stop offset="1" stopColor={C.moon} stopOpacity="0" />
             </radialGradient>
@@ -203,7 +217,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
             </linearGradient>
             <radialGradient id="i-vignette" cx="50%" cy="48%" r="75%">
               <stop offset="0.55" stopColor="#000" stopOpacity="0" />
-              <stop offset="1" stopColor="#000" stopOpacity="0.55" />
+              <stop offset="1" stopColor="#000" stopOpacity={C.vignette} />
             </radialGradient>
             <linearGradient id="i-reflFade" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="#fff" stopOpacity="1" />
@@ -227,13 +241,13 @@ export default function Intro({ onDone }: { onDone: () => void }) {
 
           {/* небо: звёзды, луна с ореолом */}
           <rect width={W} height={HORIZON} fill="url(#i-sky)" />
-          {scene.stars.map((s, i) => (
+          {C.stars && scene.stars.map((s, i) => (
             <circle key={i} cx={s.x} cy={s.y} r={s.s} fill={C.primary} opacity={0.2 + 0.55 * (0.5 + 0.5 * Math.sin(T * s.sp + s.ph))} />
           ))}
           <circle cx={MOON.x} cy={MOON.y} r="190" fill="url(#i-moonGlow)" />
           <g filter="url(#i-glow)">
             <circle cx={MOON.x} cy={MOON.y} r="30" fill={C.moon} />
-            <circle cx={MOON.x + 12} cy={MOON.y - 7} r="27" fill="#0B1628" opacity="0.16" />
+            {C.crescent && <circle cx={MOON.x + 12} cy={MOON.y - 7} r="27" fill="#0B1628" opacity="0.16" />}
           </g>
 
           {/* море: градиент, зыбь катится к зрителю, мазки света, лунная дорожка */}
@@ -258,13 +272,13 @@ export default function Intro({ onDone }: { onDone: () => void }) {
               const len = 6 + k * 95 * (0.4 + g.j);
               const x = MOON.x + Math.sin(T * 0.7 + g.ph) * (4 + k * 44) - len / 2;
               return <rect key={i} x={x} y={g.y} width={len} height={1 + k * 2.2} rx="1" fill={C.moon}
-                opacity={(0.12 + 0.5 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.5)} />;
+                opacity={Math.min(1, (0.12 + 0.5 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.5) * C.glint)} />;
             })}
           </g>
 
           {/* горизонт: дымка, дальние острова (не в фокусе), туман над водой */}
           <rect y={HORIZON - 45} width={W} height="100" fill="url(#i-haze)" />
-          <g filter="url(#i-far)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill="#0A1424" opacity="0.92" />)}</g>
+          <g filter="url(#i-far)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} opacity="0.92" />)}</g>
           <ellipse cx={500 + Math.sin(T * 0.12) * 120} cy={HORIZON + 22} rx="520" ry="34" fill="url(#i-mist)" />
           <ellipse cx={1150 - Math.sin(T * 0.1 + 1) * 140} cy={HORIZON + 48} rx="460" ry="30" fill="url(#i-mist)" />
 
@@ -273,7 +287,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
             const a = tau - d;
             if (a <= 0) return null;
             const rx = MW * 0.5 + 250 * a;
-            return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.primary} strokeWidth="1.5" opacity={Math.max(0, 0.55 * (1 - a / 2.4))} />;
+            return <ellipse key={`r${k}`} cx={CX} cy={WATER} rx={rx} ry={rx * 0.16} fill="none" stroke={C.ink} strokeWidth="1.5" opacity={Math.max(0, 0.55 * (1 - a / 2.4))} />;
           })}
           <g filter="url(#i-glow)">
             {[0, 0.45].map((d, k) => {
@@ -300,7 +314,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
           )}
           {tau > 0 && (
             <path d={`M${CX - MW * 0.7},${WATER + 3 * Math.sin(T * 1.3)} Q${CX},${WATER + 5} ${CX + MW * 0.7},${WATER + 3 * Math.sin(T * 1.3 + 1)}`}
-              fill="none" stroke={C.primary} strokeWidth="1.5" opacity={0.35} filter="url(#i-soft)" />
+              fill="none" stroke={C.ink} strokeWidth="1.5" opacity={0.35} filter="url(#i-soft)" />
           )}
 
           {/* пена, брызги штрихами по траектории, пузыри */}
@@ -326,7 +340,7 @@ export default function Intro({ onDone }: { onDone: () => void }) {
           {/* название проявляется из размытия */}
           {t >= T_WORD && (
             <g opacity={wordK} transform={`translate(0 ${(1 - wordK) * 16})`} filter={wordK < 0.99 ? 'url(#i-word)' : undefined}>
-              <image href="/brand/404-wordmark-cream.svg" x={CX - 190} y={168} width={380} height={380 / 4.09} />
+              <image href={C.word} x={CX - 190} y={168} width={380} height={380 / 4.09} />
             </g>
           )}
           {t >= T_TAG && (
@@ -339,10 +353,10 @@ export default function Intro({ onDone }: { onDone: () => void }) {
         </svg>
 
         {/* камыш: средний план чуть мягче, передний — сильно размыт (глубина резкости) */}
-        <Reeds side="left" seed={11} count={12} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto text-[#07101F]" style={{ filter: 'blur(1.2px)' }} />
-        <Reeds side="right" seed={23} count={12} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto text-[#07101F]" style={{ filter: 'blur(1.2px)' }} />
-        <Reeds side="left" seed={5} count={14} className="absolute bottom-[-8vh] left-[-6vw] h-[82vh] w-auto text-[#02060D]" style={{ filter: 'blur(7px)' }} />
-        <Reeds side="right" seed={17} count={14} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto text-[#02060D]" style={{ filter: 'blur(7px)' }} />
+        <Reeds side="left" seed={11} count={12} className="absolute bottom-[-2vh] left-[4vw] h-[46vh] w-auto" style={{ filter: 'blur(1.2px)', color: C.reedMid }} />
+        <Reeds side="right" seed={23} count={12} className="absolute bottom-[-2vh] right-[4vw] h-[42vh] w-auto" style={{ filter: 'blur(1.2px)', color: C.reedMid }} />
+        <Reeds side="left" seed={5} count={14} className="absolute bottom-[-8vh] left-[-6vw] h-[82vh] w-auto" style={{ filter: 'blur(7px)', color: C.reedNear }} />
+        <Reeds side="right" seed={17} count={14} className="absolute bottom-[-8vh] right-[-6vw] h-[78vh] w-auto" style={{ filter: 'blur(7px)', color: C.reedNear }} />
       </div>
 
       <div className="absolute right-4 top-4 flex items-center gap-2" style={{ opacity: 1 - outK }}>

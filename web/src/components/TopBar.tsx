@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Mode } from '../types';
 import { fmtTime } from '../format';
-import { SoundToggle } from './Nav';
+import { SoundToggle, ThemeSwitch } from './Nav';
 import Hydrophone from './Hydrophone';
 import { showIntro } from '../introBus';
 
@@ -27,7 +27,11 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
           <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро" className="shrink-0 md:hidden">
-            <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto" />
+            {/* на узком экране — только знак (брендбук: малые носители), шире — знак с надписью */}
+            <img src="/brand/404-logo-cream.svg" alt="404" className="on-night h-7 w-auto sm:hidden" />
+            <img src="/brand/404-logo-dark.svg" alt="404" className="on-day h-7 w-auto sm:hidden" />
+            <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="on-night hidden h-[18px] w-auto sm:block" />
+            <img src="/brand/404-lockup-horizontal-dark.svg" alt="404" className="on-day hidden h-[18px] w-auto sm:block" />
           </button>
           <div className="hidden min-w-0 md:block">
             <div className="truncate text-[15px] font-semibold leading-5">{title}</div>
@@ -54,7 +58,9 @@ export default function TopBar({ mode, online, title, subtitle, onDemo, onReset 
             <button type="button" className={`${btn} btn-shine ink-host bg-white/[.06] text-primary hover:bg-white/10`} onClick={onDemo}>▶ Запустить</button>
             <button type="button" className={`${btn} text-muted hover:text-primary`} onClick={onReset}>Сбросить</button>
           </div>
-          <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>
+          <button type="button" className="grid h-8 w-8 place-items-center rounded-full border border-line text-[11px] text-primary sm:hidden"
+            onClick={onDemo} title="Запустить демо" aria-label="Запустить демо">▶</button>
+          <ThemeSwitch compact />
           <SoundToggle />
 
           <div className="hidden items-center gap-2 rounded-[8px] border border-line px-2 py-1 lg:flex" title="Гидрофон: что сейчас слышат буи">

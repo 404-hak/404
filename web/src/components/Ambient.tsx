@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 import Reeds from './Reeds';
+import { currentTheme } from '../theme';
 
 /** Цвета свечения по режиму: светлое течение и глубина. Спокойно — морская синева. */
 const COLORS: Record<Mode, { a: [number, number, number]; b: [number, number, number] }> = {
@@ -9,6 +10,13 @@ const COLORS: Record<Mode, { a: [number, number, number]; b: [number, number, nu
   alertness: { a: [0.62, 0.55, 0.4], b: [0.16, 0.2, 0.3] },
   alarm: { a: [0.7, 0.36, 0.36], b: [0.2, 0.13, 0.22] },
   intercept: { a: [0.66, 0.4, 0.38], b: [0.18, 0.14, 0.24] },
+};
+/** Днём: тёплый солнечный свет и голубая вода; режим так же сдвигает оттенок */
+const DAY_COLORS: Record<Mode, { a: [number, number, number]; b: [number, number, number] }> = {
+  calm: { a: [1.0, 0.96, 0.86], b: [0.42, 0.62, 0.78] },
+  alertness: { a: [1.0, 0.88, 0.62], b: [0.5, 0.6, 0.7] },
+  alarm: { a: [1.0, 0.72, 0.68], b: [0.56, 0.56, 0.66] },
+  intercept: { a: [1.0, 0.75, 0.7], b: [0.54, 0.57, 0.67] },
 };
 const SPEED: Record<Mode, number> = { calm: 1, alertness: 1.2, alarm: 1.55, intercept: 1.4 };
 /** Луна над горизонтом справа (доли экрана, y — снизу); фаза — из прогноза */
@@ -20,7 +28,7 @@ const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 // под источником света — дорожка из размытых мазков. Течения — как в фоне 404-upk.
 const FRAGMENT = `precision highp float;
 uniform vec2 uRes;uniform float uT;uniform vec2 uPtr;uniform float uPower;
-uniform vec3 uA;uniform vec3 uB;uniform float uGain;uniform vec4 uPulse;uniform vec3 uMoon;
+uniform vec3 uA;uniform vec3 uB;uniform float uGain;uniform vec4 uPulse;uniform vec3 uMoon;uniform float uDay;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
@@ -34,24 +42,24 @@ void main(){
   float below=HZ-uv.y;
   vec3 deep=uB*.55;
   vec3 haze=uB*1.05+uA*.09;
-  vec3 moonC=vec3(.86,.9,.97);
-  float shine=.45+.55*uMoon.z;                          // сколько света даёт луна в эту ночь
-  // небо: от глубины к светлой дымке у горизонта
-  vec3 col=mix(haze,deep*.9,smoothstep(HZ,1.,uv.y));
+  vec3 moonC=mix(vec3(.86,.9,.97),vec3(1.,.97,.88),uDay);   // ночью луна, днём солнце
+  float shine=mix(.45+.55*uMoon.z,1.25,uDay);               // сколько света на воде
+  // небо: от глубины (днём — от синевы) к светлой дымке у горизонта
+  vec3 col=mix(haze,mix(deep*.9,vec3(.42,.6,.8),uDay),smoothstep(HZ,1.,uv.y));
   float above=uv.y-HZ;
   if(above>0.){
     // звёзды: редкие, мерцают, у горизонта тонут в дымке; при яркой луне их меньше
     vec2 sp=vec2(uv.x*asp,uv.y)*150.;vec2 cell=floor(sp);float h=hash(cell);
     vec2 off=vec2(hash(cell+3.1),hash(cell+7.7))-.5;
     float st=step(.955,h)*smoothstep(.24,0.,length(fract(sp)-.5-off*.55));
-    col+=moonC*st*(.45+.55*sin(uT*(.7+h*2.4)+h*60.))*.9*smoothstep(0.,.07,above)*(1.-.4*uMoon.z);
+    col+=moonC*st*(.45+.55*sin(uT*(.7+h*2.4)+h*60.))*.9*smoothstep(0.,.07,above)*(1.-.4*uMoon.z)*(1.-uDay);
     // луна: пепельный диск, освещённая часть по фазе, ореол
     vec2 d=(uv-uMoon.xy)*vec2(asp,1.);float R=.024,r=length(d);
     float disc=smoothstep(R,R-.003,r);
-    float shade=smoothstep(R,R-.003,length(d+vec2(2.*R*uMoon.z,0.)));
-    col=mix(col,col*.55+moonC*.1,disc*.6);
+    float shade=smoothstep(R,R-.003,length(d+vec2(2.*R*uMoon.z,0.)))*(1.-uDay);   // у солнца нет фазы
+    col=mix(col,col*.55+moonC*.1,disc*.6*(1.-uDay));
     col=mix(col,moonC,disc*(1.-shade)*.95);
-    col+=moonC*exp(-r*r/(.002+.012*uMoon.z))*.2*shine;
+    col+=moonC*exp(-r*r/mix(.002+.012*uMoon.z,.03,uDay))*mix(.2*shine,.55,uDay);
   }
   if(below>0.){
     vec2 w=plane(uv,asp);
@@ -95,9 +103,10 @@ void main(){
   float isle=smoothstep(.42,.6,noise(vec2(hx*2.2,4.1)));
   float ih=(.003+.011*fbm(vec2(hx*22.,1.7)))*isle;
   float a2=uv.y-HZ;
-  col=mix(col,deep*.72,(1.-smoothstep(ih-.0015,ih,a2))*step(-.0004,a2)*isle*.9);
-  col=mix(col,deep*.8,(1.-smoothstep(ih*.8-.0015,ih*.8,-a2))*step(0.,-a2)*isle*.35);
-  col*=mix(.7,1.,smoothstep(1.2,.3,distance(uv,vec2(.5,.55))));
+  vec3 isleC=mix(deep*.72,vec3(.36,.43,.39),uDay);           // днём острова серо-зелёные
+  col=mix(col,isleC,(1.-smoothstep(ih-.0015,ih,a2))*step(-.0004,a2)*isle*.9);
+  col=mix(col,isleC*1.05,(1.-smoothstep(ih*.8-.0015,ih*.8,-a2))*step(0.,-a2)*isle*.35);
+  col*=mix(mix(.7,.9,uDay),1.,smoothstep(1.2,.3,distance(uv,vec2(.5,.55))));
   col+=(hash(gl_FragCoord.xy+fract(uT))-.5)/255.;          // против полос на градиенте
   gl_FragColor=vec4(col*uGain,1.);
 }`;
@@ -105,7 +114,7 @@ void main(){
 /** Доля пути к цели за кадр — одинаковая плавность на 60 и на 144 Гц. */
 const follow = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
-interface Frame { t: number; ptr: number[]; power: number; a: number[]; b: number[]; gain: number; pulse: number[]; moon: number }
+interface Frame { t: number; ptr: number[]; power: number; a: number[]; b: number[]; gain: number; pulse: number[]; moon: number; day: number }
 
 function createGlow(canvas: HTMLCanvasElement, force: boolean) {
   const gl = canvas.getContext('webgl', {
@@ -129,7 +138,7 @@ function createGlow(canvas: HTMLCanvasElement, force: boolean) {
   const loc = gl.getAttribLocation(prog, 'p');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(['uRes', 'uT', 'uPtr', 'uPower', 'uA', 'uB', 'uGain', 'uPulse', 'uMoon'].map((n) => [n, gl.getUniformLocation(prog, n)]));
+  const u = Object.fromEntries(['uRes', 'uT', 'uPtr', 'uPower', 'uA', 'uB', 'uGain', 'uPulse', 'uMoon', 'uDay'].map((n) => [n, gl.getUniformLocation(prog, n)]));
   let scale = 0.5;   // свечение мягкое: половины разрешения хватает
   return {
     resize(w: number, h: number) {
@@ -148,6 +157,7 @@ function createGlow(canvas: HTMLCanvasElement, force: boolean) {
       gl.uniform1f(u.uGain, f.gain);
       gl.uniform4f(u.uPulse, f.pulse[0], f.pulse[1], f.pulse[2], f.pulse[3]);
       gl.uniform3f(u.uMoon, MOON.x, MOON.y, f.moon);
+      gl.uniform1f(u.uDay, f.day);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     },
   };
@@ -183,8 +193,8 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
 
     let w = 0, h = 0, raf = 0, prev = 0, slow = 0, quietAt = 0;
     const startAt = performance.now();
-    const c0 = COLORS[live.current.mode];
-    const f: Frame & { speed: number } = { t: 0, ptr: [MOON.x, 0.5], power: 0.55, a: [...c0.a], b: [...c0.b], gain: 0, pulse: [0, 0, 0, 0], speed: 1, moon: live.current.moon };
+    const c0 = currentTheme() === 'day' ? DAY_COLORS[live.current.mode] : COLORS[live.current.mode];
+    const f: Frame & { speed: number } = { t: 0, ptr: [MOON.x, 0.5], power: 0.55, a: [...c0.a], b: [...c0.b], gain: 0, pulse: [0, 0, 0, 0], speed: 1, moon: live.current.moon, day: currentTheme() === 'day' ? 1 : 0 };
     const ptr = { tx: 0.5, ty: 0.5, moved: -1e9 };
 
     const resize = () => { w = innerWidth; h = innerHeight; gfx.resize(w, h); };
@@ -199,10 +209,13 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
 
       f.speed += (SPEED[m] - f.speed) * follow(0.6, dt);
       f.t += dt * f.speed;
-      const c = COLORS[m];
+      // тема: день и ночь перетекают друг в друга за пару секунд
+      f.day += ((currentTheme() === 'day' ? 1 : 0) - f.day) * follow(1.4, dt);
+      const cn = COLORS[m], cd = DAY_COLORS[m];
       for (let k = 0; k < 3; k++) {
-        f.a[k] += (c.a[k] - f.a[k]) * follow(1.1, dt);
-        f.b[k] += (c.b[k] - f.b[k]) * follow(1.1, dt);
+        const ta = cn.a[k] + (cd.a[k] - cn.a[k]) * f.day, tb = cn.b[k] + (cd.b[k] - cn.b[k]) * f.day;
+        f.a[k] += (ta - f.a[k]) * follow(1.1, dt);
+        f.b[k] += (tb - f.b[k]) * follow(1.1, dt);
       }
       // свет: при движении мыши идёт за курсором, в покое сам медленно бродит по экрану
       const moving = now - ptr.moved < 2200;

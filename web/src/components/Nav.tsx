@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { showIntro } from '../introBus';
 import type { Route } from '../route';
 import { setSound, useSoundOn } from '../sound';
+import { useTheme, type ThemePref } from '../theme';
 
 const I = ({ children }: { children: ReactNode }) => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -22,6 +23,47 @@ export const NAV: { group: string; items: { id: Route; label: string; short: str
   { group: 'Аналитика', items: [{ id: 'stats', label: 'Статистика', short: 'Анализ' }, { id: 'forecast', label: 'Прогноз ночей', short: 'Прогноз' }] },
   { group: 'Сеть', items: [{ id: 'buoys', label: 'Буи', short: 'Буи' }, { id: 'evidence', label: 'Доказательства', short: 'Улики' }] },
 ];
+
+const THEME_ICON: Record<ThemePref, ReactNode> = {
+  night: <I><path d="M15.5 12.4A6.5 6.5 0 0 1 7.6 3.5a6.5 6.5 0 1 0 7.9 8.9z" /></I>,
+  day: <I><circle cx="10" cy="10" r="3.4" /><path d="M10 2.5v1.8M10 15.7v1.8M2.5 10h1.8M15.7 10h1.8M4.7 4.7l1.3 1.3M14 14l1.3 1.3M4.7 15.3 6 14M14 6l1.3-1.3" /></I>,
+  auto: <I><circle cx="10" cy="10" r="6.5" /><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" stroke="none" /></I>,
+};
+const THEME_LABEL: Record<ThemePref, string> = { night: 'Ночь', day: 'День', auto: 'Авто' };
+const NEXT: Record<ThemePref, ThemePref> = { auto: 'night', night: 'day', day: 'auto' };
+
+function themeHint(pref: ThemePref, theme: string, rise: string, set: string) {
+  if (pref === 'auto') return `Авто по МСК: день с ${rise} до ${set}, сейчас — ${theme === 'day' ? 'день' : 'ночь'}`;
+  return `Тема: ${THEME_LABEL[pref].toLowerCase()}`;
+}
+
+/** Тема: «Ночь», «День», «Авто» (по солнцу над дельтой, время — МСК). Широко — три кнопки, узко — одна по кругу. */
+export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
+  const { pref, theme, setPref, rise, set } = useTheme();
+  const hint = themeHint(pref, theme, rise, set);
+  const cycle = (
+    <button type="button" onClick={() => setPref(NEXT[pref])} title={`${hint}. Нажмите — ${THEME_LABEL[NEXT[pref]].toLowerCase()}`}
+      aria-label={`Тема: ${THEME_LABEL[pref]}`}
+      className={`h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary ${compact ? 'grid md:hidden' : 'mx-auto grid xl:hidden'}`}>
+      {THEME_ICON[pref]}
+    </button>
+  );
+  if (compact) return cycle;
+  return (
+    <>
+      {cycle}
+      <div role="radiogroup" aria-label="Тема" title={hint} className="hidden grid-cols-3 gap-1 rounded-[10px] border border-line bg-white/[.03] p-1 xl:grid">
+        {(['night', 'day', 'auto'] as ThemePref[]).map((p) => (
+          <button key={p} type="button" role="radio" aria-checked={pref === p} onClick={() => setPref(p)}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium ${pref === p ? 'bg-white/10 text-primary' : 'text-muted hover:text-primary'}`}>
+            <span className="scale-[.8]">{THEME_ICON[p]}</span>{THEME_LABEL[p]}
+          </button>
+        ))}
+      </div>
+      {pref === 'auto' && <div className="mt-1.5 hidden px-1 font-mono text-[10px] text-muted xl:block">день {rise}–{set} МСК</div>}
+    </>
+  );
+}
 
 const SoundIcon = ({ on }: { on: boolean }) => (
   <I>
@@ -45,8 +87,10 @@ export function Sidebar({ route, go, badges }: Props) {
     <nav aria-label="Разделы" className="relative z-20 hidden w-[68px] shrink-0 flex-col border-r border-line bg-surface/70 backdrop-blur md:flex xl:w-[232px]">
       <div className="flex h-14 items-center px-5">
         <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро">
-          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="hidden h-[18px] xl:block" />
-          <img src="/brand/404-logo-cream.svg" alt="404" className="-ml-0.5 h-7 xl:hidden" />
+          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="on-night hidden h-[18px] xl:block" />
+          <img src="/brand/404-lockup-horizontal-dark.svg" alt="404" className="on-day hidden h-[18px] xl:block" />
+          <img src="/brand/404-logo-cream.svg" alt="404" className="on-night -ml-0.5 h-7 xl:hidden" />
+          <img src="/brand/404-logo-dark.svg" alt="404" className="on-day -ml-0.5 h-7 xl:hidden" />
         </button>
       </div>
       <div className="relative flex-1 px-3 pt-3">
@@ -72,6 +116,7 @@ export function Sidebar({ route, go, badges }: Props) {
         ))}
       </div>
       <div className="border-t border-line p-3">
+        <div className="mb-2"><ThemeSwitch /></div>
         <button type="button" onClick={() => setSound(!sound)} aria-pressed={sound} title={sound ? 'Выключить звук' : 'Включить звук'}
           className="flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-[13px] text-muted hover:bg-white/5 hover:text-primary">
           <SoundIcon on={sound} /><span className="hidden xl:block">{sound ? 'Звук включён' : 'Звук выключен'}</span>

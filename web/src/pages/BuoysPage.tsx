@@ -47,8 +47,8 @@ export default function BuoysPage({ state, toBuoy }: { state: State; toBuoy: (id
             </div>
             <dl className="mt-4 grid grid-cols-3 gap-2 text-[11px]">
               {[
-                ['батарея', `${b.battery} %`, b.battery / 100, b.battery < 30 ? 'bg-warn' : 'bg-[#8E9C80]'],
-                ['здоровье', pct(b.health), b.health, 'bg-[#8E9C80]'],
+                ['батарея', `${b.battery} %`, b.battery / 100, b.battery < 30 ? 'bg-warn' : 'bg-[var(--c-bar)]'],
+                ['здоровье', pct(b.health), b.health, 'bg-[var(--c-bar)]'],
                 ['услышал', String(heard(b.id)), Math.min(1, heard(b.id) / 10), 'bg-primary/70'],
               ].map(([k, v, f, c]) => (
                 <div key={k as string}>
