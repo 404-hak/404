@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Mode } from '../types';
 import { fmtHM } from '../format';
+import type { Basemap } from '../App';
 
 const MODE: Record<Mode, { label: string; color: string }> = {
   calm: { label: 'Спокойно', color: 'text-accent' },
@@ -11,11 +12,11 @@ const MODE: Record<Mode, { label: string; color: string }> = {
 const DOT: Record<Mode, string> = { calm: 'bg-accent', alertness: 'bg-warn', alarm: 'bg-alert', intercept: 'bg-alert' };
 
 interface Props {
-  mode: Mode | null; online: boolean; basemap: 'scheme' | 'tiles';
-  onBasemap: (b: 'scheme' | 'tiles') => void; onDemo: () => void; onReset: () => void;
+  mode: Mode | null; online: boolean; basemap: Basemap; yandexAvailable: boolean;
+  onBasemap: (b: Basemap) => void; onDemo: () => void; onReset: () => void;
 }
 
-export default function TopBar({ mode, online, basemap, onBasemap, onDemo, onReset }: Props) {
+export default function TopBar({ mode, online, basemap, yandexAvailable, onBasemap, onDemo, onReset }: Props) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);
@@ -31,8 +32,11 @@ export default function TopBar({ mode, online, basemap, onBasemap, onDemo, onRes
       </div>
       <div className="flex items-center gap-2 sm:gap-3">
         <div className="hidden items-center gap-1 sm:flex" role="group" aria-label="Подложка карты">
-          <button className={`${btn} ${basemap === 'scheme' ? '!text-primary border-grey' : ''}`} onClick={() => onBasemap('scheme')}>Схема</button>
-          <button className={`${btn} ${basemap === 'tiles' ? '!text-primary border-grey' : ''}`} onClick={() => onBasemap('tiles')} title="Нужен интернет">Карта</button>
+          <button className={`${btn} ${basemap === 'yandex' ? '!text-primary border-grey' : ''} disabled:cursor-not-allowed disabled:opacity-40`}
+            onClick={() => onBasemap('yandex')} disabled={!yandexAvailable}
+            title={yandexAvailable ? 'Яндекс Карты: спутник и гибрид' : 'Нужен ключ VITE_YANDEX_MAPS_KEY и интернет'}>Яндекс</button>
+          <button className={`${btn} ${basemap === 'scheme' ? '!text-primary border-grey' : ''}`} onClick={() => onBasemap('scheme')}
+            title="Офлайн-схема, работает без интернета">Схема</button>
         </div>
         <button className={btn} onClick={onDemo}>Демо</button>
         <button className={`${btn} hidden sm:inline-block`} onClick={onReset}>Сброс</button>

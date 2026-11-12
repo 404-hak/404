@@ -8,12 +8,12 @@ const Chip = ({ label, value, tone = '', wide = false }: { label: string; value:
   </div>
 );
 
-export default function StatChips({ state }: { state: State }) {
+export default function StatChips({ state, raised = false }: { state: State; raised?: boolean }) {
   const f = state.forecast;
   const health = state.buoys.reduce((s, b) => s + b.health, 0) / state.buoys.length;
   const online = state.buoys.filter((b) => b.status !== 'offline').length;
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex flex-wrap gap-2">
+    <div className={`pointer-events-none absolute left-3 z-[1100] flex flex-wrap gap-2 ${raised ? 'bottom-12' : 'bottom-3'}`}>
       <Chip label="РИСК НОЧИ" value={pct(f.risk)} tone={f.level === 'low' ? 'text-accent' : 'text-warn'} />
       <Chip label="ВОДА" value={`${f.water_temp > 0 ? '+' : ''}${Math.round(f.water_temp)}°`} />
       <Chip label="ЛУНА" value={pct(f.moon_illumination)} />

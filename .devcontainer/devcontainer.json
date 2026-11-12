@@ -1,0 +1,23 @@
+{
+  "name": "404 · Браконьер не найден",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postAttachCommand": { "dashboard": "bash scripts/start.sh" },
+  "forwardPorts": [8000, 5173],
+  "portsAttributes": {
+    "8000": { "label": "404 · дашборд", "onAutoForward": "openBrowser" },
+    "5173": { "label": "Vite · разработка", "onAutoForward": "notify" }
+  },
+  "secrets": {
+    "VITE_YANDEX_MAPS_KEY": {
+      "description": "Ключ JavaScript API Яндекс Карт. Без него дашборд работает на офлайн-схеме.",
+      "documentationUrl": "https://developer.tech.yandex.ru/services/"
+    }
+  },
+  "customizations": {
+    "vscode": { "extensions": ["ms-python.python", "bradlc.vscode-tailwindcss"] }
+  }
+}

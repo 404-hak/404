@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import L from 'leaflet';
 import type { GeoJsonObject } from 'geojson';
-import { AttributionControl, GeoJSON, MapContainer, Marker, Polyline, Rectangle, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { AttributionControl, GeoJSON, MapContainer, Marker, Polyline, Rectangle, Tooltip, useMap } from 'react-leaflet';
 import type { Alert, State } from '../types';
 import { km } from '../format';
 
@@ -26,7 +26,8 @@ function FlyToAlert({ alert }: { alert: Alert | undefined }) {
   return null;
 }
 
-export default function MapView({ state, basemap }: { state: State; basemap: 'scheme' | 'tiles' }) {
+/** Офлайн-схема дельты (Natural Earth) — работает без интернета и без ключа. */
+export default function MapView({ state }: { state: State }) {
   const [delta, setDelta] = useState<GeoJsonObject | null>(null);
   useEffect(() => {
     fetch('/geo/volga-delta.geojson').then((r) => r.json()).then(setDelta).catch(() => setDelta(null));
@@ -41,11 +42,7 @@ export default function MapView({ state, basemap }: { state: State; basemap: 'sc
     <MapContainer center={state.center} zoom={10} minZoom={8} maxZoom={14} zoomControl attributionControl={false}
       className="h-full w-full" preferCanvas={false}>
       <AttributionControl prefix='<a href="https://leafletjs.com">Leaflet</a>' />
-      {basemap === 'tiles' && (
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png" subdomains="abcd" opacity={0.85}
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' />
-      )}
-      {basemap === 'scheme' && delta && (
+      {delta && (
         <GeoJSON data={delta} attribution='<a href="https://www.naturalearthdata.com">Natural Earth</a>'
           style={{ color: '#1E3050', weight: 1, fillColor: C.surface, fillOpacity: 1 }} />
       )}

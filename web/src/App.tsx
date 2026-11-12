@@ -3,7 +3,11 @@ import TopBar from './components/TopBar';
 import MapView from './components/MapView';
 import SidePanel from './components/SidePanel';
 import StatChips from './components/StatChips';
+import YandexMapView from './components/YandexMapView';
 import { api, useLiveState } from './live';
+import { hasYandexKey } from './yandex';
+
+export type Basemap = 'yandex' | 'scheme';
 
 /** Короткий двухтоновый сигнал тревоги (браузер разрешит звук после первого клика). */
 function beep() {
@@ -24,7 +28,9 @@ function beep() {
 
 export default function App() {
   const { state, online } = useLiveState();
-  const [basemap, setBasemap] = useState<'scheme' | 'tiles'>('scheme');
+  const [basemap, setBasemap] = useState<Basemap>(hasYandexKey ? 'yandex' : 'scheme');
+  const [yandexOk, setYandexOk] = useState(hasYandexKey);
+  const [notice, setNotice] = useState<string | null>(null);
   const lastAlert = useRef<string | null>(null);
 
   useEffect(() => {
@@ -35,13 +41,27 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-bg text-primary">
-      <TopBar mode={state?.mode ?? null} online={online} basemap={basemap} onBasemap={setBasemap}
+      <TopBar mode={state?.mode ?? null} online={online} basemap={basemap} yandexAvailable={yandexOk}
+        onBasemap={(b) => { setNotice(null); setBasemap(b); }}
         onDemo={() => api.runDemo()} onReset={() => api.resetDemo()} />
       {state ? (
         <main className="flex min-h-0 flex-1 flex-col md:flex-row">
           <div className="relative h-[55vh] md:h-auto md:flex-1">
-            <MapView state={state} basemap={basemap} />
-            <StatChips state={state} />
+            {basemap === 'yandex' ? (
+              <YandexMapView state={state} onFail={(why) => {
+                setYandexOk(false);
+                setBasemap('scheme');
+                setNotice(`Яндекс Карты недоступны (${why}) — показана офлайн-схема`);
+              }} />
+            ) : (
+              <MapView state={state} />
+            )}
+            {notice && (
+              <div className="absolute right-3 top-3 z-[1100] max-w-[340px] rounded-[9px] border border-line bg-surface/95 px-3 py-2 text-[12px] leading-[17px] text-muted">
+                {notice}
+              </div>
+            )}
+            <StatChips state={state} raised={basemap === 'yandex'} />
           </div>
           <SidePanel state={state} />
         </main>
