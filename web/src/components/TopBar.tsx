@@ -4,6 +4,7 @@ import { fmtTime } from '../format';
 import { SoundToggle, ThemeSwitch } from './Nav';
 import Hydrophone from './Hydrophone';
 import { showIntro } from '../introBus';
+import { design } from '../design';
 
 export const MODE: Record<Mode, { label: string; hint: string; text: string; dot: string; pill: string }> = {
   calm: { label: 'Спокойно', hint: 'угроз нет', text: 'text-accent', dot: 'bg-accent', pill: 'border-accent/40 bg-accent/10' },
@@ -14,7 +15,77 @@ export const MODE: Record<Mode, { label: string; hint: string; text: string; dot
 
 interface Props { mode: Mode | null; online: boolean; title: string; subtitle: string; onDemo: () => void; onReset: () => void }
 
-export default function TopBar({ mode, online, title, subtitle, onDemo, onReset }: Props) {
+const Play = () => (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden><path d="M6 4.2v11.6c0 .6.7 1 1.2.6l8.6-5.8a.75.75 0 0 0 0-1.2L7.2 3.6c-.5-.4-1.2 0-1.2.6z" /></svg>
+);
+const Reset = () => (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M4 10a6 6 0 1 0 1.8-4.3" /><path d="M4 3.5v3.2h3.2" />
+  </svg>
+);
+
+/**
+ * Шапка в оформлении «УПК» — как шапка раздела в панели УПК: слева название и подпись, справа спокойная
+ * строка состояния и кнопки-«призраки». Без плашек, пунктирных рамок и моноширинных подписей.
+ */
+function TopBarUpk({ mode, online, title, subtitle, onDemo, onReset }: Props) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const m = mode && online ? MODE[mode] : null;
+  const ghost = 'ui-btn ui-btn-ghost ui-btn-sm text-muted hover:text-primary';
+  const [place, rest] = title.split(' · ');
+  return (
+    <header className="upk-head mode-line bar-in relative z-20 shrink-0">
+      <div className="flex min-h-[60px] items-center gap-2 px-4 sm:gap-3 md:px-7">
+        <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро" className="shrink-0 md:hidden">
+          <img src="/brand/404-logo-cream.svg" alt="404" className="on-night h-7 w-auto" />
+          <img src="/brand/404-logo-dark.svg" alt="404" className="on-day h-7 w-auto" />
+        </button>
+        <div className="hidden min-w-0 md:block">
+          <div className="truncate text-[17px] font-semibold leading-6 tracking-[-.01em]">
+            {place}{rest && <span className="font-normal text-muted"> · {rest}</span>}
+          </div>
+          <div className="truncate text-[12.5px] leading-[17px] text-muted">{subtitle}</div>
+        </div>
+        <span className="flex-1" />
+
+        <div className="upk-status flex min-w-0 items-center gap-2 text-[13.5px]" role="status" aria-live="polite"
+          title={m ? `Режим: ${m.label.toLowerCase()} — ${m.hint}` : 'Нет связи с сервером'}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${m ? `${mode === 'alarm' || mode === 'intercept' ? 'ping-dot' : 'live-dot'} ${m.dot}` : 'animate-pulse bg-grey'}`} />
+          <span className={`truncate font-semibold ${mode === 'alarm' || mode === 'intercept' ? 'text-alert' : ''}`}>{m ? m.label : 'Нет связи'}</span>
+          {m && <span className="hidden truncate text-muted xl:inline">{m.hint}</span>}
+        </div>
+
+        <span className="upk-sep hidden sm:block" />
+        {/* видимость задают обёртки: у кнопок свой display */}
+        <span className="hidden items-center gap-1 sm:flex">
+          <button type="button" className={ghost} onClick={onDemo} title="Для показа: прогон сценария тревоги"><Play />Демо</button>
+          <button type="button" className={ghost} onClick={onReset} title="Вернуть демо в начало"><Reset />Сбросить</button>
+        </span>
+        <span className="sm:hidden">
+          <button type="button" className={`${ghost} !w-8 !px-0`} onClick={onDemo} title="Запустить демо" aria-label="Запустить демо"><Play /></button>
+        </span>
+        <ThemeSwitch compact />
+        <SoundToggle />
+
+        <span className="upk-sep hidden lg:block" />
+        <div className="hidden opacity-80 lg:block" title="Гидрофон: что сейчас слышат буи">
+          <Hydrophone mode={online ? mode : null} />
+        </div>
+        <span className="hidden text-[14px] font-semibold tabular-nums sm:block" title="Время астраханское">{fmtTime(now)}</span>
+      </div>
+    </header>
+  );
+}
+
+export default function TopBar(props: Props) {
+  return design === 'upk' ? <TopBarUpk {...props} /> : <TopBarClassic {...props} />;
+}
+
+function TopBarClassic({ mode, online, title, subtitle, onDemo, onReset }: Props) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);

@@ -220,3 +220,22 @@ html[data-design="upk"]::view-transition-old(root) { z-index: 1; }
 /* плашка режима «Настороженность»: текст и фон нейтральные, цвет — только у точки */
 html[data-design="upk"] .pill.border-warn\/40 { background: rgb(var(--rgb-primary) / .06); }
 html[data-design="upk"] .pill.border-warn\/40 > .text-warn { color: var(--c-text); }
+
+/* ================= навигация как в панели УПК ================= */
+/* шапка: ровная полоса цвета фона, тонкая граница, никакого цвета режима */
+html[data-design="upk"] .upk-head { background: color-mix(in srgb, var(--c-bg) 90%, transparent); }
+html[data-design="upk"] .upk-head.mode-line { border-bottom: 1px solid var(--c-line); }
+html[data-design="upk"] .upk-sep { width: 1px; height: 20px; background: var(--c-line); flex: none; }
+html[data-design="upk"] .upk-status .live-dot::after { border-color: currentColor; }
+/* боковое меню: фон чуть светлее страницы, знак на высоте шапки, группы — мелкие прописные */
+html[data-design="upk"] nav.md\:flex { background: color-mix(in srgb, var(--c-surface) 78%, transparent); }
+html[data-design="upk"] .upk-brand { height: 60px; border-bottom: 1px solid transparent; }
+html[data-design="upk"] nav.md\:flex .cap { padding-top: 6px; color: var(--c-text-2); }
+html[data-design="upk"] .ui-nav { height: 38px; color: var(--c-text-2); }
+html[data-design="upk"] .ui-nav[aria-current="page"] { color: var(--c-text); }
+html[data-design="upk"] .ui-nav[aria-current="page"] svg { color: var(--c-accent); }
+html[data-design="upk"] .ui-nav-mark { border-radius: 10px; }
+/* нижняя полоса на телефоне: выбранный — цветом текста и точкой-полоской акцента */
+html[data-design="upk"] nav.md\:hidden { background: color-mix(in srgb, var(--c-bg) 92%, transparent); }
+html[data-design="upk"] nav.md\:hidden button[aria-current="page"] svg { color: var(--c-accent); }
+html[data-design="upk"] nav.md\:hidden button > span.absolute.top-0 { background: var(--c-accent); }

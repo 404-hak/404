@@ -62,12 +62,29 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
           </button>
         ))}
       </div>
-      {pref === 'auto' && <SkyClock rise={rise} set={set} />}
+      {pref === 'auto' && (design === 'upk' ? <SkyToggle rise={rise} set={set} /> : <SkyClock rise={rise} set={set} />)}
     </>
   );
 }
 
 const MSK_MS = 3 * 3600_000, DAY_MS = 86400_000;
+
+/** В оформлении «УПК» перемотка неба спрятана за тихой строкой: открывается по нажатию */
+function SkyToggle({ rise, set }: { rise: string; set: string }) {
+  const { live } = useSkyClock();
+  const [open, setOpen] = useState(!live);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className="mt-1.5 hidden w-full items-center justify-between rounded-[8px] px-2 py-1 text-[12.5px] text-muted hover:text-primary xl:flex">
+        <span>Солнце: {rise}–{set}</span>
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden
+          style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .3s' }}><path d="m5 8 5 5 5-5" /></svg>
+      </button>
+      {open && <SkyClock rise={rise} set={set} />}
+    </>
+  );
+}
 const SPEEDS = [
   { v: 1, label: '×1', title: 'Настоящее время' },
   { v: 600, label: '10 мин/с', title: '10 минут неба в секунду: закат за полминуты' },
@@ -127,7 +144,7 @@ export function Sidebar({ route, go, badges }: Props) {
   });
   return (
     <nav aria-label="Разделы" className="relative z-20 hidden w-[68px] shrink-0 flex-col border-r border-line bg-surface/[.88] md:flex xl:w-[232px]">
-      <div className="flex h-14 items-center px-5">
+      <div className="upk-brand flex h-14 items-center px-5">
         <button type="button" onClick={showIntro} title="Показать интро" aria-label="Показать интро">
           <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="on-night hidden h-[18px] xl:block" />
           <img src="/brand/404-lockup-horizontal-dark.svg" alt="404" className="on-day hidden h-[18px] xl:block" />
