@@ -87,3 +87,37 @@ def test_api_flow():
         assert client.post("/api/alerts", json={"buoy_id": "nope", "kind": "shot", "confidence": 0.5}).status_code == 404
         with client.websocket_connect("/ws") as ws:
             assert "buoys" in ws.receive_json()
+
+
+def test_history_keeps_scenario():
+    w = world_at()
+    assert w.hot_sectors()[0] == 7                     # демо-история не ломает «усилить сектор 7»
+    assert w.verify_chain().ok
+    assert any(a.synthetic for a in w.alerts)
+    assert all(a.resolved_at and a.intercept_at for a in w.alerts if a.status == "resolved")
+
+
+def test_stats_and_nights():
+    w = world_at()
+    s = w.stats(30)
+    assert len(s.nights) == 30 and s.nights[-1].date.isoformat() == "2026-11-13"
+    assert s.total == sum(n.events for n in s.nights) == sum(s.by_kind.values()) == sum(s.by_hour)
+    assert s.reaction_median_min and 4 <= s.reaction_median_min <= 60
+    nights = w.nights(14)
+    assert len(nights) == 14 and nights[0].date.isoformat() == "2026-11-13"
+    assert all(n.level == fc.level(n.risk) for n in nights)
+
+
+def test_patch_records_times():
+    w = world_at()
+    a = w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.9))
+    w.patch_alert(a.id, "intercept")
+    w.patch_alert(a.id, "resolved")
+    assert a.intercept_at == a.resolved_at == FRIDAY_NIGHT
+    assert w.verify_chain().ok                         # время обработки не входит в хэш
+
+
+def test_stats_endpoints():
+    c = TestClient(app)
+    assert c.get("/api/stats?days=7").json()["days"] == 7
+    assert len(c.get("/api/forecast/nights?days=5").json()) == 5

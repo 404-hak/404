@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .models import Alert, AlertIn, AlertPatch, Buoy, ChainCheck, Forecast, State
+from .models import Alert, AlertIn, AlertPatch, Buoy, ChainCheck, Forecast, NightForecast, State, Stats
 from .sim import Sim
 from .world import World
 
@@ -95,6 +95,18 @@ async def patch_alert(alert_id: str, body: AlertPatch) -> Alert:
 @app.get("/api/forecast", response_model=Forecast)
 def get_forecast() -> Forecast:
     return world.forecast()
+
+
+@app.get("/api/forecast/nights", response_model=list[NightForecast])
+def get_nights(days: int = 14) -> list[NightForecast]:
+    """Риск на ближайшие ночи — для планирования патрулей."""
+    return world.nights(max(1, min(days, 60)))
+
+
+@app.get("/api/stats", response_model=Stats)
+def get_stats(days: int = 30) -> Stats:
+    """Аналитика по последним ночам (в демо — вместе со сгенерированной историей)."""
+    return world.stats(max(1, min(days, 60)))
 
 
 @app.get("/api/evidence/verify", response_model=ChainCheck)

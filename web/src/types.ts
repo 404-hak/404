@@ -13,6 +13,7 @@ export interface Alert {
   id: string; buoy_id: string; buoy_name: string; sector: number; kind: AlertKind; ts: string;
   lat: number; lon: number; confidence: number; status: AlertStatus; message: string;
   distance_km: number | null; match: Match | null; prev_hash: string; hash: string;
+  intercept_at: string | null; resolved_at: string | null; synthetic: boolean;
 }
 export interface Forecast {
   ts: string; moon_phase: string; moon_illumination: number; weekday: string; water_temp: number;
@@ -24,3 +25,14 @@ export interface State {
   mode: Mode; now: string; buoys: Buoy[]; alerts: Alert[]; forecast: Forecast; sectors: Sector[];
   links: [string, string][]; inspector: [number, number]; center: [number, number];
 }
+
+export interface NightStat { date: string; risk: number; moon_illumination: number; events: number; by_kind: Record<string, number> }
+export interface Stats {
+  days: number; nights: NightStat[]; by_kind: Record<string, number>; by_sector: Record<string, number>;
+  by_hour: number[]; total: number; reaction_median_min: number | null; synthetic: boolean;
+}
+export interface NightForecast {
+  date: string; weekday: string; moon_phase: string; moon_illumination: number; water_temp: number;
+  risk: number; level: 'low' | 'elevated' | 'high';
+}
+export interface ChainCheck { ok: boolean; checked: number; broken_at: string | null }

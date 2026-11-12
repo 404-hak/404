@@ -14,13 +14,26 @@ from zoneinfo import ZoneInfo
 
 from . import forecast as fc
 from . import geo, voice
-from .models import Alert, AlertIn, Buoy, ChainCheck, Forecast, Match, Sector, State
+from .models import Alert, AlertIn, Buoy, ChainCheck, Forecast, Match, NightForecast, NightStat, Sector, State, Stats
 
 TZ = ZoneInfo("Europe/Astrakhan")
 GENESIS = "0" * 64
 FP_DIM = 16
 MATCH_THRESHOLD = 0.8
 OFFLINE_AFTER = timedelta(seconds=60)
+HISTORY_NIGHTS = 60
+
+# Демо-история: где и что «слышали» буи. Веса держат сектор 7 самым горячим, 5 — вторым,
+# как в сценарии защиты («Рекомендую усилить сектор 7»).
+SYNTH_BUOY_WEIGHT = {"b01": 5, "b04": 5, "b09": 5, "b03": 3, "b05": 3}
+SYNTH_KINDS = (("motor", 50), ("silence", 22), ("offline", 18), ("shot", 10))
+SYNTH_HOURS = ((21, 1), (22, 2), (23, 3), (0, 4), (1, 4), (2, 3), (3, 2), (4, 1))
+
+
+def night_of(ts: datetime) -> date:
+    """Ночь, к которой относится момент: до полудня — ещё прошлая ночь."""
+    t = ts.astimezone(TZ)
+    return t.date() - timedelta(days=1) if t.hour < 12 else t.date()
 
 
 def _unit(v: list[float]) -> list[float]:
@@ -81,17 +94,46 @@ class World:
         return d if d < now else d.replace(year=now.year - 1)
 
     def _seed_history(self, now: datetime) -> None:
-        """Архив прошлых событий: из него берутся «горячие» сектора и узнаваемые катера."""
+        """Архив прошлых событий: из него берутся «горячие» сектора и узнаваемые катера.
+
+        Четыре опорных события сценария и сгенерированная демо-история за последние ночи
+        (помечена synthetic: это не реальные данные заповедника).
+        """
         hist = [
-            (self._past(now, 4, 12, 23, 10), "b09", "motor", 0.91, "boat-B"),
-            (self._past(now, 4, 20, 2, 5), "b01", "silence", 0.83, None),
-            (self._past(now, 5, 2, 22, 30), "b03", "shot", 0.88, None),
-            (self._past(now, 5, 5, 1, 40), "b04", "motor", 0.93, "boat-A"),
+            (self._past(now, 4, 12, 23, 10), "b09", "motor", 0.91, "boat-B", False, 21),
+            (self._past(now, 4, 20, 2, 5), "b01", "silence", 0.83, None, False, 34),
+            (self._past(now, 5, 2, 22, 30), "b03", "shot", 0.88, None, False, 12),
+            (self._past(now, 5, 5, 1, 40), "b04", "motor", 0.93, "boat-A", False, 17),
         ]
-        for ts, bid, kind, conf, vid in sorted(hist):
+        hist += self._synthetic_history(now)
+        for ts, bid, kind, conf, vid, synth, react in sorted(hist, key=lambda h: h[0]):
             fp = self.vessels[vid]["vector"] if vid else None
             a = self._make_alert(AlertIn(buoy_id=bid, kind=kind, confidence=conf, ts=ts, fingerprint=fp))
             a.status = "resolved"
+            a.synthetic = synth
+            a.intercept_at = ts + timedelta(minutes=react)
+            a.resolved_at = a.intercept_at + timedelta(minutes=25 + react)
+
+    def _synthetic_history(self, now: datetime) -> list[tuple]:
+        """Демо-история: в тёмные тёплые ночи событий больше — как предсказывает формула риска."""
+        out = []
+        ids = list(self.buoys)
+        weights = [SYNTH_BUOY_WEIGHT.get(i, 1) for i in ids]
+        tonight = night_of(now)
+        for k in range(1, HISTORY_NIGHTS + 1):
+            d = tonight - timedelta(days=k)
+            rnd = random.Random(f"404-{d.isoformat()}")
+            r = fc.risk(fc.conditions_for(datetime(d.year, d.month, d.day, 23, 0, tzinfo=TZ)))
+            n = (rnd.random() < 0.12 + 0.55 * r) + (rnd.random() < 0.25 * r) + (rnd.random() < 0.08 * r)
+            for _ in range(n):
+                hour = rnd.choices([h for h, _ in SYNTH_HOURS], [w for _, w in SYNTH_HOURS])[0]
+                day = d + timedelta(days=1) if hour < 12 else d
+                ts = datetime(day.year, day.month, day.day, hour, rnd.randrange(60), tzinfo=TZ)
+                kind = rnd.choices([k for k, _ in SYNTH_KINDS], [w for _, w in SYNTH_KINDS])[0]
+                bid = rnd.choices(ids, weights)[0]
+                react = round(min(60, max(4, rnd.lognormvariate(2.7, 0.45))))
+                out.append((ts, bid, kind, round(rnd.uniform(0.7, 0.96), 2), None, True, react))
+        return out
 
     # ---------- алерты ----------
     def _next_id(self, ts: datetime) -> str:
@@ -137,6 +179,10 @@ class World:
         for a in self.alerts:
             if a.id == alert_id:
                 a.status = status  # type: ignore[assignment]
+                if status == "intercept" and a.intercept_at is None:
+                    a.intercept_at = self.now()
+                if status == "resolved" and a.resolved_at is None:
+                    a.resolved_at = self.now()
                 return a
         raise KeyError(alert_id)
 
@@ -215,3 +261,51 @@ class World:
                      alerts=sorted(self.alerts, key=lambda a: a.ts, reverse=True)[:30],
                      forecast=f, sectors=sectors, links=geo.nerve_links(),
                      inspector=geo.INSPECTOR, center=geo.MAP_CENTER)
+
+    # ---------- аналитика ----------
+    def stats(self, days: int = 30) -> Stats:
+        """Сводка по последним ночам: события по ночам, типам, секторам, часам и скорость реакции."""
+        tonight = night_of(self.now())
+        first = tonight - timedelta(days=days - 1)
+        window = [a for a in self.alerts if first <= night_of(a.ts) <= tonight]
+        nights = []
+        for k in range(days):
+            d = first + timedelta(days=k)
+            c = fc.conditions_for(datetime(d.year, d.month, d.day, 23, 0, tzinfo=TZ))
+            evs = [a for a in window if night_of(a.ts) == d]
+            kinds: dict[str, int] = {}
+            for a in evs:
+                kinds[a.kind] = kinds.get(a.kind, 0) + 1
+            nights.append(NightStat(date=d, risk=fc.risk(c), moon_illumination=round(c.illumination, 2),
+                                    events=len(evs), by_kind=kinds))
+        by_kind = {k: 0 for k, _ in SYNTH_KINDS}
+        by_sector = {n: 0 for n in range(1, geo.ROWS * geo.COLS + 1)}
+        by_hour = [0] * 24
+        reactions = []
+        for a in window:
+            by_kind[a.kind] = by_kind.get(a.kind, 0) + 1
+            by_sector[a.sector] += 1
+            by_hour[a.ts.astimezone(TZ).hour] += 1
+            done = a.intercept_at or a.resolved_at
+            if done:
+                reactions.append((done - a.ts).total_seconds() / 60)
+        reactions.sort()
+        median = None
+        if reactions:
+            m = len(reactions) // 2
+            median = round(reactions[m] if len(reactions) % 2 else (reactions[m - 1] + reactions[m]) / 2, 1)
+        return Stats(days=days, nights=nights, by_kind=by_kind, by_sector=by_sector, by_hour=by_hour,
+                     total=len(window), reaction_median_min=median, synthetic=any(a.synthetic for a in window))
+
+    def nights(self, days: int = 14) -> list[NightForecast]:
+        """Прогноз риска на ближайшие ночи: настоящая луна, сезонная вода, день недели."""
+        tonight = night_of(self.now())
+        out = []
+        for k in range(days):
+            d = tonight + timedelta(days=k)
+            c = fc.conditions_for(datetime(d.year, d.month, d.day, 23, 0, tzinfo=TZ))
+            r = fc.risk(c)
+            out.append(NightForecast(date=d, weekday=fc.WEEKDAYS[c.weekday], moon_phase=c.phase,
+                                     moon_illumination=round(c.illumination, 2), water_temp=c.water_temp,
+                                     risk=r, level=fc.level(r)))
+        return out

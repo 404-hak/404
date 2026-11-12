@@ -82,6 +82,20 @@ body { -webkit-font-smoothing: antialiased; }
 .boot-ring { position: absolute; inset: -18px; border-radius: 50%; border: 1.5px solid var(--c-accent); animation: sonar 2.4s var(--ease-out) infinite; }
 .boot-ring.r2 { animation-delay: 1.2s; }
 
+/* ---------- разделы ---------- */
+.card { border-radius: 18px; border: 1px solid var(--c-line); background: rgba(20, 34, 54, .72); padding: 20px;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.page-in { animation: page-in .45s var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); filter: blur(3px); } }
+.bar-grow { transform-origin: bottom; animation: grow-y .7s var(--ease-out) both; }
+.bar-grow-x { transform-origin: left; animation: grow-x .8s var(--ease-out) both; }
+@keyframes grow-y { from { transform: scaleY(0); } }
+@keyframes grow-x { from { transform: scaleX(0); } }
+.line-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.2s var(--ease-inout) .15s forwards; }
+/* кольцо сонара у значка буя в списке */
+.buoy-ring { position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid currentColor; color: inherit; opacity: 0;
+  border-color: inherit; animation: sonar 3.2s var(--ease-out) infinite; pointer-events: none; }
+
 /* ---------- карта: общее ---------- */
 .leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
 .leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }

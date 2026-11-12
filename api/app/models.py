@@ -46,6 +46,9 @@ class Alert(BaseModel):
     fingerprint: list[float] | None = None
     prev_hash: str
     hash: str
+    intercept_at: datetime | None = Field(default=None, description="Когда начат перехват (в хэш не входит: это обработка, не улика)")
+    resolved_at: datetime | None = Field(default=None, description="Когда событие закрыто")
+    synthetic: bool = Field(default=False, description="Сгенерированная демо-история, не реальное событие")
 
 
 class AlertIn(BaseModel):
@@ -98,3 +101,32 @@ class ChainCheck(BaseModel):
     ok: bool
     checked: int
     broken_at: str | None = None
+
+
+class NightStat(BaseModel):
+    date: date
+    risk: float
+    moon_illumination: float
+    events: int
+    by_kind: dict[str, int]
+
+
+class Stats(BaseModel):
+    days: int
+    nights: list[NightStat]
+    by_kind: dict[str, int]
+    by_sector: dict[int, int]
+    by_hour: list[int] = Field(description="События по часу суток (местное время), 24 значения")
+    total: int
+    reaction_median_min: float | None = Field(description="Медиана минут от события до начала перехвата или закрытия")
+    synthetic: bool = Field(description="В статистике есть сгенерированная демо-история")
+
+
+class NightForecast(BaseModel):
+    date: date
+    weekday: str
+    moon_phase: str
+    moon_illumination: float
+    water_temp: float
+    risk: float
+    level: Literal["low", "elevated", "high"]

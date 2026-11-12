@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Mode } from '../types';
 import { fmtTime } from '../format';
+import { SoundToggle } from './Nav';
 
 export const MODE: Record<Mode, { label: string; hint: string; text: string; dot: string; pill: string }> = {
   calm: { label: 'Спокойно', hint: 'угроз нет', text: 'text-accent', dot: 'bg-accent', pill: 'border-accent/40 bg-accent/10' },
@@ -9,23 +10,23 @@ export const MODE: Record<Mode, { label: string; hint: string; text: string; dot
   intercept: { label: 'Перехват', hint: 'катер в пути', text: 'text-alert', dot: 'bg-alert', pill: 'border-alert/50 bg-alert/10' },
 };
 
-interface Props { mode: Mode | null; online: boolean; subtitle: string; onDemo: () => void; onReset: () => void }
+interface Props { mode: Mode | null; online: boolean; title: string; subtitle: string; onDemo: () => void; onReset: () => void }
 
-export default function TopBar({ mode, online, subtitle, onDemo, onReset }: Props) {
+export default function TopBar({ mode, online, title, subtitle, onDemo, onReset }: Props) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(t);
   }, []);
   const m = mode && online ? MODE[mode] : null;
-  const btn = 'h-8 rounded-[8px] px-3 text-[12px] font-medium';
+  const btn = 'h-8 whitespace-nowrap rounded-[8px] px-3 text-[12px] font-medium';
   return (
-    <header className="shrink-0 bg-surface/80 backdrop-blur">
+    <header className="relative z-20 shrink-0 bg-surface/70 backdrop-blur">
       <div className="flex h-14 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-4">
-          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0" />
-          <div className="hidden min-w-0 border-l border-line pl-4 md:block">
-            <div className="truncate text-[13px] font-semibold leading-4">Дельта Волги · дежурство</div>
+          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0 md:hidden" />
+          <div key={title} className="enter hidden min-w-0 md:block">
+            <div className="truncate text-[15px] font-semibold leading-5">{title}</div>
             <div className="truncate text-[11px] leading-4 text-muted">{subtitle}</div>
           </div>
         </div>
@@ -50,6 +51,7 @@ export default function TopBar({ mode, online, subtitle, onDemo, onReset }: Prop
             <button type="button" className={`${btn} text-muted hover:text-primary`} onClick={onReset}>Сбросить</button>
           </div>
           <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>
+          <SoundToggle />
 
           <div className="hidden flex-col items-end leading-none sm:flex" title="Время астраханское">
             <span className="font-mono text-[13px] font-medium tabular-nums">{fmtTime(now)}</span>
