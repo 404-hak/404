@@ -238,6 +238,21 @@ body { -webkit-font-smoothing: antialiased; }
   box-shadow: 0 6px 18px var(--c-shadow); animation: fade-in .8s ease backwards; }
 
 /* ---------- спутник (Яндекс): снимок приглушён, чтобы швы мозаики не спорили со слоем 404 ---------- */
+/* ---------- 3D-карта: подписи над сценой ---------- */
+.map-3d { background: radial-gradient(120% 90% at 50% 40%, rgb(var(--rgb-primary) / .05), transparent 70%), var(--c-bg); }
+.m3d-labels > div { will-change: transform; }
+.m3d-anchor, .m3d-tag { position: relative; width: 0; height: 0; }
+.m3d-anchor > * { position: absolute; left: 6px; top: 6px; }
+.m3d-tag > span { position: absolute; left: 12px; top: -10px; white-space: nowrap; font-size: 11px; line-height: 18px; font-weight: 500; padding: 0 6px;
+  border-radius: 6px; color: var(--c-text); background: rgb(var(--rgb-bg) / .72); border: 1px solid rgb(var(--rgb-primary) / .14);
+  transition: background-color .25s, color .25s, opacity .3s; }
+.m3d-tag.alert > span { color: var(--c-alert); font-weight: 600; }
+.m3d-tag.off > span { color: var(--c-text-2); }
+.m3d-tag.on > span { background: var(--c-primary); color: var(--c-bg); border-color: transparent; font-weight: 600; }
+.m3d-me > span { font-weight: 600; }
+.m3d-compact .m3d-tag:not(.on):not(.alert):not(.m3d-me) > span, .m3d-compact .sector-label span { opacity: 0; }
+.m3d-labels { animation: fade-in 1s ease 1.6s backwards; }
+
 .map-photo [class*="-ground-pane"] { filter: saturate(.55) brightness(.78) contrast(1.06); }
 .map-photo .map-label, .map-photo .tick { color: #E2E8F0; text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); } /* снимок тёмный в любой теме */
 

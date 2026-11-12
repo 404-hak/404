@@ -4,11 +4,41 @@ import type { State } from '../types';
 import { km } from '../format';
 import { loadYmaps } from '../yandex';
 import { BUOY_STATUS, areaOf, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
-import { useBooting } from '../motion';
+import { reducedMotion } from '../motion';
 
 const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
 // зазор вокруг района [сверху, справа, снизу, слева]: видна граница, кнопки и легенда её не закрывают
 const ZOOM_MARGIN = [64, 64, 64, 28];
+const easeOut = (k: number) => 1 - (1 - k) ** 3;
+
+/**
+ * Анимация параметра объекта Яндекса: геометрию и линии Яндекс рисует сам, CSS до них не достаёт,
+ * поэтому прорисовку рамки, проявление связей и бег пунктира ведём по кадрам. Возвращает отмену.
+ */
+function tween(ms: number, delay: number, step: (k: number) => void, done?: () => void) {
+  let raf = 0;
+  const t0 = performance.now() + delay;
+  const tick = (now: number) => {
+    const k = Math.min(1, Math.max(0, (now - t0) / ms));
+    step(easeOut(k));
+    if (k < 1) raf = requestAnimationFrame(tick); else done?.();
+  };
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}
+
+/** Точки периметра района на доле k обхода (рамка «прорисовывается», как на схеме) */
+function partialRing(ring: [number, number][], k: number) {
+  const seg = ring.slice(1).map((p, i) => Math.hypot(p[0] - ring[i][0], p[1] - ring[i][1]));
+  let left = seg.reduce((a, b) => a + b, 0) * k;
+  const out: [number, number][] = [ring[0]];
+  for (let i = 0; i < seg.length && left > 0; i++) {
+    const f = Math.min(1, left / seg[i]);
+    out.push([ring[i][0] + (ring[i + 1][0] - ring[i][0]) * f, ring[i][1] + (ring[i + 1][1] - ring[i][1]) * f]);
+    left -= seg[i];
+  }
+  return out.length > 1 ? out : [ring[0], ring[0]];
+}
 
 interface Props extends Selection { state: State; handle: MutableRefObject<MapHandle | null>; onFail: (why: string) => void }
 
@@ -27,12 +57,33 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   const layouts = useRef<Record<string, any>>({});
   const marks = useRef<Record<string, any>>({});
   const [ready, setReady] = useState(false);
-  const booting = useBooting();
   const area = useMemo(() => areaOf(state.sectors), [state.sectors]);
+  // первое появление слоя 404 — от момента, когда Яндекс готов (API грузится секунду-другую;
+  // раньше «загрузка» отсчитывалась от открытия страницы и успевала кончиться до появления буёв)
+  const boot = useRef(!reducedMotion());
+  const anims = useRef<(() => void)[]>([]);
+  const selRef = useRef(selected);
+  selRef.current = selected;
+  /** Выделение — классом на живом значке: без пересоздания он плавно увеличивается, как на схеме */
+  const paintSelection = () => {
+    el.current?.querySelectorAll<HTMLElement>('.buoy[data-id]').forEach((b) => b.classList.toggle('buoy--selected', b.dataset.id === selRef.current));
+  };
 
   useEffect(() => {
-    el.current?.classList.toggle('booting', booting);
-  }, [booting]);
+    if (!ready || !boot.current) return;
+    el.current?.classList.add('booting');
+    const t = window.setTimeout(() => { boot.current = false; el.current?.classList.remove('booting'); }, 2800);
+    return () => window.clearTimeout(t);
+  }, [ready]);
+
+  // если Яндекс сам перерисует значок (смена статуса, масштаб), выделение возвращается на новый
+  useEffect(() => {
+    if (!el.current) return;
+    let raf = 0;
+    const mo = new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintSelection(); }); });
+    mo.observe(el.current, { childList: true, subtree: true });
+    return () => { mo.disconnect(); cancelAnimationFrame(raf); anims.current.forEach((c) => c()); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // создание карты
   useEffect(() => {
@@ -67,7 +118,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
 
         layouts.current = {
           buoy: y.templateLayoutFactory.createClass(
-            '<div class="buoy buoy--{{ properties.status }}{% if properties.selected %} buoy--selected{% endif %}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
+            '<div class="buoy buoy--{{ properties.status }}" data-id="{{ properties.id }}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
             + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% endif %}'
             + '<span class="map-label">{{ properties.name }}</span></div>'),
           inspector: y.templateLayoutFactory.createClass('<div class="inspector"><span class="map-label">Вы</span></div>'),
@@ -82,9 +133,13 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         m.geoObjects.add(new y.Polygon(maskRings(area), {}, {
           fillColor: C.mask, fillOpacity: 0.72, strokeWidth: 0, fillRule: 'evenOdd', interactivityModel: 'default#transparent',
         }));
-        m.geoObjects.add(new y.Rectangle(area, {}, {
-          fill: false, strokeColor: C.primary, strokeOpacity: 0.55, strokeWidth: 1.5, interactivityModel: 'default#transparent',
-        }));
+        // рамка района прорисовывается по периметру, как на схеме
+        const ring: [number, number][] = [[area[0][0], area[0][1]], [area[1][0], area[0][1]], [area[1][0], area[1][1]], [area[0][0], area[1][1]], [area[0][0], area[0][1]]];
+        const frame = new y.Polyline(boot.current ? [ring[0], ring[0]] : ring, {}, {
+          strokeColor: C.primary, strokeOpacity: 0.55, strokeWidth: 1.5, interactivityModel: 'default#transparent',
+        });
+        m.geoObjects.add(frame);
+        if (boot.current) anims.current.push(tween(1800, 200, (k) => frame.geometry.setCoordinates(partialRing(ring, k))));
         // координаты линий сетки по краю района
         for (const t of gridTicks(state.sectors)) {
           m.geoObjects.add(new y.Placemark(t.at, { text: t.text }, {
@@ -124,12 +179,21 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
     g.removeAll();
     const byId = Object.fromEntries(state.buoys.map((b) => [b.id, b]));
     const flat = { interactivityModel: 'default#transparent' };
+    const stop: (() => void)[] = [];
+    // линии одной группы проявляются вместе: прозрачность задаётся коллекции, линии её наследуют
+    const group = (opacity: number, delay: number) => {
+      const c = new y.GeoObjectCollection({}, { strokeOpacity: boot.current ? 0 : opacity });
+      g.add(c);
+      if (boot.current) stop.push(tween(1000, delay, (k) => c.options.set('strokeOpacity', opacity * k)));
+      return c;
+    };
+    const grid = group(0.3, 700), linksOk = group(0.75, 800), linksAlarm = group(0.9, 800);
 
     for (const s of state.sectors) {
       const isHot = hot.includes(s.n);
-      g.add(new y.Rectangle([[s.south, s.west], [s.north, s.east]], {}, isHot
+      (isHot ? g : grid).add(new y.Rectangle([[s.south, s.west], [s.north, s.east]], {}, isHot
         ? { ...flat, fillColor: C.warn, fillOpacity: 0.14, strokeColor: C.warn, strokeOpacity: 0.95, strokeWidth: 2 }
-        : { ...flat, fill: false, strokeColor: C.primary, strokeOpacity: 0.3, strokeWidth: 1 }));
+        : { ...flat, fill: false, strokeColor: C.primary, strokeWidth: 1 }));
       g.add(new y.Placemark([s.north, s.west], { n: s.n, hot: isHot ? 'hot' : '' }, {
         ...flat, iconLayout: L.sector, iconOffset: [6, 6], zIndex: 100,
       }));
@@ -137,16 +201,34 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
     for (const [a, b] of state.links) {
       if (!byId[a] || !byId[b]) continue;
       const alarm = byId[a].status === 'alert' || byId[b].status === 'alert';
-      g.add(new y.Polyline([[byId[a].lat, byId[a].lon], [byId[b].lat, byId[b].lon]], {}, {
-        ...flat, strokeColor: alarm ? C.alert : '#A9B79C', strokeOpacity: alarm ? 0.9 : 0.75, strokeWidth: alarm ? 2 : 1.5, strokeStyle: 'dot',
+      (alarm ? linksAlarm : linksOk).add(new y.Polyline([[byId[a].lat, byId[a].lon], [byId[b].lat, byId[b].lon]], {}, {
+        ...flat, strokeColor: alarm ? C.alert : '#A9B79C', strokeWidth: alarm ? 2 : 1.5, strokeStyle: 'dot',
       }));
     }
     const intercept = active.find((a) => a.status === 'intercept');
     if (intercept) {
       const [ilat, ilon] = state.inspector;
-      g.add(new y.Polyline([[ilat, ilon], [intercept.lat, intercept.lon]], {}, {
+      const route = new y.Polyline([[ilat, ilon], [intercept.lat, intercept.lon]], {}, {
         ...flat, strokeColor: C.primary, strokeWidth: 3, strokeStyle: 'dash',
-      }));
+      });
+      g.add(route);
+      // пунктир маршрута бежит к цели, как на схеме; 25 кадров в секунду — Яндексу хватает и это дёшево
+      if (!reducedMotion()) {
+        let raf = 0, last = 0;
+        const run = (now: number) => {
+          raf = requestAnimationFrame(run);
+          if (now - last < 40) return;
+          last = now;
+          try {
+            route.options.set('strokeStyle', { style: 'dash', offset: -((now / 1000) * 5) % 7 });
+          } catch {                              // старый Яндекс без сдвига пунктира — просто пунктир
+            cancelAnimationFrame(raf);
+            route.options.set('strokeStyle', 'dash');
+          }
+        };
+        raf = requestAnimationFrame(run);
+        stop.push(() => cancelAnimationFrame(raf));
+      }
       if (intercept.distance_km != null) {
         g.add(new y.Placemark([(ilat + intercept.lat) / 2, (ilon + intercept.lon) / 2], { text: km(intercept.distance_km) }, {
           ...flat, iconLayout: L.label,
@@ -157,7 +239,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
     state.buoys.forEach((b, i) => {
       const r = b.status === 'alert' ? 12 : 9;
       const pm = new y.Placemark([b.lat, b.lon], {
-        status: b.status, name: b.name, i, d: ((i * 0.83) % 3.6).toFixed(2), hintContent: hint(b), selected: b.id === selected,
+        id: b.id, status: b.status, name: b.name, i, d: ((i * 0.83) % 3.6).toFixed(2), hintContent: hint(b),
       }, {
         iconLayout: L.buoy, iconOffset: [-r, -r], iconShape: { type: 'Circle', coordinates: [r, r], radius: r + 4 },
         zIndex: b.status === 'alert' ? 1000 : 500,
@@ -169,14 +251,14 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
     g.add(new y.Placemark(state.inspector, { hintContent: 'Вы — катер инспектора' }, {
       iconLayout: L.inspector, iconOffset: [-7, -7], iconShape: { type: 'Circle', coordinates: [7, 7], radius: 10 }, zIndex: 900,
     }));
+    return () => stop.forEach((c) => c());
   }, [ready, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // выделение меняет только сам значок, без перерисовки слоя
+  // выделение меняет только класс живого значка (без перерисовки — с плавным увеличением)
   useEffect(() => {
     if (!ready) return;
-    map.current?.hint?.close();          // подсказка не залипает, когда значок перерисовывается
+    paintSelection();
     for (const [id, pm] of Object.entries(marks.current)) {
-      pm.properties.set('selected', id === selected);
       pm.options.set('zIndex', id === selected ? 1200 : pm.properties.get('status') === 'alert' ? 1000 : 500);
     }
   }, [ready, selected, key]); // eslint-disable-line react-hooks/exhaustive-deps

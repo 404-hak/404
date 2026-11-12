@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -x api/.venv/bin/uvicorn ] && [ -d web/node_modules ] || bash .devcontainer/setup.sh
 if [ -n "${VITE_YANDEX_MAPS_KEY:-}" ]; then echo "Яндекс Карты: ключ найден"; else echo "Яндекс Карты: ключа нет — будет офлайн-схема"; fi
+# после git pull могли добавиться зависимости (например, three.js для 3D-карты) — доустанавливаем
+if [ ! web/node_modules/.package-lock.json -nt web/package-lock.json ]; then (cd web && npm ci --no-audit --no-fund); fi
 (cd web && npm run build)
 # Codespaces уже мог запустить дашборд при открытии — останавливаем старый, чтобы не было «address already in use»
 if pkill -f "uvicorn app.main:app" 2>/dev/null; then echo "Остановлен предыдущий запуск дашборда"; sleep 1; fi
