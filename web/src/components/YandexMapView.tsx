@@ -41,14 +41,14 @@ function partialRing(ring: [number, number][], k: number) {
   return out.length > 1 ? out : [ring[0], ring[0]];
 }
 
-interface Props extends Selection { state: State; handle: MutableRefObject<MapHandle | null>; onFail: (why: string) => void }
+interface Props extends Selection { state: State; handle: MutableRefObject<MapHandle | null>; onFail: (why: string) => void; margin?: number[] }
 
 /**
  * Яндекс Карты, «Гибрид»: спутниковый снимок дельты с подписями.
  * Карта не уходит за район дежурства: панорама ограничена, снаружи — затемнение.
  * Поверх — слой 404: сектора, связи буёв, буи, катер инспектора и маршрут перехвата.
  */
-export default function YandexMapView({ state, handle, onFail, selected, onSelect }: Props) {
+export default function YandexMapView({ state, handle, onFail, selected, onSelect, margin = ZOOM_MARGIN }: Props) {
   const pick = useRef(onSelect);
   pick.current = onSelect;
   const el = useRef<HTMLDivElement>(null);
@@ -100,7 +100,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         const m = new y.Map(el.current, { center: [(s + n) / 2, (w + e) / 2], zoom: 10, type: 'yandex#hybrid', controls: [] }, {
           suppressMapOpenBlock: true, yandexMapDisablePoiInteractivity: true, autoFitToViewport: 'always', maxZoom: 16,
         });
-        const fitArea = (duration = 0) => m.setBounds(area, { checkZoomRange: true, zoomMargin: ZOOM_MARGIN, duration });
+        const fitArea = (duration = 0) => m.setBounds(area, { checkZoomRange: true, zoomMargin: margin, duration });
         // Границы карты: меньше этого масштаба не отдалить (весь район с небольшим запасом),
         // а панорама не выходит за то, что видно на этом масштабе. Пересчёт при смене размера окна.
         const limit = () => {

@@ -58,7 +58,7 @@ function ForecastCard({ f, state, handle }: { f: Forecast; state: State; handle:
   const risk = useTween(f.risk * 100, 1100);
   const hot = state.sectors.filter((s) => f.hot_sectors.includes(s.n));
   return (
-    <section className="enter border-b border-line p-5">
+    <section className="forecast-card enter border-b border-line p-5">
       <div className="cap">Риск браконьерства этой ночью{f.demo ? ' · демо' : ''}</div>
       <div className="mt-2 flex items-baseline gap-3">
         <span className={`ui-hero-num font-light tabular-nums text-[56px] leading-[60px] tracking-[-.03em] transition-colors duration-700 ${lv.text}`}>

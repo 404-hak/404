@@ -18,6 +18,8 @@ import { sound } from './sound';
 import { haptic } from './native';
 import { useSurfaces } from './motion';
 import Intro from './components/Intro';
+import DeltaShell from './components/DeltaShell';
+import { layout } from './design';
 import { INTRO_EVENT, appSettled } from './introBus';
 
 /** Интро — один раз за сеанс; ?intro в адресе показывает всегда; при «уменьшить движение» — не показываем */
@@ -110,6 +112,31 @@ export default function App() {
     }[route];
   }
 
+  const introEl = intro && (
+    <Intro moon={state?.forecast.moon_illumination ?? 0.3} onDone={() => {
+      try { sessionStorage.setItem('404-intro', 'seen'); } catch { /* приватный режим */ }
+      setIntro(false);
+    }} />
+  );
+
+  // «Карта — всё»: живая дельта на весь экран, разделы листом поверх неё (см. design.ts — откат ?layout=panels)
+  if (layout === 'delta') {
+    return (
+      <div className={`app delta mode-${mode} relative h-full overflow-hidden text-primary`}>
+        {state ? (
+          <DeltaShell state={state} online={online} route={route} go={navigate} badges={badges} page={page} handle={map}
+            selected={selected} onSelect={select} onDemo={() => { navigate('map'); api.runDemo(); }} onReset={() => api.resetDemo()} />
+        ) : (
+          <>
+            <Ambient mode={mode} moon={0.3} />
+            <div className="relative grid h-full place-items-center text-[13px] text-muted">Подключаюсь к буям…</div>
+          </>
+        )}
+        {introEl}
+      </div>
+    );
+  }
+
   return (
     <div className={`app mode-${mode} relative flex h-full text-primary`}>
       <Ambient mode={mode} quiet={route === 'map'} moon={state?.forecast.moon_illumination ?? 0.3} />
@@ -136,12 +163,7 @@ export default function App() {
         )}
         <BottomNav route={route} go={navigate} badges={badges} />
       </div>
-      {intro && (
-        <Intro moon={state?.forecast.moon_illumination ?? 0.3} onDone={() => {
-          try { sessionStorage.setItem('404-intro', 'seen'); } catch { /* приватный режим */ }
-          setIntro(false);
-        }} />
-      )}
+      {introEl}
     </div>
   );
 }

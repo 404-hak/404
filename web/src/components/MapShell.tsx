@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState, type MutableRefObject, typ
 import type { State } from '../types';
 import type { MapHandle, Selection } from '../geo';
 import { hasYandexKey } from '../yandex';
-import MapView from './MapView';
+import MapView, { type FitPad } from './MapView';
 import YandexMapView from './YandexMapView';
 
 // 3D (three.js) грузится только когда его выбрали — остальной сайт не тяжелеет
@@ -92,8 +92,16 @@ function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) 
 }
 
 /** Карта с одинаковым управлением для спутника и схемы. */
-export default function MapShell({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
-  const [basemap, setBasemap] = useState<Basemap>(hasYandexKey ? 'photo' : 'scheme');
+/** Свободная от шапки, листа и дока часть карты (раскладка «Карта — всё») */
+export type Insets = { top: number; right: number; bottom: number; left: number };
+
+export default function MapShell({ state, handle, selected, onSelect, live = false, insets }: {
+  state: State; handle: MutableRefObject<MapHandle | null>; live?: boolean; insets?: Insets;
+} & Selection) {
+  // в «Карте — всё» по умолчанию схема: на ней течёт живая дельта; спутник — по кнопке
+  const [basemap, setBasemap] = useState<Basemap>(hasYandexKey && !live ? 'photo' : 'scheme');
+  const pad: FitPad | undefined = insets && { tl: [insets.left + 28, insets.top + 36], br: [insets.right + 64, insets.bottom + 36] };
+  const margin = insets && [insets.top + 36, insets.right + 64, insets.bottom + 36, insets.left + 28];
   const [notice, setNotice] = useState<string | null>(null);
   const intercept = state.alerts.some((a) => a.status === 'intercept');
   const root = useRef<HTMLDivElement>(null);
@@ -105,7 +113,7 @@ export default function MapShell({ state, handle, selected, onSelect }: { state:
   return (
     <div ref={root} className="relative h-full w-full overflow-hidden">
       {basemap === 'photo' ? (
-        <YandexMapView state={state} handle={handle} selected={selected} onSelect={onSelect} onFail={(why) => {
+        <YandexMapView state={state} handle={handle} selected={selected} onSelect={onSelect} margin={margin} onFail={(why) => {
           // кнопка «Спутник» остаётся активной: нажатие повторит загрузку без перезагрузки страницы
           setBasemap('scheme');
           setNotice(`Спутник недоступен: ${why}. Показана офлайн-схема — кнопка «Спутник» попробует снова.`);
@@ -118,14 +126,14 @@ export default function MapShell({ state, handle, selected, onSelect }: { state:
           }} />
         </Suspense>
       ) : (
-        <MapView state={state} handle={handle} selected={selected} onSelect={onSelect} />
+        <MapView state={state} handle={handle} selected={selected} onSelect={onSelect} live={live} pad={pad} />
       )}
 
       {/* глубина по краям и свечение цвета режима; в тревоге край пульсирует */}
       <div className="map-vignette pointer-events-none absolute inset-0 z-[1050]" />
       <div className="map-glow pointer-events-none absolute inset-0 z-[1050]" />
 
-      <div className="pointer-events-none absolute inset-0 z-[1100]">
+      <div className="pointer-events-none absolute inset-0 z-[1100]" style={insets && { top: insets.top, right: insets.right, bottom: insets.bottom, left: insets.left }}>
         {/* подложка: светлая плашка переезжает к выбранной кнопке */}
         <div className="fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_var(--c-shadow)]"
           role="group" aria-label="Подложка карты">

@@ -41,13 +41,13 @@ function themeHint(pref: ThemePref, theme: string, rise: string, set: string) {
 }
 
 /** Тема: «Ночь», «День», «Авто» (по солнцу над дельтой, время — МСК). Широко — три кнопки, узко — одна по кругу. */
-export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
+export function ThemeSwitch({ compact = false, always = false }: { compact?: boolean; always?: boolean }) {
   const { pref, theme, setPref, rise, set } = useTheme();
   const hint = themeHint(pref, theme, rise, set);
   const cycle = (
     <button type="button" onClick={() => sparkTransition(() => setPref(NEXT[pref], design !== 'upk'), 980)} title={`${hint}. Нажмите — ${THEME_LABEL[NEXT[pref]].toLowerCase()}`}
       aria-label={`Тема: ${THEME_LABEL[pref]}`}
-      className={`h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary ${compact ? 'grid md:hidden' : 'mx-auto grid xl:hidden'}`}>
+      className={`h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary ${compact ? (always ? 'grid' : 'grid md:hidden') : 'mx-auto grid xl:hidden'}`}>
       {THEME_ICON[pref]}
     </button>
   );
@@ -203,11 +203,11 @@ export function BottomNav({ route, go, badges }: Props) {
   );
 }
 
-export const SoundToggle = () => {
+export const SoundToggle = ({ always = false }: { always?: boolean }) => {
   const on = useSoundOn();
   return (
     <button type="button" onClick={() => setSound(!on)} aria-pressed={on} title={on ? 'Выключить звук' : 'Включить звук'}
-      className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary md:hidden">
+      className={`grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary ${always ? '' : 'md:hidden'}`}>
       <SoundIcon on={on} />
     </button>
   );

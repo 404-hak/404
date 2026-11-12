@@ -8,6 +8,7 @@ import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bo
 import { useBooting } from '../motion';
 import { useTheme } from '../theme';
 import { WARN } from '../design';
+import LiveDelta, { loadDelta } from './LiveDelta';
 
 /** Цвета схемы по теме: ночью вода темнее суши, днём — синее, вне района — затемнение или высветление */
 const PALETTE = {
@@ -42,11 +43,11 @@ function DeltaLayer({ c }: { c: Palette }) {
     let alive = true;
     const renderer = L.canvas({ pane: 'land', padding: 0.4 });
     const restyle = () => layer?.setStyle((f) => DELTA_STYLE((f as Feature).properties?.kind, map.getZoom(), pal.current));
-    fetch('/geo/delta-osm.geojson').then((r) => r.json()).then((fc: FeatureCollection) => {
+    loadDelta().then((fc: FeatureCollection) => {
       if (!alive) return;
       // порядок слоёв: плавни, море, водоёмы, затем линии рек поверх
       const order = ['wetland', 'sea', 'water', 'stream', 'river'];
-      fc.features.sort((a, b) => order.indexOf(a.properties?.kind) - order.indexOf(b.properties?.kind));
+      fc = { ...fc, features: [...fc.features].sort((a, b) => order.indexOf(a.properties?.kind) - order.indexOf(b.properties?.kind)) };
       layer = L.geoJSON(fc, {
         renderer, interactive: false,
         attribution: '© <a href="https://www.openstreetmap.org/copyright">участники OpenStreetMap</a>',
@@ -94,18 +95,19 @@ const DRAW = {
 };
 
 /** Держит карту в районе дежурства и отдаёт наружу управление ею. */
-function Bounded({ area, handle, focus, booting }: {
-  area: Bounds; handle: MutableRefObject<MapHandle | null>; focus?: { id: string; lat: number; lon: number }; booting: boolean;
+function Bounded({ area, handle, focus, booting, fitPad }: {
+  area: Bounds; handle: MutableRefObject<MapHandle | null>; focus?: { id: string; lat: number; lon: number }; booting: boolean; fitPad?: FitPad;
 }) {
   const map = useMap();
   useEffect(() => {
-    const view = L.latLngBounds(pad(area, 0.12));
+    // в «Карте — всё» часть экрана занята листом и шапкой: границы шире, чтобы район можно было вписать в свободную часть
+    const view = L.latLngBounds(pad(area, fitPad ? 3 : 0.12));
     // зазор вокруг района, чтобы была видна его граница; сверху, справа и снизу — под кнопки и легенду
-    const fit = { paddingTopLeft: [28, 64] as [number, number], paddingBottomRight: [64, 64] as [number, number] };
+    const fit = { paddingTopLeft: fitPad?.tl ?? [28, 64] as [number, number], paddingBottomRight: fitPad?.br ?? [64, 64] as [number, number] };
     // меньше этого масштаба отдалить нельзя: весь район с небольшим запасом
     const limit = () => {
       map.setMinZoom(0);
-      map.setMinZoom(map.getBoundsZoom(view, false));
+      map.setMinZoom(fitPad ? map.getBoundsZoom(area, false, L.point(fitPad.tl[0] + fitPad.br[0], fitPad.tl[1] + fitPad.br[1])) - 0.6 : map.getBoundsZoom(view, false));
     };
     const labels = () => map.getContainer().classList.toggle('compact', isCompact(map.getSize().x, map.getZoom()));
     // Центр полёта сразу поджимается внутрь границ: иначе после полёта к бую у края
@@ -158,7 +160,12 @@ function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
 }
 
 /** Офлайн-схема дельты по OpenStreetMap — работает без интернета и без ключа. */
-export default function MapView({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
+/** Отступы вписывания района: сверху-слева и снизу-справа, в пикселях */
+export type FitPad = { tl: [number, number]; br: [number, number] };
+
+export default function MapView({ state, handle, selected, onSelect, live = false, pad }: {
+  state: State; handle: MutableRefObject<MapHandle | null>; live?: boolean; pad?: FitPad;
+} & Selection) {
   const booting = useBooting();
   const C = PALETTE[useTheme().theme];
   // Выбор не пересоздаёт значок: на живом элементе переключается класс, и буй плавно
@@ -182,7 +189,8 @@ export default function MapView({ state, handle, selected, onSelect }: { state: 
     <MapContainer bounds={area} zoomSnap={0.1} zoomDelta={0.5} maxZoom={13} maxBoundsViscosity={1}
       zoomControl={false} attributionControl={false} className="map-scheme h-full w-full">
       <AttributionControl prefix={false} position="bottomright" />
-      <Bounded area={area} handle={handle} focus={active} booting={booting} />
+      <Bounded area={area} handle={handle} focus={active} booting={booting} fitPad={pad} />
+      {live && <LiveDelta area={area} buoys={state.buoys} alerts={state.alerts} />}
       <ClickAway onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
       <Pane name="land" style={{ zIndex: 350 }}><DeltaLayer c={C} /></Pane>

@@ -28,6 +28,30 @@ export const design: Design = pick();
 document.documentElement.dataset.design = design;
 
 /**
+ * Раскладка экрана:
+ *   'delta'  — «Карта — всё»: живая дельта на весь экран, разделы листом поверх карты, док внизу;
+ *   'panels' — прежняя: боковое меню, шапка и страницы.
+ * ОТКАТ: DEFAULT_LAYOUT = 'panels'; сравнить — ?layout=panels или ?layout=delta (запоминается), ?layout=default — забыть.
+ * Прежнее оформление (?design=classic) всегда с прежней раскладкой.
+ */
+export type Layout = 'delta' | 'panels';
+const DEFAULT_LAYOUT: Layout = 'delta';
+const LAYOUT_KEY = '404-layout';
+function pickLayout(): Layout {
+  if (design === 'classic') return 'panels';
+  try {
+    const q = new URLSearchParams(location.search).get('layout');
+    if (q === 'delta' || q === 'panels') localStorage.setItem(LAYOUT_KEY, q);
+    else if (q === 'default') localStorage.removeItem(LAYOUT_KEY);
+    const saved = localStorage.getItem(LAYOUT_KEY);
+    if (saved === 'delta' || saved === 'panels') return saved;
+  } catch { /* приватный режим */ }
+  return DEFAULT_LAYOUT;
+}
+export const layout: Layout = pickLayout();
+document.documentElement.dataset.layout = layout;
+
+/**
  * Цвет «повышенного риска». В оформлении «УПК» вместо яркого оранжевого — приглушённый янтарь
  * с прошлого сайта, и только в мелких отметках (см. design-upk.css); в прежнем — как было.
  */
