@@ -29,7 +29,6 @@ function beep() {
 export default function App() {
   const { state, online } = useLiveState();
   const [basemap, setBasemap] = useState<Basemap>(hasYandexKey ? 'yandex' : 'scheme');
-  const [yandexOk, setYandexOk] = useState(hasYandexKey);
   const [notice, setNotice] = useState<string | null>(null);
   const lastAlert = useRef<string | null>(null);
 
@@ -41,7 +40,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-bg text-primary">
-      <TopBar mode={state?.mode ?? null} online={online} basemap={basemap} yandexAvailable={yandexOk}
+      <TopBar mode={state?.mode ?? null} online={online} basemap={basemap} yandexAvailable={hasYandexKey}
         onBasemap={(b) => { setNotice(null); setBasemap(b); }}
         onDemo={() => api.runDemo()} onReset={() => api.resetDemo()} />
       {state ? (
@@ -49,9 +48,8 @@ export default function App() {
           <div className="relative h-[55vh] md:h-auto md:flex-1">
             {basemap === 'yandex' ? (
               <YandexMapView state={state} onFail={(why) => {
-                setYandexOk(false);
                 setBasemap('scheme');
-                setNotice(`Яндекс Карты недоступны (${why}) — показана офлайн-схема`);
+                setNotice(`Яндекс Карты недоступны: ${why}. Показана офлайн-схема — кнопка «Яндекс» в шапке попробует снова.`);
               }} />
             ) : (
               <MapView state={state} />
