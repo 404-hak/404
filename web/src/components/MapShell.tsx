@@ -39,7 +39,7 @@ function useWidth(ref: RefObject<HTMLElement>) {
 }
 
 /** Широкая карта — легенда строкой внизу; узкая — карточка по кнопке «Что на карте?». */
-function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) {
+function Legend({ intercept, inline, links = true }: { intercept: boolean; inline: boolean; links?: boolean }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const shown = open ?? inline;
   const row = 'flex items-center gap-2 whitespace-nowrap';
@@ -48,7 +48,7 @@ function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) 
     <>
       <span className={row}><span className="ml-[3px] mr-[3px] h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_rgb(var(--rgb-primary)/.2)]" />{inline ? 'Вы — катер' : 'Вы — катер инспектора'}</span>
       <span className={row}><span className="h-3 w-3.5 shrink-0 rounded-[2px] border-[1.5px] border-warn bg-warn/15" />{inline ? 'Высокий риск' : 'Сектор высокого риска'}</span>
-      <span className={row}><span className="w-3.5 shrink-0 border-t-2 border-dotted border-accent" />{inline ? 'Связь буёв' : 'Связь между буями'}</span>
+      {links && <span className={row}><span className="w-3.5 shrink-0 border-t-2 border-dotted border-accent" />{inline ? 'Связь буёв' : 'Связь между буями'}</span>}
       {intercept && <span className={row}><span className="w-3.5 shrink-0 border-t-2 border-dashed border-primary" />Маршрут перехвата</span>}
     </>
   );
@@ -171,7 +171,7 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
         </div>
 
         <div className={`fade-in absolute left-3 ${inline ? 'bottom-8 right-16' : 'top-3'}`} style={{ animationDelay: '1.2s' }}>
-          <Legend intercept={intercept} inline={inline} />
+          <Legend intercept={intercept} inline={inline} links={!live} />
         </div>
       </div>
     </div>

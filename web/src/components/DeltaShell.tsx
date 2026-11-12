@@ -8,6 +8,7 @@ import { ICONS, NAV, SoundToggle, ThemeSwitch } from './Nav';
 import { MODE } from './TopBar';
 import { showIntro } from '../introBus';
 import { useTween } from '../motion';
+import { HAZES, hazePicker, setHaze, useHaze } from './MapHaze';
 
 const TZ = 'Europe/Astrakhan';
 const dayFmt = new Intl.DateTimeFormat('ru-RU', { timeZone: TZ, day: 'numeric', month: 'long' });
@@ -125,6 +126,8 @@ export default function DeltaShell({ state, online, route, go, badges, page, han
         </div>
       </section>
 
+      {hazePicker && route === 'map' && <HazePicker />}
+
       <nav aria-label="Разделы" className="delta-dock lit">
         {items.map((it) => (
           <button key={it.id} type="button" onClick={() => go(it.id)} aria-current={route === it.id ? 'page' : undefined} title={it.label}
@@ -137,5 +140,19 @@ export default function DeltaShell({ state, online, route, go, badges, page, han
         ))}
       </nav>
     </>
+  );
+}
+
+/** Переключатель вариантов дымки — для выбора (виден при ?haze в адресе) */
+function HazePicker() {
+  const v = useHaze();
+  return (
+    <div className="delta-haze lit" role="radiogroup" aria-label="Вариант дымки">
+      <span className="px-2 text-[12.5px] text-muted">Дымка</span>
+      {HAZES.map((h) => (
+        <button key={h.id} type="button" role="radio" aria-checked={v === h.id} onClick={() => setHaze(h.id)}>{h.id} · {h.name}</button>
+      ))}
+      <button type="button" role="radio" aria-checked={v === 0} onClick={() => setHaze(0)}>без</button>
+    </div>
   );
 }

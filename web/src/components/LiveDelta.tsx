@@ -34,8 +34,7 @@ function linesIn(fc: FeatureCollection, area: Bounds): Line[] {
 }
 
 /**
- * Живая дельта: по руслам района медленно течёт свет (вниз по течению — так нарисованы линии в OSM),
- * буи «слушают» — от каждого время от времени расходится тихое кольцо, от буя с тревогой — частые
+ * Живая дельта: буи «слушают» — от каждого время от времени расходится тихое кольцо (круги на воде), от буя с тревогой — частые
  * красные, а новая тревога пускает по воде большую волну. Рисуется на одном холсте поверх схемы,
  * 30 кадров в секунду; при приближении холст гаснет и появляется на новом масштабе.
  */
@@ -90,15 +89,7 @@ export default function LiveDelta({ area, buoys, alerts }: { area: Bounds; buoys
       ctx.beginPath(); ctx.rect(a.x, a.y, b.x - a.x, b.y - a.y); ctx.clip();
       ctx.translate(o.x, o.y);
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      if (rivers && streams) {
-        // протоки чуть светятся ровно, по главным руслам редкими длинными бликами течёт свет
-        ctx.setLineDash([]);
-        ctx.strokeStyle = day ? 'rgba(255,255,255,.28)' : 'rgba(120,165,205,.10)'; ctx.lineWidth = 1; ctx.stroke(streams);
-        ctx.strokeStyle = day ? 'rgba(255,255,255,.35)' : 'rgba(120,165,205,.16)'; ctx.lineWidth = 2.2; ctx.stroke(rivers);
-        ctx.setLineDash([18, 210]); ctx.lineDashOffset = still ? 0 : -t * 26;
-        ctx.strokeStyle = day ? 'rgba(255,255,255,.45)' : 'rgba(150,196,228,.14)'; ctx.lineWidth = 6; ctx.stroke(rivers);
-        ctx.strokeStyle = day ? 'rgba(255,255,255,.9)' : 'rgba(205,228,246,.62)'; ctx.lineWidth = 1.6; ctx.stroke(rivers);
-      }
+      // русла больше не подсвечиваются бегущими линиями: живость карте даёт дымка (MapHaze)
       ctx.restore();
       if (still) return;
       // буи слушают воду: редкие тихие кольца; у тревоги — частые красные

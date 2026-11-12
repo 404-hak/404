@@ -110,3 +110,18 @@ html[data-layout="delta"][data-theme="day"] .delta-dock-item[aria-current="page"
 
 /* карта на весь экран: виньетка мягче, подписи района не прячутся под шапкой */
 html[data-layout="delta"] .map-vignette { opacity: .6; }
+
+/* переключатель вариантов дымки (виден при ?haze): слева внизу, не мешает кнопкам карты */
+html[data-layout="delta"] .delta-haze {
+  position: absolute; z-index: 1400; left: 16px; bottom: 20px; display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  padding: 6px; border-radius: 16px; background: var(--c-surface);
+}
+html[data-layout="delta"] .delta-haze > * { position: relative; z-index: 1; }
+html[data-layout="delta"] .delta-haze button {
+  height: 34px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--c-text-2); font-size: 13px; font-weight: 600; text-align: left; white-space: nowrap;
+}
+html[data-layout="delta"] .delta-haze button[aria-checked="true"] { background: rgb(var(--rgb-accent) / .26); color: var(--c-text); }
+@media (max-width: 767px) {
+  html[data-layout="delta"] .delta-haze { left: 8px; right: 8px; bottom: auto; top: calc(66px + env(safe-area-inset-top)); flex-direction: row; overflow-x: auto; }
+  html[data-layout="delta"] .delta-haze > span { display: none; }
+}

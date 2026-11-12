@@ -9,6 +9,7 @@ import { useBooting } from '../motion';
 import { useTheme } from '../theme';
 import { WARN } from '../design';
 import LiveDelta, { loadDelta } from './LiveDelta';
+import MapHaze from './MapHaze';
 
 /** Цвета схемы по теме: ночью вода темнее суши, днём — синее, вне района — затемнение или высветление */
 const PALETTE = {
@@ -190,6 +191,7 @@ export default function MapView({ state, handle, selected, onSelect, live = fals
       zoomControl={false} attributionControl={false} className="map-scheme h-full w-full">
       <AttributionControl prefix={false} position="bottomright" />
       <Bounded area={area} handle={handle} focus={active} booting={booting} fitPad={pad} />
+      {live && <MapHaze buoys={state.buoys} />}
       {live && <LiveDelta area={area} buoys={state.buoys} alerts={state.alerts} />}
       <ClickAway onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
@@ -209,7 +211,8 @@ export default function MapView({ state, handle, selected, onSelect, live = fals
       <Rectangle bounds={area} interactive={false} eventHandlers={DRAW}
         pathOptions={{ color: C.primary, opacity: 0.4, weight: 1.2, fill: false, className: 'draw' }} />
 
-      {state.links.map(([a, b]) => {
+      {/* в «Карте — всё» без пунктирного «созвездия» связей: сеть видна по буям и дымке */}
+      {!live && state.links.map(([a, b]) => {
         if (!byId[a] || !byId[b]) return null;
         const alarm = byId[a].status === 'alert' || byId[b].status === 'alert';
         return (

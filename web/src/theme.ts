@@ -7,6 +7,7 @@
  * Интерфейс плавно светлеет и теплеет; середину между тёмным и светлым он проходит
  * короткой анимацией — там текст был бы серым на сером и не читался.
  */
+import { design } from './design';
 import { useEffect, useState } from 'react';
 
 export type ThemePref = 'night' | 'day' | 'auto';
@@ -181,12 +182,16 @@ function safeUi(k: number, warm: number) {
 }
 
 // ---------- состояние ----------
+/** В оформлении «УПК» тем две — тёмная (морская) и светлая; «Авто» — только в прежнем оформлении и при ?sky / ?speed */
+const TWO_THEMES = design !== 'classic';
 const readPref = (): ThemePref => {
+  const fallback: ThemePref = TWO_THEMES ? 'night' : 'auto';
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'night' || v === 'day' || v === 'auto' ? v : 'auto';
+    if (TWO_THEMES && v === 'auto') return 'night';
+    return v === 'night' || v === 'day' || v === 'auto' ? v : fallback;
   } catch {
-    return 'auto';
+    return fallback;
   }
 };
 /** ?sky=2026-11-12T16:10 — «Авто» как в это время по МСК (проверка и показ рассвета/заката на защите) */

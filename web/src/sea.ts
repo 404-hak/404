@@ -512,7 +512,8 @@ export function targets(mode: Mode, moonProp: number) {
   const base = palAt(now.sunAlt);
   const tint = TINT[mode];
   const tn = (c: V3, k: number) => c.map((v, i) => v + (tint.c[i] - v) * tint.k * k) as V3;
-  const pal: Pal = { ...base, far: tn(base.far, 1), near: tn(base.near, 0.6), hz: tn(base.hz, 0.5), line: tn(base.line, 0.4) };
+  // в оформлении «УПК» на небе нет звёздной россыпи: ночью только луна и огни буёв у горизонта
+  const pal: Pal = { ...base, stars: design === 'classic' ? base.stars : 0, far: tn(base.far, 1), near: tn(base.near, 0.6), hz: tn(base.hz, 0.5), line: tn(base.line, 0.4) };
   const phase = (now.moon.waxing ? 1 : -1) * Math.max(0.001, now.moon.illum);
   return {
     pal,

@@ -32,10 +32,14 @@ const THEME_ICON: Record<ThemePref, ReactNode> = {
   day: <I><circle cx="10" cy="10" r="3.4" /><path d="M10 2.5v1.8M10 15.7v1.8M2.5 10h1.8M15.7 10h1.8M4.7 4.7l1.3 1.3M14 14l1.3 1.3M4.7 15.3 6 14M14 6l1.3-1.3" /></I>,
   auto: <I><circle cx="10" cy="10" r="6.5" /><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" stroke="none" /></I>,
 };
-const THEME_LABEL: Record<ThemePref, string> = { night: 'Ночь', day: 'День', auto: 'Авто' };
-const NEXT: Record<ThemePref, ThemePref> = { auto: 'night', night: 'day', day: 'auto' };
+// в оформлении «УПК» тем две: тёмная (морская) и светлая
+const TWO = design !== 'classic';
+const THEME_LABEL: Record<ThemePref, string> = TWO ? { night: 'Тёмная', day: 'Светлая', auto: 'Авто' } : { night: 'Ночь', day: 'День', auto: 'Авто' };
+const NEXT: Record<ThemePref, ThemePref> = TWO ? { auto: 'day', night: 'day', day: 'night' } : { auto: 'night', night: 'day', day: 'auto' };
+const PREFS: ThemePref[] = TWO ? ['night', 'day'] : ['night', 'day', 'auto'];
 
 function themeHint(pref: ThemePref, theme: string, rise: string, set: string) {
+  if (TWO && pref !== 'auto') return `Тема: ${THEME_LABEL[pref].toLowerCase()}`;
   if (pref === 'auto') return `Авто по МСК: день с ${rise} до ${set}, сейчас — ${theme === 'day' ? 'день' : 'ночь'}`;
   return `Тема: ${THEME_LABEL[pref].toLowerCase()}`;
 }
@@ -55,15 +59,15 @@ export function ThemeSwitch({ compact = false, always = false }: { compact?: boo
   return (
     <>
       {cycle}
-      <div role="radiogroup" aria-label="Тема" title={hint} className="ui-seg hidden grid-cols-3 gap-1 rounded-[10px] border border-line bg-white/[.03] p-1 xl:grid">
-        {(['night', 'day', 'auto'] as ThemePref[]).map((p) => (
+      <div role="radiogroup" aria-label="Тема" title={hint} className={`ui-seg hidden ${TWO ? 'grid-cols-2' : 'grid-cols-3'} gap-1 rounded-[10px] border border-line bg-white/[.03] p-1 xl:grid`}>
+        {PREFS.map((p) => (
           <button key={p} type="button" role="radio" aria-checked={pref === p} onClick={() => { if (p !== pref) sparkTransition(() => setPref(p, design !== 'upk'), 980); }}
             className={`ui-seg-btn flex h-8 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium ${pref === p ? 'bg-white/10 text-primary' : 'text-muted hover:text-primary'}`}>
             <span className="scale-[.8]">{THEME_ICON[p]}</span>{THEME_LABEL[p]}
           </button>
         ))}
       </div>
-      {pref === 'auto' && (design === 'upk' ? <SkyToggle rise={rise} set={set} /> : <SkyClock rise={rise} set={set} />)}
+      {pref === 'auto' && (TWO ? <SkyToggle rise={rise} set={set} /> : <SkyClock rise={rise} set={set} />)}
     </>
   );
 }

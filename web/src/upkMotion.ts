@@ -1,12 +1,13 @@
 /**
- * Движение интерфейса с прошлого сайта команды (404 · УПК), перенесённое как есть по смыслу:
- *  — свой указатель мыши: четырёхлучевая искра из знака 404 с кольцом, следом и вспышкой на нажатие;
- *  — искры на краях выделенного текста и вспышка, когда выделение отпустили или скопировали;
- *  — новый раздел и новая тема раскрываются знаком 404 из точки нажатия (View Transitions);
- *  — «магнитные» главные кнопки: тянутся за курсором на пару пикселей;
- *  — номера и отпечатки «перебираются» и встают на место слева направо.
+ * Движение интерфейса в оформлении «УПК» — мотив воды: всё, что происходит, — круги на воде.
+ *  — указатель мыши — маленький поплавок: качается за мышью, над кнопкой «клюёт» (ныряет и встаёт),
+ *    при нажатии ныряет, и от точки расходятся круги; за быстрым движением остаётся тихий след;
+ *  — новый раздел и новая тема всплывают из точки нажатия волнистой кромкой, как круг от капли
+ *    (View Transitions), прежний экран уходит вглубь и темнеет;
+ *  — выделенный текст светится, а когда его отпустили или скопировали, от конца расходятся круги;
+ *  — «магнитные» главные кнопки; номера и отпечатки перебираются и встают на место.
  * Работает только в оформлении «УПК» (design.ts); при «уменьшить движение» — выключено.
- * Указатель и искры выделения — только для мыши: на телефоне остаются системные жесты.
+ * Поплавок и круги от выделения — только для мыши: на телефоне остаются системные жесты.
  */
 import { flushSync } from 'react-dom';
 import { design } from './design';
@@ -16,68 +17,43 @@ const ON = design === 'upk';
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const fineMouse = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 
-/** Искра знака 404 */
-export const SPARK_PATH = 'M12 0C12.9 7.6 16.4 11.1 24 12C16.4 12.9 12.9 16.4 12 24C11.1 16.4 7.6 12.9 0 12C7.6 11.1 11.1 7.6 12 0Z';
-const SHAPE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${SPARK_PATH}"/></svg>`;
-
-function part(className: string, inner: string) {
-  const el = document.createElement('div');
-  el.className = className;
-  el.setAttribute('aria-hidden', 'true');
-  el.innerHTML = inner;
-  return el;
-}
-
-/** Вспышка: искры разлетаются из точки по кругу */
-export function sparks(cx: number, cy: number, radius: number, count = 8) {
+/** Круги на воде из точки: несколько эллипсов расходятся и тают (вода видна чуть сверху — круги сплюснуты) */
+export function ripples(cx: number, cy: number, { count = 3, size = 70, duration = 1100, strong = false } = {}) {
   if (!ON || reduced()) return;
-  const turn = Math.random() * 45;
   for (let i = 0; i < count; i += 1) {
-    const angle = ((turn + (i * 360) / count) * Math.PI) / 180;
-    const far = radius + 16 + Math.random() * 22;
-    const bit = part('cursor-bit', SHAPE);
-    document.body.append(bit);
-    const anim = bit.animate(
+    const el = document.createElement('div');
+    el.className = `ripple${strong ? ' is-strong' : ''}`;
+    el.setAttribute('aria-hidden', 'true');
+    document.body.append(el);
+    const s = size * (1 - i * 0.18);
+    const anim = el.animate(
       [
-        { transform: `translate3d(${cx + Math.cos(angle) * radius}px, ${cy + Math.sin(angle) * radius}px, 0) scale(0.9)`, opacity: 1 },
-        { transform: `translate3d(${cx + Math.cos(angle) * far}px, ${cy + Math.sin(angle) * far}px, 0) scale(0) rotate(120deg)`, opacity: 0 },
+        { transform: `translate3d(${cx}px, ${cy}px, 0) translate(-50%, -50%) scale(0.12)`, opacity: 0.9 },
+        { transform: `translate3d(${cx}px, ${cy}px, 0) translate(-50%, -50%) scale(1)`, opacity: 0 },
       ],
-      { duration: 560, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' },
+      { duration: duration + i * 120, delay: i * 140, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'both' },
     );
-    anim.onfinish = anim.oncancel = () => bit.remove();
+    el.style.width = `${s * 2}px`;
+    el.style.height = `${s * 0.8}px`;
+    anim.onfinish = anim.oncancel = () => el.remove();
   }
 }
 
-// ---------- раскрытие знаком 404 ----------
-let unit: [number, number][] | null = null;
-/** Отрезки кривых знака → многоугольник для clip-path */
-function unitShape() {
-  if (unit) return unit;
-  const n = SPARK_PATH.match(/-?\d*\.?\d+/g)!.map(Number);
-  let px = n[0], py = n[1];
-  unit = [];
-  for (let i = 2; i + 5 < n.length; i += 6) {
-    for (let k = 0; k < 8; k++) {
-      const t = k / 8, u = 1 - t;
-      const bx = u * u * u * px + 3 * u * u * t * n[i] + 3 * u * t * t * n[i + 2] + t * t * t * n[i + 4];
-      const by = u * u * u * py + 3 * u * u * t * n[i + 1] + 3 * u * t * t * n[i + 3] + t * t * t * n[i + 5];
-      unit.push([(bx - 12) / 12, (by - 12) / 12]);
-    }
-    px = n[i + 4];
-    py = n[i + 5];
-  }
-  return unit;
-}
-/** Кадры: знак растёт из точки и поворачивается, пока не закроет область радиусом radius */
-function sparkFrames(cx: number, cy: number, radius: number, steps = 18) {
-  const shape = unitShape();
-  const inner = Math.min(...shape.map((p) => Math.hypot(p[0], p[1])));
-  const full = (radius / inner) * 1.15;
-  const frames: string[] = [];
+// ---------- всплытие: кромка круга от капли, волнистая ----------
+/** Кадры clip-path: круг из точки растёт, по краю бежит затухающая волна */
+function waveFrames(cx: number, cy: number, radius: number, steps = 20) {
+  const N = 72, frames: string[] = [];
   for (let f = 0; f <= steps; f++) {
-    const progress = f / steps, size = full * progress;
-    const turn = (-50 + 50 * progress) * (Math.PI / 180), cos = Math.cos(turn), sin = Math.sin(turn);
-    frames.push(`polygon(${shape.map((p) => `${(cx + (p[0] * cos - p[1] * sin) * size).toFixed(1)}px ${(cy + (p[0] * sin + p[1] * cos) * size).toFixed(1)}px`).join(',')})`);
+    const k = f / steps;
+    const r = radius * 1.08 * (1 - (1 - k) ** 2.2);
+    const amp = 0.07 * (1 - k);
+    const pts: string[] = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const rr = r * (1 + amp * Math.sin(a * 7 + k * 9) + amp * 0.6 * Math.sin(a * 3 - k * 6));
+      pts.push(`${(cx + Math.cos(a) * rr).toFixed(1)}px ${(cy + Math.sin(a) * rr).toFixed(1)}px`);
+    }
+    frames.push(`polygon(${pts.join(',')})`);
   }
   return frames;
 }
@@ -90,7 +66,7 @@ if (ON) {
 
 type VT = { ready: Promise<void>; finished: Promise<void> };
 /**
- * Смена экрана со знаком 404: новое состояние раскрывается из точки нажатия, прежнее отступает вглубь
+ * Смена экрана: новое состояние всплывает из точки нажатия волнистой кромкой, прежнее отступает вглубь
  * и темнеет. Где View Transitions нет (или движение выключено, или идёт заставка) — просто смена.
  */
 export function sparkTransition(update: () => void, duration = 760) {
@@ -103,7 +79,8 @@ export function sparkTransition(update: () => void, duration = 760) {
   try { transition = start.call(document, () => flushSync(update)); } catch { update(); return; }
   transition.ready.then(() => {
     const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-    root.animate({ clipPath: sparkFrames(x, y, radius) }, { duration, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' });
+    root.animate({ clipPath: waveFrames(x, y, radius) }, { duration, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', pseudoElement: '::view-transition-new(root)' });
+    ripples(x, y, { count: 2, size: 120, duration: 900 });
     root.animate({ filter: ['brightness(1.5)', 'brightness(1)'] }, { duration, easing: 'ease-out', pseudoElement: '::view-transition-new(root)' });
     root.animate({ transform: ['scale(1)', 'scale(0.93)'], filter: ['brightness(1)', 'brightness(0.5)'] },
       { duration, easing: 'cubic-bezier(0.4, 0, 0.6, 1)', pseudoElement: '::view-transition-old(root)', fill: 'forwards' });
@@ -141,70 +118,54 @@ export function scramble(el: HTMLElement | null, { duration = 900, delay = 0 } =
 /** ref для React: <span ref={scrambleRef}>…</span> */
 export const scrambleRef = (el: HTMLElement | null) => scramble(el);
 
-// ---------- свой указатель ----------
+// ---------- указатель-поплавок ----------
 const INTERACTIVE = 'a[href], button, [role="button"], [role="tab"], [role="radio"], [role="option"], label, select, summary, input[type="range"], input[type="checkbox"], .buoy, .leaflet-interactive, [tabindex]:not([tabindex="-1"])';
 const TEXT_FIELD = 'input:not([type="checkbox"], [type="radio"], [type="file"], [type="button"], [type="submit"], [type="range"]), textarea, [contenteditable="true"]';
 const DISABLED = 'button:disabled, input:disabled, select:disabled, [aria-disabled="true"]';
-const RING_EASE = 0.2;      // кольцо догоняет указатель с небольшой задержкой
-const TRAIL_STEP = 64;      // через сколько пикселей пути оставлять след
-const MAX_BITS = 16;        // больше частиц разом не нужно: это украшение, а не нагрузка
-const BURST_BITS = 6;
+const FOLLOW = 0.32;       // поплавок догоняет мышь с небольшой задержкой — как на воде
+const WAKE_STEP = 120;     // через сколько пикселей быстрого пути оставлять тихий след
+/**
+ * Поплавок в стиле знака 404: тонкая игла, как у знака, и кольцо с точкой, как у буя на карте;
+ * без заливок, только линии. Точка указателя — на ватерлинии.
+ */
+const FLOAT = '<svg viewBox="0 0 20 40" aria-hidden="true"><path class="f-needle" d="M10 2v36"/><circle class="f-ring" cx="10" cy="18" r="5"/><circle class="f-dot" cx="10" cy="18" r="1.6"/></svg>';
 
 function startCursor() {
-  const cursor = part('cursor', `<div class="cursor-pose">${SHAPE}</div><div class="cursor-beam"><i></i></div>`);
-  const ring = part('cursor-ring', '<i></i>');
-  let x = 0, y = 0, ringX = 0, ringY = 0, frame = 0, shown = false, travelled = 0, bits = 0;
+  const float = document.createElement('div');
+  float.className = 'float';
+  float.setAttribute('aria-hidden', 'true');
+  float.innerHTML = `<div class="float-tilt"><div class="float-bob">${FLOAT}</div><div class="float-beam"><i></i></div></div><span class="float-ring"></span>`;
+  const tilt = float.firstElementChild as HTMLElement;
+  let x = 0, y = 0, fx = 0, fy = 0, vx = 0, frame = 0, shown = false, travelled = 0;
   let lastTarget: EventTarget | null = null;
-  const place = (el: HTMLElement, px: number, py: number) => { el.style.transform = `translate3d(${px}px, ${py}px, 0)`; };
   const tick = () => {
     frame = 0;
-    ringX += (x - ringX) * RING_EASE;
-    ringY += (y - ringY) * RING_EASE;
-    place(cursor, x, y);
-    place(ring, ringX, ringY);
-    if (Math.abs(x - ringX) + Math.abs(y - ringY) > 0.2) frame = requestAnimationFrame(tick);
+    const nx = fx + (x - fx) * FOLLOW, ny = fy + (y - fy) * FOLLOW;
+    vx += ((nx - fx) - vx) * 0.25;
+    fx = nx; fy = ny;
+    float.style.transform = `translate3d(${fx}px, ${fy}px, 0)`;
+    tilt.style.transform = `rotate(${Math.max(-22, Math.min(22, vx * 1.6))}deg)`;
+    if (Math.abs(x - fx) + Math.abs(y - fy) > 0.2 || Math.abs(vx) > 0.05) frame = requestAnimationFrame(tick);
   };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(tick); };
-  const toggle = (name: string, on: boolean) => { cursor.classList.toggle(name, on); ring.classList.toggle(name, on); };
   const show = () => {
     if (shown) return;
     shown = true;
-    if (!cursor.isConnected) {
-      document.body.append(ring, cursor);
+    if (!float.isConnected) {
+      document.body.append(float);
       document.documentElement.classList.add('has-cursor');
     }
-    ringX = x; ringY = y; travelled = 0;
-    toggle('is-on', true);
+    fx = x; fy = y; travelled = 0;
+    float.classList.add('is-on');
   };
-  const hide = () => { shown = false; toggle('is-on', false); };
+  const hide = () => { shown = false; float.classList.remove('is-on'); };
   const describe = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return;
     const disabled = !!target.closest(DISABLED);
     const text = !disabled && !!target.closest(TEXT_FIELD);
-    toggle('is-disabled', disabled);
-    toggle('is-text', text);
-    toggle('is-hover', !disabled && !text && !!target.closest(INTERACTIVE));
-  };
-  const spawn = (px: number, py: number, dx: number, dy: number, size: number, duration: number) => {
-    if (reduced() || bits >= MAX_BITS) return;
-    bits += 1;
-    const bit = part('cursor-bit', SHAPE);
-    document.body.append(bit);
-    const anim = bit.animate(
-      [
-        { transform: `translate3d(${px}px, ${py}px, 0) scale(${size})`, opacity: 0.9 },
-        { transform: `translate3d(${px + dx}px, ${py + dy}px, 0) scale(0) rotate(90deg)`, opacity: 0 },
-      ],
-      { duration, easing: 'cubic-bezier(0.2, 0.7, 0.3, 1)', fill: 'forwards' },
-    );
-    anim.onfinish = anim.oncancel = () => { bit.remove(); bits -= 1; };
-  };
-  const burst = () => {
-    const turn = Math.random() * 60;
-    for (let i = 0; i < BURST_BITS; i += 1) {
-      const angle = ((turn + i * 60) * Math.PI) / 180, distance = 22 + Math.random() * 14;
-      spawn(x, y, Math.cos(angle) * distance, Math.sin(angle) * distance, 0.55 + Math.random() * 0.4, 520);
-    }
+    float.classList.toggle('is-disabled', disabled);
+    float.classList.toggle('is-text', text);
+    float.classList.toggle('is-bite', !disabled && !text && !!target.closest(INTERACTIVE));
   };
 
   document.addEventListener('pointermove', (e) => {
@@ -213,10 +174,11 @@ function startCursor() {
     x = e.clientX; y = e.clientY;
     show();
     if (e.target !== lastTarget) { lastTarget = e.target; describe(e.target); }
-    travelled += distance;
-    if (travelled >= TRAIL_STEP) {
+    // быстрое движение оставляет на воде тихий след
+    travelled += distance > 6 ? distance : 0;
+    if (travelled >= WAKE_STEP && !float.classList.contains('is-text')) {
       travelled = 0;
-      if (!cursor.classList.contains('is-text')) spawn(x, y, (Math.random() - 0.5) * 14, 6 + Math.random() * 10, 0.3 + Math.random() * 0.3, 650);
+      ripples(x, y, { count: 1, size: 26, duration: 900 });
     }
     schedule();
   }, { passive: true });
@@ -227,65 +189,36 @@ function startCursor() {
     lastTarget = e.target;
     describe(e.target);
     schedule();
-    toggle('is-down', true);
-    if (!cursor.classList.contains('is-text')) burst();
+    float.classList.add('is-down');
+    if (!float.classList.contains('is-text')) {
+      const strong = e.target instanceof Element && !!e.target.closest('.ui-btn-primary, .ui-btn-danger');
+      ripples(x, y, { count: 3, size: strong ? 90 : 60, strong });
+    }
   }, { passive: true });
-  const release = () => toggle('is-down', false);
+  const release = () => float.classList.remove('is-down');
   document.addEventListener('pointerup', release, { passive: true });
   document.addEventListener('pointercancel', release, { passive: true });
   window.addEventListener('blur', release);
   document.documentElement.addEventListener('mouseleave', hide);
 }
 
-// ---------- искры выделения ----------
+// ---------- выделение: от конца расходятся круги ----------
 function startSelection() {
   const LINE_MAX = 120;   // прямоугольник выше этого — целый блок, а не строка текста
-  const make = (kind: string) => part(`sel-spark ${kind}`, SHAPE);
-  const first = make('is-start'), end = make('is-end');
-  let frame = 0, endPoint: { x: number; y: number } | null = null;
-  const isVisible = (node: Node, x: number, y: number) => {
-    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return false;
-    for (let el = node instanceof Element ? node : node.parentElement; el && el !== document.body; el = el.parentElement) {
-      const style = getComputedStyle(el);
-      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
-      const box = el.getBoundingClientRect();
-      if (x < box.left - 1 || x > box.right + 1 || y < box.top - 1 || y > box.bottom + 1) return false;
-    }
-    return true;
-  };
-  const selectedRange = () => {
+  const endPoint = () => {
     const selection = getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
     if (document.activeElement?.matches?.('input, textarea')) return null;
-    return selection.getRangeAt(0);
+    const lines = [...selection.getRangeAt(0).getClientRects()].filter((r) => r.width > 0.5 && r.height > 0 && r.height < LINE_MAX);
+    const tail = lines[lines.length - 1];
+    return tail ? { x: tail.right, y: tail.bottom - 2 } : null;
   };
-  const place = (el: HTMLElement, x: number, y: number, on: boolean) => {
-    if (on && !el.isConnected) document.body.append(el);
-    el.classList.toggle('is-on', on);
-    if (on) el.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-  };
-  const draw = () => {
-    frame = 0;
-    endPoint = null;
-    const range = selectedRange();
-    const lines = range ? [...range.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0 && r.height < LINE_MAX) : [];
-    if (!range || !lines.length) { place(first, 0, 0, false); place(end, 0, 0, false); return; }
-    const head = lines[0], tail = lines[lines.length - 1];
-    place(first, head.left, head.top, isVisible(range.startContainer, head.left, head.top));
-    const tailOn = isVisible(range.endContainer, tail.right, tail.bottom);
-    place(end, tail.right, tail.bottom, tailOn);
-    if (tailOn) endPoint = { x: tail.right, y: tail.bottom };
-  };
-  const schedule = () => { if (!frame) frame = requestAnimationFrame(draw); };
-  const burst = () => { if (endPoint) sparks(endPoint.x, endPoint.y, 3, 5); };
-  document.addEventListener('selectionchange', schedule);
-  window.addEventListener('scroll', schedule, { passive: true, capture: true });
-  window.addEventListener('resize', schedule, { passive: true });
+  const ring = () => { const p = endPoint(); if (p) ripples(p.x, p.y, { count: 2, size: 34, duration: 900 }); };
   document.addEventListener('pointerup', (e) => {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;
-    requestAnimationFrame(() => { draw(); burst(); });
+    requestAnimationFrame(ring);
   }, { passive: true });
-  document.addEventListener('copy', burst);
+  document.addEventListener('copy', ring);
 }
 
 // ---------- магнитные кнопки ----------

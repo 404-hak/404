@@ -6,6 +6,7 @@ import { HZ, currentSky, type Sky } from '../theme';
 import { hex, palAt, type V3 } from '../skyPalette';
 import { createSea, frameFrom, seaClock, targets, type Frame, type Sea } from '../sea';
 import { setIntroCover, setIntroPlaying, whenAppSettled } from '../introBus';
+import { design } from '../design';
 
 /**
  * Интро: то же море, что на фоне сайта (один рисовальщик, sea.ts), только ракурс ниже и с бликом
@@ -181,7 +182,7 @@ function buildPalette(sky: Sky, moon: number) {
     light, skyBands, band,
     skyTop: css(p.top), skyMid: css(mixV(p.hz, p.top, 0.45)), skyHz: css(p.hz), seaFar: css(p.far), seaNear: css(p.near),
     seaBands: [0, 1, 2, 3].map((i) => css(mixV(p.far, p.near, i / 3))),
-    line: css(p.line), island: css(p.isle), stars: p.stars, horizon: css(mixV(p.hz, [1, 1, 1], 0.35)),
+    line: css(p.line), island: css(p.isle), stars: design === 'classic' ? p.stars : 0, horizon: css(mixV(p.hz, [1, 1, 1], 0.35)),
     body: seen > 0.05 ? { x: bx, y: by, sun: useSun, seen, illum: sky.moon.illum >= 0 ? sky.moon.illum : moon, waxing: sky.moon.waxing } : null,
     bodyC: useSun ? css(p.sun) : css(mixV(hex('#F2C79A'), hex('#EEF1F8'), Math.min(1, Math.max(0, sky.moon.alt / 14)))),
     primary: '#FFFFFF', accent: light ? '#5E6A57' : '#8E9C80', muted: light ? '#505968' : '#B4BAC4',
