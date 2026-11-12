@@ -9,7 +9,7 @@ export const tokensCss = `/* 404 · дизайн-токены · версия 2.
   --c-surface: ${C.surface};   /* Глубинный · карточки, панели */
   --c-primary: ${C.primary};   /* Пенный · знак, основной текст */
   --c-grey: ${C.grey};      /* Сланцевый · крупный вторичный текст, линии */
-  --c-accent: ${C.accent};    /* Бирюзовый · акцент, узлы сети */
+  --c-accent: ${C.accent};    /* Шалфейный · акцент, узлы сети */
 
   /* статусы — только для состояний системы */
   --c-ok: ${C.accent};        /* Норма */
@@ -46,7 +46,7 @@ module.exports = {
         surface: '${C.surface}',   // Глубинный
         primary: '${C.primary}',   // Пенный
         grey: '${C.grey}',      // Сланцевый
-        accent: '${C.accent}',    // Бирюзовый
+        accent: '${C.accent}',    // Шалфейный
         ok: '${C.accent}',
         warn: '${C.warn}',      // Янтарный
         alert: '${C.alert}',     // Коралловый

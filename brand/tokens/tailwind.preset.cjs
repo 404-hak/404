@@ -7,8 +7,8 @@ module.exports = {
         surface: '#142236',   // Глубинный
         primary: '#E2E8F0',   // Пенный
         grey: '#64748B',      // Сланцевый
-        accent: '#2DD4BF',    // Бирюзовый
-        ok: '#2DD4BF',
+        accent: '#7A866F',    // Шалфейный
+        ok: '#7A866F',
         warn: '#F59E0B',      // Янтарный
         alert: '#EF4444',     // Коралловый
       },

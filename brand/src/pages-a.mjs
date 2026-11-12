@@ -42,7 +42,7 @@ function dimH(y, x1, x2, label, c, { above = true, off = 7 } = {}) {
 // ===== ОБЛОЖКА =====
 export function cover() {
   return `<section class="page dark" id="cover">
-  <div class="abs" style="inset:0;background:radial-gradient(ellipse 62% 50% at 50% 42%, rgba(45,212,191,.085), rgba(45,212,191,0) 70%),radial-gradient(ellipse 85% 70% at 50% 42%, ${C.surface}, ${C.bg} 72%)"></div>
+  <div class="abs" style="inset:0;background:radial-gradient(ellipse 62% 50% at 50% 42%, rgba(122,134,111,.16), rgba(122,134,111,0) 70%),radial-gradient(ellipse 85% 70% at 50% 42%, ${C.surface}, ${C.bg} 72%)"></div>
   ${box('left:0;right:0;top:236px', `<div style="display:flex;justify-content:center">${LV(C.primary, 'width:258px;height:auto')}</div>`)}
   ${box('left:63px;right:63px;top:710px;height:1px;background:var(--ln)')}
   ${box('left:63px;top:728px;font-weight:300;font-size:34px;letter-spacing:-.01em', 'Бренд-гайд')}
@@ -234,7 +234,7 @@ export function p21() {
 }
 
 export function p22() {
-  const dc = C.bg, g = 'rgba(11,22,40,.42)', band = 'rgba(45,212,191,.30)';
+  const dc = C.bg, g = 'rgba(11,22,40,.42)', band = 'rgba(122,134,111,.38)';
   // горизонтальный
   const sH = 0.80, lwH = LOCKUP_H.w * sH, lhH = LOCKUP_H.h * sH;
   const oxH = (600 - lwH) / 2 + 10, oyH = (330 - lhH) / 2;
@@ -284,7 +284,7 @@ export function p22() {
 }
 
 export function p23() {
-  const T = C.accent, dash = `fill="rgba(45,212,191,.12)" stroke="${T}" stroke-dasharray="4 3" stroke-width="1"`;
+  const T = C.accent, dash = `fill="rgba(122,134,111,.18)" stroke="${T}" stroke-dasharray="4 3" stroke-width="1"`;
   const logoBox = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${C.bg}" stroke="rgba(226,232,240,.35)" stroke-width=".8"/>`;
   const lbl = (x, y, t, a = 'middle') => `<text x="${x}" y="${y}" text-anchor="${a}" font-size="10" font-weight="600" fill="${C.primary}">${t}</text>`;
   const dl = (x1, y1, x2, y2) => `<path d="M${x1},${y1} L${x2},${y2}" stroke="${C.primary}" stroke-width=".9"/>`;
@@ -365,7 +365,7 @@ export function p31() {
     { n: 'Ночной', tk: 'Background', role: 'Фоновый', hex: C.bg, fg: C.primary, cls: 'bgc', d: 'Основная поверхность бренда и интерфейса' },
     { n: 'Глубинный', tk: 'Surface', role: 'Поверхность', hex: C.surface, fg: C.primary, cls: '', d: 'Карточки, панели и плашки поверх Background' },
     { n: 'Сланцевый', tk: 'Grey', role: 'Дополнительный', hex: C.grey, fg: C.primary, cls: '', d: 'Вторичный текст — крупный; линии, неактивные элементы' },
-    { n: 'Бирюзовый', tk: 'Accent', role: 'Акцентный', hex: C.accent, fg: C.bg, cls: '', d: 'Акценты, цифры, маркеры, узлы сети. Он же «Норма»' },
+    { n: 'Шалфейный', tk: 'Accent', role: 'Акцентный', hex: C.accent, fg: C.bg, cls: '', d: 'Акценты, цифры, маркеры, узлы сети. Он же «Норма»' },
   ];
   const col = (c, i) => {
     const x = 63 + i * 212;
@@ -411,7 +411,7 @@ export function p32() {
     </div>`).join('');
   const rules = [
     ['Только для состояний', 'Статусные цвета означают событие в системе. Они не используются для знака, логотипа, фона страниц и декора.'],
-    ['Один цвет — один смысл', 'Бирюзовый — норма и акцент бренда; янтарный — внимание; коралловый — тревога. Не меняйте их местами.'],
+    ['Один цвет — один смысл', 'Шалфейный — норма и акцент бренда; янтарный — внимание; коралловый — тревога. Не меняйте их местами.'],
     ['Редкость усиливает сигнал', 'Статусные цвета занимают считанные проценты экрана. Красный на экране — всегда повод действовать.'],
   ];
   return page('p32', 'dark', `
@@ -439,8 +439,8 @@ export function p33() {
     ['Primary на Grey', C.primary, C.grey, 'Знак и крупный текст на серых плашках'],
     ['Warning на Background', C.warn, C.bg, 'Статус «Предупреждение»'],
     ['Alert на Background', C.alert, C.bg, 'Статус «Тревога»'],
-    ['Primary на Surface', C.primary, C.surface, 'Текст на карточках и панелях'],
-    ['Accent на Primary', C.accent, C.primary, 'Не сочетать'],
+    ['Accent на Primary', C.accent, C.primary, 'Крупный текст, знак на светлом'],
+    ['Grey и Accent', C.grey, C.accent, 'Не сочетать'],
   ];
   const trs = pairs.map(([n, fg, bgc, use]) => {
     const c = G.contrast(fg, bgc);
@@ -458,7 +458,7 @@ export function p33() {
     ${barHTML}
     ${box('left:63px;top:352px;font-size:0', '')}
     ${note('Сланцевый — только крупно', `Grey ${C.grey} на Background даёт ${fx(greyC.toFixed(1))}:1 — проходит лишь AA Large: текст от 24 px или 18,7 px semibold. Мелкие подписи на тёмном набираем Primary 70 % (${fx(tC.toFixed(1))}:1, AAA).`, 366)}
-    ${note('Бирюзовый — только на тёмном', `Accent на Primary — ${fx(accL.toFixed(1))}:1, как текст не читается. На светлых носителях Accent — заливка под текстом Background.`, 494)}
+    ${note('Шалфейный — мелко только на тёмном', `Accent на Background — ${fx(G.contrast(C.accent, C.bg).toFixed(1))}:1, мелкий текст допустим. На Primary — ${fx(accL.toFixed(1))}:1: только крупный текст и знак. С Grey не сочетать — ${fx(G.contrast(C.accent, C.grey).toFixed(1))}:1.`, 494)}
     ${note('Статусные цвета', 'Warning и Alert — по событию, в сумме не более 2 % площади экрана. В пропорции не входят.', 614)}
     ${box('left:418px;top:354px;width:689px', `
       <div style="display:grid;grid-template-columns:62px 186px 76px 74px 1fr;height:28px;align-items:center;border-bottom:1px solid var(--line-l)" class="cap">

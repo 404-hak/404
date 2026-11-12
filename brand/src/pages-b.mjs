@@ -107,7 +107,7 @@ export function p51() {
     ['Background · Ночной', C.bg, C.primary, 'bgc', 'Primary'],
     ['Primary · Пенный', C.primary, C.bg, 'pc', 'Background'],
     ['Grey · Сланцевый', C.grey, C.primary, 'gc', 'Primary'],
-    ['Accent · Бирюзовый', C.accent, C.bg, 'ac', 'Background'],
+    ['Accent · Шалфейный', C.accent, C.bg, 'ac', 'Background'],
   ];
   const html = L.map(([n, bg, fg, cls, fgn], i) => {
     const c = G.contrast(fg, bg);
@@ -171,7 +171,7 @@ export function p61() {
     ['Не растягивать и не сжимать', bad(M(C.primary, 'height:96px;width:auto;transform:scaleX(1.45)'))],
     ['Не поворачивать', bad(M(C.primary, 'height:100px;width:auto;transform:rotate(-17deg)'))],
     ['Не красить в статусные и другие цвета вне фирменных', bad(M(C.alert, 'height:104px;width:auto'))],
-    ['Не добавлять тени, свечение и обводку', bad(M(C.primary, `height:104px;width:auto;filter:drop-shadow(6px 9px 5px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(45,212,191,.9))`))],
+    ['Не добавлять тени, свечение и обводку', bad(M(C.primary, `height:104px;width:auto;filter:drop-shadow(6px 9px 5px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(122,134,111,.95))`))],
     ['Не размещать на фоне с низким контрастом', bad(M(G.mix(C.primary, C.surface, .13), 'height:104px;width:auto'))],
     ['Не менять пропорции и положение надписи', bad(`<div style="display:flex;align-items:flex-end;gap:6px">${M(C.primary, 'height:84px;width:auto')}${G.inlineWord(C.primary, 'width:118px;height:auto;margin-bottom:-4px')}</div>`)],
     ['Не использовать контурную версию', bad(`<svg viewBox="0 0 ${MARK.w} ${MARK.h}" style="height:104px;width:auto"><path d="${MARK.d}" fill="none" stroke="${C.primary}" stroke-width="6" stroke-linejoin="round"/></svg>`)],
@@ -272,7 +272,7 @@ export function p72() {
     `<rect x="46" y="12" width="104" height="100" rx="8" fill="${C.surface}" stroke="rgba(226,232,240,.3)"/><path d="M60,32 H120 M60,46 H136 M60,60 H110" stroke="${C.primary}" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/><text x="60" y="86" font-family="JetBrains Mono" font-size="8" fill="${T_DARK}">SHA-256 9f2c…b81d</text><circle cx="136" cy="98" r="9" fill="${C.accent}"/><path d="M131.5,98 L135,101.5 L141,94.5" stroke="${C.bg}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
   ];
   const S = [
-    ['Спокойствие', C.accent, 'Бирюзовый', 'Карта бирюзовая, индекс здоровья, прогноз на ночь', '«Полнолуние, понедельник. Риск низкий»'],
+    ['Спокойствие', C.accent, 'Шалфейный', 'Карта в шалфейных тонах, индекс здоровья, прогноз на ночь', '«Полнолуние, понедельник. Риск низкий»'],
     ['Настороженность', C.warn, 'Янтарный', '2 сектора подсвечены янтарным', '«Безлунная ночь, пятница, вода +12°. Рекомендую усилить сектор 7»'],
     ['Тревога', C.alert, 'Коралловый', 'Красная пульсация, звуковой сигнал, карточка алерта', '«Буй-4: мотор. Совпадение с катером от 05.05 (89 %). Дистанция 3,2 км»'],
     ['Перехват', C.alert, 'Коралловый цель · Пенный маршрут', 'Карта в режиме навигации', '«До цели 1,8 км. Перехват через 12 мин через протоку Старая»'],
@@ -347,7 +347,7 @@ export function p74() {
     <circle cx="86" cy="95" r="44" fill="${C.bg}" stroke="${stroke}"/>
     ${markAt(86, 95, 50, C.primary)}
     <rect x="148" y="52" width="164" height="86" rx="14" fill="${C.surface}" stroke="${stroke}"/>
-    <text x="162" y="74" font-family="Inter" font-weight="600" font-size="10.5" fill="${C.accent}">404</text>
+    <text x="162" y="74" font-family="Inter" font-weight="600" font-size="10.5" fill="${C.primary}">404</text>
     <text x="162" y="92" font-family="Inter" font-size="10.5" fill="${C.primary}">Буй Камышовый-4</text>
     <text x="162" y="106" font-family="Inter" font-size="10.5" fill="${C.primary}">услышал мотор.</text>
     <text x="162" y="124" font-family="JetBrains Mono" font-size="9" fill="${T_DARK}">3.2 км от вас</text></svg>`;
@@ -466,7 +466,7 @@ export function p83() {
 // ===== ФИНАЛ =====
 export function end() {
   return `<section class="page dark" id="end">
-    <div class="abs" style="inset:0;background:radial-gradient(ellipse 50% 45% at 50% 46%, rgba(45,212,191,.06), rgba(45,212,191,0) 70%)"></div>
+    <div class="abs" style="inset:0;background:radial-gradient(ellipse 50% 45% at 50% 46%, rgba(122,134,111,.11), rgba(122,134,111,0) 70%)"></div>
     <div class="abs ctr" style="left:0;right:0;top:300px">${M(C.primary, 'height:170px;width:auto')}</div>
     <div class="abs cap" style="left:0;right:0;top:757px;text-align:center">404 · Бренд-гайд · Версия 2.0 · 2026</div>
   </section>`;
