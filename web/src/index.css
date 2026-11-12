@@ -256,6 +256,9 @@ body { -webkit-font-smoothing: antialiased; }
 /* камыш дельты: интро и фон */
 .reed { transform-box: fill-box; transform-origin: 50% 100%; animation: reed-sway 6s ease-in-out infinite alternate; }
 @keyframes reed-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.8deg); } }
+/* куст целиком: свойство rotate не трогает transform (зеркало справа) и идёт на видеокарте без перерисовки */
+.reeds-sway { transform-origin: 50% 100%; will-change: transform; animation: clump-sway 8s ease-in-out infinite alternate; }
+@keyframes clump-sway { from { rotate: -0.9deg; } to { rotate: 1.1deg; } }
 .sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); filter: blur(1.5px); transition: color 1s, opacity 1s; }
 .sea .reeds-left { left: -1vw; }
 .sea .reeds-right { right: -1vw; }
@@ -263,7 +266,7 @@ body { -webkit-font-smoothing: antialiased; }
   background: radial-gradient(50% 50% at 50% 50%, var(--c-mist), transparent 70%); filter: blur(10px);
   animation: mist 46s ease-in-out infinite alternate; }
 @keyframes mist { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
-@media (prefers-reduced-motion: reduce) { .reed, .sea .mist { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .reed, .reeds-sway, .sea .mist { animation: none; } }
 
 /* заголовок раздела лежит прямо на небе — на рассвете и закате оно яркое: мягкая подложка в цвет фона */
 .on-sky { text-shadow: 0 1px 2px rgb(var(--rgb-bg) / .85), 0 0 10px rgb(var(--rgb-bg) / .9), 0 0 22px rgb(var(--rgb-bg) / .7); }

@@ -43,7 +43,8 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       raf = requestAnimationFrame(frame);
       if (document.hidden) { prev = 0; return; }
       const { mode: m, quiet: q, moon: mp } = live.current;
-      if (q && now - quietAt < 80) return;              // на карте фон почти закрыт — 12 кадров в секунду
+      // фон медленный: 30 кадров в секунду хватает глазу и вдвое легче видеокарте; на карте фон почти закрыт — 12
+      if (now - quietAt < (q ? 80 : 30)) return;
       quietAt = now;
       const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / 60;
       prev = now;
@@ -78,7 +79,7 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       } else f.pulse = [0, 0, 0, 0];
       gfx.draw(f);
 
-      if (!q) { slow = dt > 0.034 ? slow + 1 : Math.max(0, slow - 1); if (slow > 90) { gfx.lower(w, h); slow = -1e9; } }
+      if (!q) { slow = dt > 0.05 ? slow + 1 : Math.max(0, slow - 1); if (slow > 45) { gfx.lower(w, h); slow = -1e9; } }
     };
 
     const onMove = (e: PointerEvent) => { ptr.tx = e.clientX / innerWidth; ptr.ty = e.clientY / innerHeight; ptr.moved = performance.now(); };
@@ -104,8 +105,8 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
     <div aria-hidden className="sea pointer-events-none fixed inset-0">
       <canvas ref={ref} className="absolute inset-0 h-full w-full" />
       <div className="mist" />
-      <Reeds side="left" seed={5} count={13} className="reeds reeds-left" />
-      <Reeds side="right" seed={17} count={13} className="reeds reeds-right" />
+      <Reeds side="left" seed={5} count={13} className="reeds reeds-left" clump />
+      <Reeds side="right" seed={17} count={13} className="reeds reeds-right" clump />
     </div>
   );
 }

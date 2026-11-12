@@ -32,20 +32,11 @@ float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
 float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);
   for(int i=0;i<3;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
 vec2 plane(vec2 uv,float asp){float below=max(uHzY-uv.y,.001);float d=1./(below+.06);return vec2((uv.x-.5)*asp*d*.35,d);}
-// «призрак» блика: мягкий диск, чуть светлее к краю — как в настоящей оптике
-float ghost(vec2 p,float r){float d=length(p);return smoothstep(r,r*.5,d)*.5+exp(-pow((d-r*.86)/(r*.16),2.))*.5;}
-// блик объектива: тонкий горизонтальный луч через светило, слабое гало и призраки по линии к центру кадра
+// блик объектива: тонкий горизонтальный луч через светило и мягкое рассеяние вдоль него
 vec3 flare(vec2 uv,vec2 L,float asp,vec3 c){
   vec2 p=(uv-L)*vec2(asp,1.);
-  float ax=abs(p.x),r=length(p);
-  float f=exp(-p.y*p.y*9000.)*exp(-ax*3.)*.36+exp(-p.y*p.y*700.)*exp(-ax*5.)*.1+exp(-pow((r-.2)*26.,2.))*.03;
-  vec3 o=c*f;
-  vec2 a=(vec2(.5)-L)*vec2(asp,1.);
-  o+=c*vec3(1.,.84,.62)*ghost(p-a*.58,.03)*.07;
-  o+=vec3(.62,.82,.7)*ghost(p-a*1.32,.075)*.05;
-  o+=vec3(.72,.78,1.)*ghost(p-a*1.72,.02)*.08;
-  o+=c*ghost(p-a*2.15,.13)*.025;
-  return o;
+  float ax=abs(p.x);
+  return c*(exp(-p.y*p.y*9000.)*exp(-ax*3.)*.36+exp(-p.y*p.y*700.)*exp(-ax*5.)*.1);
 }
 void main(){
   vec2 uv=gl_FragCoord.xy/uRes;
@@ -69,8 +60,8 @@ void main(){
     float st=step(.962,h)*smoothstep(.3,0.,length(fract(sp)-.5-off*.55));
     col+=vec3(.9,.93,1.)*st*(.55+.45*sin(uT*(.4+h*1.2)+h*60.))*.8*uStars*smoothstep(0.,.07,a);
     // слоистые облака у горизонта — вытянутые, мягкие, подсвечены светилом
-    float cl=fbm(vec2(uv.x*asp*1.3+uT*.005,uv.y*11.));
-    float cloud=smoothstep(.52,.78,cl)*smoothstep(0.,.12,a)*smoothstep(.85,.3,a)*uClouds;
+    float cloud=0.;
+    if(a<.85&&uClouds>0.){float cl=fbm(vec2(uv.x*asp*1.3+uT*.005,uv.y*11.));cloud=smoothstep(.52,.78,cl)*smoothstep(0.,.12,a)*smoothstep(.85,.3,a)*uClouds;}
     vec3 cc=mix(uHz,uTop,.35)*1.06+uSunC*.12*uSun.z+uMoonC*.04*moonLight;
     col=mix(col,cc,cloud*.5);
     // солнце — мягкий диск
@@ -95,14 +86,14 @@ void main(){
       ring=exp(-k*k)*exp(-uPulse.z*1.1)*uPulse.w;
       w+=normalize(w-c+1e-4)*sin((dw-r)*9.)*ring*.18;
     }
-    vec2 q=vec2(fbm(w*.6+vec2(t*.03,0.)),fbm(w*.6+vec2(5.2,1.3)-vec2(0.,t*.02)));
+    vec2 q=vec2(fbm(w*.6+vec2(t*.03,0.)),noise(w*.9+vec2(5.2,1.3)-vec2(0.,t*.02)));
     float f=fbm(w*.6+2.*q+vec2(0.,-t*.05));
     float depth=clamp(below/HZ,0.,1.);
     vec3 water=mix(uFar,uNear,smoothstep(0.,1.,pow(depth,.5)));
     water=mix(water,water*1.1+uLine*.02,smoothstep(.35,.8,f)*.6);          // течения
     // порывы ветра: по воде медленно бегут тёмные пятна мелкой ряби
-    float gust=fbm(w*vec2(.5,.85)+vec2(-t*.08,t*.025)+3.7);
-    float cat=smoothstep(.55,.75,gust)*smoothstep(.02,.2,depth);
+    float gust=noise(w*vec2(.5,.85)+vec2(-t*.08,t*.025)+3.7);
+    float cat=smoothstep(.6,.85,gust)*smoothstep(.02,.2,depth);
     water=mix(water,water*.88,cat*.5);
     float swell=.5+.5*sin(w.y*2.2-t*.85+f*3.);
     water+=uLine*swell*.025;
@@ -114,8 +105,7 @@ void main(){
     float nearK=mix(2.,1.,clamp((w.y-1.)/5.,0.,1.));
     float s1=noise(vec2(w.x*3.,w.y*6.)*nearK+q*2.+vec2(t*.12,-t*.55));
     water+=uLine*smoothstep(.58,.88,s1)*smoothstep(.15,.95,swell)*.06;
-    float rip=noise(vec2(w.x*13.,w.y*24.)+vec2(t*.5,-t*1.3));
-    water+=uLine*smoothstep(.6,.92,rip)*cat*.035;
+    water+=uLine*smoothstep(.5,.8,s1)*cat*.03;
     // дорожка под солнцем и луной: переливающиеся блики, к зрителю шире
     float g=noise(vec2(w.x*7.,w.y*16.)+q*3.+vec2(t*.25,-t*1.1));
     float glit=smoothstep(.45,.95,g)*smoothstep(.1,.9,swell+.3);
@@ -131,13 +121,15 @@ void main(){
   }
   col+=mix(uHz,vec3(1.),.3)*exp(-pow((uv.y-HZ)*60.,2.))*.1;               // светлая дымка горизонта
   // острова дельты: мягкие силуэты в дымке и их отражение
-  float hx=uv.x*asp;
-  float isle=smoothstep(.44,.6,noise(vec2(hx*2.2,4.1)));
-  float ih=(.003+.011*fbm(vec2(hx*20.,1.7)))*isle;
   float a2=uv.y-HZ;
-  vec3 ic=mix(uIsle,uHz,.22);
-  col=mix(col,ic,(1.-smoothstep(ih-.0025,ih+.0008,a2))*smoothstep(-.0012,.0012,a2)*isle*.9);
-  col=mix(col,mix(col,ic,.45),(1.-smoothstep(ih*.75-.003,ih*.75+.001,-a2))*smoothstep(-.001,.002,-a2)*isle*.5);
+  if(abs(a2)<.02){                                                          // считаем только у самого горизонта
+    float hx=uv.x*asp;
+    float isle=smoothstep(.44,.6,noise(vec2(hx*2.2,4.1)));
+    float ih=(.003+.011*fbm(vec2(hx*20.,1.7)))*isle;
+    vec3 ic=mix(uIsle,uHz,.22);
+    col=mix(col,ic,(1.-smoothstep(ih-.0025,ih+.0008,a2))*smoothstep(-.0012,.0012,a2)*isle*.9);
+    col=mix(col,mix(col,ic,.45),(1.-smoothstep(ih*.75-.003,ih*.75+.001,-a2))*smoothstep(-.001,.002,-a2)*isle*.5);
+  }
   // чайки: днём и в сумерках пара птиц и одна поодаль медленно планируют над водой
   float birdsOn=1.-smoothstep(.45,.85,uDark);
   if(birdsOn>0.&&uv.y>HZ&&uv.y<HZ+.2){                                    // считаем только в полосе над горизонтом
@@ -230,13 +222,21 @@ export function createSea(canvas: HTMLCanvasElement, force: boolean, scale0 = 0.
     'uStars', 'uClouds', 'uHzY', 'uBodyK', 'uFlare', 'uDark', 'uBeacon'];
   const u = Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(prog, n)]));
   let scale = scale0;   // мягкая картинка: половины разрешения хватает
+  let lw = 0, lh = 0;
   return {
     resize(w: number, h: number) {
+      lw = w; lh = h;
       canvas.width = Math.max(2, Math.round(Math.min(w, 2200) * scale));
       canvas.height = Math.max(2, Math.round((h * canvas.width) / Math.max(w, 1)));
       gl.viewport(0, 0, canvas.width, canvas.height);
     },
     lower(w: number, h: number) { scale = 0.3; this.resize(w, h); },
+    /** Расфокус камеры без CSS-размытия: картинка рисуется мельче и мягко растягивается — почти бесплатно */
+    setScale(k: number) {
+      if (Math.abs(k - scale) < 0.004) return;
+      scale = k;
+      if (lw) this.resize(lw, lh);
+    },
     draw(f: Frame) {
       const v3 = (n: string, c: V3) => gl.uniform3f(u[n], c[0], c[1], c[2]);
       gl.uniform2f(u.uRes, canvas.width, canvas.height);
