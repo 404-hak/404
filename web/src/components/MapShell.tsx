@@ -96,7 +96,7 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
   const inline = useWidth(root) >= 1000;
 
   const seg = (on: boolean) =>
-    `h-8 px-3 text-[12px] font-medium rounded-[7px] ${on ? 'bg-primary text-bg' : 'text-muted hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-40`;
+    `relative z-10 h-8 w-[78px] text-[12px] font-medium rounded-[7px] ${on ? 'text-bg' : 'text-muted hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-40`;
 
   return (
     <div ref={root} className="relative h-full w-full overflow-hidden">
@@ -110,10 +110,16 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
         <MapView state={state} handle={handle} />
       )}
 
+      {/* глубина по краям и свечение цвета режима; в тревоге край пульсирует */}
+      <div className="map-vignette pointer-events-none absolute inset-0 z-[1050]" />
+      <div className="map-glow pointer-events-none absolute inset-0 z-[1050]" />
+
       <div className="pointer-events-none absolute inset-0 z-[1100]">
-        {/* подложка */}
-        <div className="pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] backdrop-blur"
+        {/* подложка: светлая плашка переезжает к выбранной кнопке */}
+        <div className="fade-in pointer-events-auto absolute right-3 top-3 flex rounded-[10px] border border-line bg-bg/90 p-[3px] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur"
           role="group" aria-label="Подложка карты">
+          <span aria-hidden className="absolute bottom-[3px] left-[3px] top-[3px] w-[78px] rounded-[7px] bg-primary transition-transform duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
+            style={{ transform: `translateX(${basemap === 'photo' ? 0 : 78}px)` }} />
           <button type="button" className={seg(basemap === 'photo')} disabled={!hasYandexKey}
             onClick={() => { setNotice(null); setBasemap('photo'); }}
             title={hasYandexKey ? 'Спутниковый снимок (Яндекс Карты)' : 'Нужен ключ Яндекс Карт (VITE_YANDEX_MAPS_KEY)'}>Спутник</button>
@@ -121,7 +127,7 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
             title="Офлайн-схема, работает без интернета">Схема</button>
         </div>
         {notice && (
-          <div className="pointer-events-auto absolute right-3 top-[56px] flex max-w-[340px] gap-2 rounded-[9px] border border-line bg-bg/95 py-2 pl-3 pr-2 text-[12px] leading-[17px] text-muted">
+          <div className="enter pointer-events-auto absolute right-3 top-[56px] flex max-w-[340px] gap-2 rounded-[9px] border border-line bg-bg/95 py-2 pl-3 pr-2 text-[12px] leading-[17px] text-muted shadow-[0_8px_24px_rgba(0,0,0,.35)]">
             <span>{notice}</span>
             <button type="button" onClick={() => setNotice(null)} aria-label="Закрыть сообщение" title="Закрыть"
               className="-mt-0.5 h-5 shrink-0 px-1 hover:text-primary">✕</button>
@@ -129,7 +135,7 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
         )}
 
         {/* масштаб */}
-        <div className="pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 backdrop-blur">
+        <div className="fade-in pointer-events-auto absolute bottom-8 right-3 flex flex-col overflow-hidden rounded-[10px] border border-line bg-bg/90 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur">
           <Btn title="Приблизить" onClick={() => handle.current?.zoomIn()}>
             <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.6"><path d="M7 1v12M1 7h12" /></svg>
           </Btn>
@@ -143,7 +149,9 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
           </Btn>
         </div>
 
-        <div className={`absolute left-3 ${inline ? 'bottom-8 right-16' : 'top-3'}`}><Legend intercept={intercept} inline={inline} /></div>
+        <div className={`fade-in absolute left-3 ${inline ? 'bottom-8 right-16' : 'top-3'}`} style={{ animationDelay: '1.2s' }}>
+          <Legend intercept={intercept} inline={inline} />
+        </div>
       </div>
     </div>
   );

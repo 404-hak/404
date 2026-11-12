@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Mode } from '../types';
-import { fmtHM } from '../format';
+import { fmtTime } from '../format';
 
 export const MODE: Record<Mode, { label: string; hint: string; text: string; dot: string; pill: string }> = {
   calm: { label: 'Спокойно', hint: 'угроз нет', text: 'text-accent', dot: 'bg-accent', pill: 'border-accent/40 bg-accent/10' },
@@ -20,37 +20,46 @@ export default function TopBar({ mode, online, subtitle, onDemo, onReset }: Prop
   const m = mode && online ? MODE[mode] : null;
   const btn = 'h-8 rounded-[8px] px-3 text-[12px] font-medium';
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-4">
-      <div className="flex min-w-0 items-center gap-4">
-        <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0" />
-        <div className="hidden min-w-0 border-l border-line pl-4 md:block">
-          <div className="truncate text-[13px] font-semibold leading-4">Дельта Волги · дежурство</div>
-          <div className="truncate text-[11px] leading-4 text-muted">{subtitle}</div>
+    <header className="shrink-0 bg-surface/80 backdrop-blur">
+      <div className="flex h-14 items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <img src="/brand/404-lockup-horizontal-cream.svg" alt="404" className="h-[18px] w-auto shrink-0" />
+          <div className="hidden min-w-0 border-l border-line pl-4 md:block">
+            <div className="truncate text-[13px] font-semibold leading-4">Дельта Волги · дежурство</div>
+            <div className="truncate text-[11px] leading-4 text-muted">{subtitle}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          {m ? (
+            <div key={mode} className={`pill relative flex h-8 items-center gap-2 rounded-full border px-3 ${m.pill}`}
+              title={`Режим: ${m.label.toLowerCase()} — ${m.hint}`} role="status" aria-live="polite">
+              <span className={`live-dot h-2 w-2 shrink-0 rounded-full ${m.dot}`} />
+              <span className={`text-[12px] font-semibold ${m.text}`}>{m.label}</span>
+              <span className="hidden text-[12px] text-muted lg:inline">· {m.hint}</span>
+            </div>
+          ) : (
+            <div className="flex h-8 items-center gap-2 rounded-full border border-line px-3 text-[12px] text-muted" role="status">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-grey" />Нет связи с сервером
+            </div>
+          )}
+
+          <div className="hidden items-center gap-1 rounded-[10px] border border-dashed border-line p-[3px] sm:flex" title="Для показа: прогон сценария тревоги">
+            <span className="px-2 font-mono text-[10px] uppercase tracking-[.08em] text-muted">Демо</span>
+            <button type="button" className={`${btn} bg-white/[.06] text-primary hover:bg-white/10`} onClick={onDemo}>▶ Запустить</button>
+            <button type="button" className={`${btn} text-muted hover:text-primary`} onClick={onReset}>Сбросить</button>
+          </div>
+          <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>
+
+          <div className="hidden flex-col items-end leading-none sm:flex" title="Время астраханское">
+            <span className="font-mono text-[13px] font-medium tabular-nums">{fmtTime(now)}</span>
+            <span className={`mt-1 flex items-center gap-1 font-mono text-[9px] uppercase tracking-[.1em] ${online ? 'text-accent' : 'text-grey'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${online ? 'live-dot bg-accent' : 'bg-grey'}`} />{online ? 'в эфире' : 'офлайн'}
+            </span>
+          </div>
         </div>
       </div>
-
-      <div className="flex items-center gap-2 sm:gap-3">
-        {m ? (
-          <div className={`flex h-8 items-center gap-2 rounded-full border px-3 ${m.pill}`} title={`Режим: ${m.label.toLowerCase()} — ${m.hint}`}>
-            <span className={`h-2 w-2 shrink-0 rounded-full ${m.dot} ${mode === 'alarm' ? 'animate-pulse' : ''}`} />
-            <span className={`text-[12px] font-semibold ${m.text}`}>{m.label}</span>
-            <span className="hidden text-[12px] text-muted lg:inline">· {m.hint}</span>
-          </div>
-        ) : (
-          <div className="flex h-8 items-center gap-2 rounded-full border border-line px-3 text-[12px] text-muted">
-            <span className="h-2 w-2 rounded-full bg-grey" />Нет связи с сервером
-          </div>
-        )}
-
-        <div className="hidden items-center gap-1 rounded-[10px] border border-dashed border-line p-[3px] sm:flex" title="Для показа: прогон сценария тревоги">
-          <span className="px-2 font-mono text-[10px] uppercase tracking-[.08em] text-muted">Демо</span>
-          <button type="button" className={`${btn} bg-white/[.06] text-primary hover:bg-white/10`} onClick={onDemo}>▶ Запустить</button>
-          <button type="button" className={`${btn} text-muted hover:text-primary`} onClick={onReset}>Сбросить</button>
-        </div>
-        <button type="button" className={`${btn} border border-line text-primary sm:hidden`} onClick={onDemo}>▶ Демо</button>
-
-        <span className="hidden font-mono text-[13px] font-medium tabular-nums sm:inline" title="Время астраханское">{fmtHM(now)}</span>
-      </div>
+      <div className="statusline" />
     </header>
   );
 }

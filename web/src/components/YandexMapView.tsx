@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import type { State } from '../types';
 import { km } from '../format';
 import { loadYmaps } from '../yandex';
-import { BUOY_STATUS, areaOf, isCompact, maskRings, pad, type Bounds, type MapHandle } from '../geo';
+import { BUOY_STATUS, areaOf, brackets, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle } from '../geo';
+import { useBooting } from '../motion';
 
-const C = { accent: '#7A866F', warn: '#F59E0B', primary: '#E2E8F0', mask: '#0B1628' };
+const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
 // зазор вокруг района [сверху, справа, снизу, слева]: видна граница, кнопки и легенда её не закрывают
 const ZOOM_MARGIN = [64, 64, 64, 28];
 
@@ -22,8 +23,14 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
   const map = useRef<any>(null);
   const layer = useRef<any>(null);
   const layouts = useRef<Record<string, any>>({});
+  const marks = useRef<Record<string, any>>({});
   const [ready, setReady] = useState(false);
+  const booting = useBooting();
   const area = useMemo(() => areaOf(state.sectors), [state.sectors]);
+
+  useEffect(() => {
+    el.current?.classList.toggle('booting', booting);
+  }, [booting]);
 
   // создание карты
   useEffect(() => {
@@ -57,13 +64,15 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
 
         layouts.current = {
           buoy: y.templateLayoutFactory.createClass(
-            '<div class="buoy buoy--{{ properties.status }}">'
-            + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% endif %}'
+            '<div class="buoy buoy--{{ properties.status }}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
+            + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% else %}<span class="sonar"></span>{% endif %}'
             + '<span class="map-label">{{ properties.name }}</span></div>'),
           inspector: y.templateLayoutFactory.createClass('<div class="inspector"><span class="map-label">Вы</span></div>'),
           sector: y.templateLayoutFactory.createClass(
             '<div class="sector-label {{ properties.hot }}">{{ properties.n }}{% if properties.hot %}<span>· высокий риск</span>{% endif %}</div>'),
           label: y.templateLayoutFactory.createClass('<div class="route-label">{{ properties.text }}</div>'),
+          lat: y.templateLayoutFactory.createClass('<span class="tick tick--lat">{{ properties.text }}</span>'),
+          lon: y.templateLayoutFactory.createClass('<span class="tick tick--lon">{{ properties.text }}</span>'),
         };
 
         // всё за пределами района — затемнено, сам район обведён
@@ -71,8 +80,17 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
           fillColor: C.mask, fillOpacity: 0.72, strokeWidth: 0, fillRule: 'evenOdd', interactivityModel: 'default#transparent',
         }));
         m.geoObjects.add(new y.Rectangle(area, {}, {
-          fill: false, strokeColor: C.primary, strokeOpacity: 0.8, strokeWidth: 2, interactivityModel: 'default#transparent',
+          fill: false, strokeColor: C.primary, strokeOpacity: 0.55, strokeWidth: 1.5, interactivityModel: 'default#transparent',
         }));
+        // уголки-видоискатель и координаты линий сетки
+        for (const c of brackets(area)) {
+          m.geoObjects.add(new y.Polyline(c, {}, { strokeColor: C.primary, strokeOpacity: 0.95, strokeWidth: 3, interactivityModel: 'default#transparent' }));
+        }
+        for (const t of gridTicks(state.sectors)) {
+          m.geoObjects.add(new y.Placemark(t.at, { text: t.text }, {
+            iconLayout: layouts.current[t.kind], interactivityModel: 'default#transparent', zIndex: 50,
+          }));
+        }
         layer.current = new y.GeoObjectCollection();
         m.geoObjects.add(layer.current);
         map.current = m;
@@ -93,10 +111,12 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // слой 404 перерисовывается только при смене статусов, горячих секторов или активных алертов
+  // Слой 404 перерисовывается только при смене статусов, горячих секторов или активных алертов:
+  // полная перерисовка перезапускает анимации буёв. Заряд батареи в подсказке обновляется отдельно.
   const hot = state.forecast.level === 'high' ? state.forecast.hot_sectors : [];
   const active = state.alerts.filter((a) => a.status !== 'resolved');
-  const key = JSON.stringify([state.buoys.map((b) => [b.status, b.battery]), hot, active.map((a) => [a.id, a.status])]);
+  const key = JSON.stringify([state.buoys.map((b) => b.status), hot, active.map((a) => [a.id, a.status])]);
+  const hint = (b: State['buoys'][number]) => `${b.name} · ${BUOY_STATUS[b.status]} · сектор ${b.sector} · батарея ${b.battery} %`;
 
   useEffect(() => {
     if (!ready) return;
@@ -116,8 +136,9 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
     }
     for (const [a, b] of state.links) {
       if (!byId[a] || !byId[b]) continue;
+      const alarm = byId[a].status === 'alert' || byId[b].status === 'alert';
       g.add(new y.Polyline([[byId[a].lat, byId[a].lon], [byId[b].lat, byId[b].lon]], {}, {
-        ...flat, strokeColor: '#A9B79C', strokeOpacity: 0.75, strokeWidth: 1.5, strokeStyle: 'dot',
+        ...flat, strokeColor: alarm ? C.alert : '#A9B79C', strokeOpacity: alarm ? 0.9 : 0.75, strokeWidth: alarm ? 2 : 1.5, strokeStyle: 'dot',
       }));
     }
     const intercept = active.find((a) => a.status === 'intercept');
@@ -132,25 +153,37 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
         }));
       }
     }
-    for (const b of state.buoys) {
+    marks.current = {};
+    state.buoys.forEach((b, i) => {
       const r = b.status === 'alert' ? 12 : 9;
-      g.add(new y.Placemark([b.lat, b.lon], {
-        status: b.status, name: b.name,
-        hintContent: `${b.name} · ${BUOY_STATUS[b.status]} · сектор ${b.sector} · батарея ${b.battery} %`,
+      const pm = new y.Placemark([b.lat, b.lon], {
+        status: b.status, name: b.name, i, d: ((i * 0.83) % 3.6).toFixed(2), hintContent: hint(b),
       }, {
         iconLayout: L.buoy, iconOffset: [-r, -r], iconShape: { type: 'Circle', coordinates: [r, r], radius: r + 4 },
         zIndex: b.status === 'alert' ? 1000 : 500,
-      }));
-    }
+      });
+      marks.current[b.id] = pm;
+      g.add(pm);
+    });
     g.add(new y.Placemark(state.inspector, { hintContent: 'Вы — катер инспектора' }, {
       iconLayout: L.inspector, iconOffset: [-7, -7], iconShape: { type: 'Circle', coordinates: [7, 7], radius: 10 }, zIndex: 900,
     }));
   }, [ready, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // подлёт к новой тревоге
-  const focus = active.find((a) => a.status === 'new' || a.status === 'intercept');
+  // подсказки с зарядом батареи — без перерисовки слоя
   useEffect(() => {
-    if (ready && focus) handle.current?.flyTo(focus.lat, focus.lon, 12);
+    if (!ready) return;
+    for (const b of state.buoys) marks.current[b.id]?.properties.set('hintContent', hint(b));
+  }, [ready, state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // к новой тревоге — подлёт, после её закрытия — обратно ко всему району
+  const focus = active.find((a) => a.status === 'new' || a.status === 'intercept');
+  const seen = useRef(false);
+  useEffect(() => {
+    if (!ready) return;
+    if (focus) handle.current?.flyTo(focus.lat, focus.lon, 12);
+    else if (seen.current) handle.current?.fitArea();
+    seen.current = Boolean(focus);
   }, [ready, focus?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div ref={el} className="map-photo h-full w-full" />;

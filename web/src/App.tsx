@@ -39,7 +39,7 @@ export default function App() {
     : '';
 
   return (
-    <div className="flex h-full flex-col bg-bg text-primary">
+    <div className={`app mode-${online && state ? state.mode : 'calm'} flex h-full flex-col text-primary`}>
       <TopBar mode={state?.mode ?? null} online={online} subtitle={subtitle}
         onDemo={() => api.runDemo()} onReset={() => api.resetDemo()} />
       {state ? (
@@ -50,7 +50,15 @@ export default function App() {
           <SidePanel state={state} handle={map} />
         </main>
       ) : (
-        <div className="grid flex-1 place-items-center text-[14px] text-muted">Подключаюсь к серверу…</div>
+        <div className="grid flex-1 place-items-center">
+          <div className="flex flex-col items-center gap-7">
+            <div className="relative grid h-20 w-20 place-items-center">
+              <span className="boot-ring" /><span className="boot-ring r2" />
+              <img src="/brand/404-logo-cream.svg" alt="" className="h-14 w-auto opacity-90" />
+            </div>
+            <div className="text-[13px] text-muted">Подключаюсь к буям…</div>
+          </div>
+        </div>
       )}
     </div>
   );

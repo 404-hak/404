@@ -3,59 +3,189 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------- цвет режима: плавно перетекает при смене режима и окрашивает свечения ---------- */
+@property --mode { syntax: '<color>'; inherits: true; initial-value: #7A866F; }
+
+:root {
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-inout: cubic-bezier(.65, 0, .35, 1);
+}
+
 html, body, #root { height: 100%; }
 body { -webkit-font-smoothing: antialiased; }
 
+.app { transition: --mode 1.2s var(--ease-inout);
+  background: radial-gradient(1100px 520px at 0% 0%, color-mix(in srgb, var(--mode) 9%, transparent), transparent 70%), var(--c-bg); }
+.mode-calm { --mode: #7A866F; }
+.mode-alertness { --mode: #F59E0B; }
+.mode-alarm, .mode-intercept { --mode: #EF4444; }
+
 .cap { font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--c-text-2); }
+
+@layer base {
+  button { transition: color .15s, background-color .15s, border-color .15s, opacity .15s, transform .12s var(--ease-out); }
+  button:not(:disabled):active { transform: scale(.97); }
+}
+
+/* ---------- общие движения ---------- */
+@keyframes enter { from { opacity: 0; transform: translateY(10px); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: scale(0); } }
+.enter { animation: enter .5s var(--ease-out) both; }
+.fade-in { animation: fade-in .6s ease both; }
+
+/* полоса состояния под шапкой: «система дышит», в тревоге — чаще */
+.statusline { position: relative; height: 2px; overflow: hidden; background: color-mix(in srgb, var(--mode) 28%, transparent); }
+.statusline::after { content: ''; position: absolute; inset: 0; width: 28%;
+  background: linear-gradient(90deg, transparent, var(--mode), transparent); animation: sweep 3.6s var(--ease-inout) infinite; }
+.mode-alarm .statusline::after { animation-duration: 1.2s; }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+
+/* «в эфире» и точка режима */
+.live-dot { position: relative; }
+.live-dot::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; animation: ping 2s var(--ease-out) infinite; }
+.mode-alarm .live-dot::after { animation-duration: 1s; }
+@keyframes ping { from { transform: scale(1); opacity: .7; } to { transform: scale(3); opacity: 0; } }
+
+/* смена режима: плашка проявляется, вокруг расходится кольцо */
+.pill { animation: pill-in .5s var(--ease-spring) both; }
+.pill::before { content: ''; position: absolute; inset: -1px; border-radius: inherit; border: 2px solid var(--mode);
+  animation: pill-ring 1.1s var(--ease-out) .1s both; pointer-events: none; }
+@keyframes pill-in { from { opacity: 0; transform: scale(.88); } }
+@keyframes pill-ring { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.35, 1.8); } }
+
+/* панель: лёгкое свечение цвета режима сверху */
+.panel { background: linear-gradient(180deg, color-mix(in srgb, var(--mode) 9%, transparent), transparent 260px), var(--c-surface);
+  transition: --mode 1.2s var(--ease-inout); }
+
+/* карточка тревоги вспыхивает при появлении */
+.alert-flash { animation: flash 1.6s ease-out both; }
+@keyframes flash { from { background-color: rgba(239, 68, 68, .32); } to { background-color: rgba(239, 68, 68, .06); } }
+
+/* эквалайзер «слышу звук» */
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.eq i { width: 3px; height: 100%; border-radius: 2px; background: currentColor; transform-origin: bottom; animation: eq .9s ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: -.3s; } .eq i:nth-child(3) { animation-delay: -.6s; } .eq i:nth-child(4) { animation-delay: -.15s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+
+/* шкала риска: кончик светится */
+.risk-tip { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tip) 30%, transparent), 0 0 14px var(--tip); animation: tip 2.4s ease-in-out infinite; }
+@keyframes tip { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--tip) 18%, transparent), 0 0 22px var(--tip); } }
+
+/* журнал: новые строки въезжают, свежая тревога подсвечена */
+.row-in { animation: enter .45s var(--ease-out) both; }
+.row-hot { animation: enter .45s var(--ease-out) both, row-flash 2.4s ease-out both; }
+@keyframes row-flash { from { background-color: rgba(239, 68, 68, .18); } to { background-color: transparent; } }
+
+/* загрузка */
+.boot-ring { position: absolute; inset: -18px; border-radius: 50%; border: 1.5px solid var(--c-accent); animation: sonar 2.4s var(--ease-out) infinite; }
+.boot-ring.r2 { animation-delay: 1.2s; }
 
 /* ---------- карта: общее ---------- */
 .leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
 .leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }
 .leaflet-control-attribution a { color: var(--c-text-2) !important; }
-.leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: none; font-size: 12px; padding: 4px 8px; }
+.leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+  font-size: 12px; padding: 4px 8px; }
 .leaflet-tooltip.tip::before { display: none; }
+
+/* глубина и цвет режима по краям карты; в тревоге край пульсирует */
+.map-vignette { background: radial-gradient(ellipse at center, transparent 58%, rgba(5, 11, 22, .5) 100%); }
+.map-glow::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mode) 35%, transparent), inset 0 0 110px color-mix(in srgb, var(--mode) 22%, transparent);
+  opacity: .55; transition: opacity .8s; }
+.mode-calm .map-glow::after { opacity: .3; }
+.mode-alarm .map-glow::after { animation: glow 1.6s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* рамка района рисуется при загрузке, уголки — видоискатель */
+.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.4s var(--ease-inout) .15s forwards; }
+.draw.late { animation-delay: .9s; animation-duration: .7s; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* связи буёв: по «нервам» бегут сигналы */
+.packet { stroke-dasharray: 4 196; stroke-dashoffset: 4; animation: packet 3.4s linear infinite; animation-delay: var(--d, 0s); }
+.packet--alert { animation-duration: 1.3s; }
+@keyframes packet { 0% { stroke-dashoffset: 4; } 62%, 100% { stroke-dashoffset: -100; } }
+
+/* горячий сектор дышит */
+.sector-hot { animation: breathe 3.2s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { fill-opacity: .02; } 50% { fill-opacity: .065; } }
+
+/* маршрут перехвата бежит от катера к цели */
+.route { stroke-dasharray: 10 8; animation: march .8s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -18; } }
 
 /* номер сектора — в верхнем левом углу ячейки */
 .sector-label { display: inline-flex; align-items: center; height: 20px; min-width: 20px; padding: 0 6px; box-sizing: border-box; justify-content: center;
   border-radius: 5px; background: rgba(11, 22, 40, .78); border: 1px solid rgba(226, 232, 240, .18);
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--c-text-2); white-space: nowrap; }
-.sector-label.hot { color: var(--c-warn); border-color: rgba(245, 158, 11, .7); background: rgba(11, 22, 40, .88); }
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--c-text-2); white-space: nowrap; transition: color .4s, border-color .4s; }
+.sector-label.hot { color: var(--c-warn); border-color: rgba(245, 158, 11, .7); background: rgba(11, 22, 40, .88);
+  box-shadow: 0 0 12px rgba(245, 158, 11, .25); }
 .sector-label span { margin-left: 4px; font-family: var(--font-sans); font-size: 11px; }
+
+/* координаты по краю района, как на морской карте */
+.tick { position: absolute; white-space: nowrap; font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; color: var(--c-text-2);
+  text-shadow: 0 0 3px var(--c-bg), 0 0 6px var(--c-bg); pointer-events: none; }
+.tick--lon { transform: translate(-50%, -100%) translateY(-6px); }
+.tick--lat { transform: translate(6px, -100%) translateY(-3px); }
 
 /* подпись объекта справа от значка */
 .map-label { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none;
   font-family: var(--font-sans); font-size: 11px; font-weight: 500; line-height: 14px; color: var(--c-primary);
-  text-shadow: 0 0 2px var(--c-bg), 0 0 3px var(--c-bg), 0 0 6px var(--c-bg); }
+  text-shadow: 0 0 2px var(--c-bg), 0 0 3px var(--c-bg), 0 0 6px var(--c-bg); transition: opacity .2s; }
 .buoy--alert .map-label { font-weight: 600; font-size: 12px; }
 .buoy--offline .map-label { color: var(--c-text-2); }
 
-/* компактный режим (узкий экран, общий план): без названий буёв и пояснений у секторов */
-.compact .buoy .map-label, .compact .sector-label span { display: none; }
+/* компактный режим (узкий экран, общий план): без названий буёв, пояснений и координат */
+.compact .buoy .map-label, .compact .sector-label span, .compact .tick { display: none; }
 
-/* буй — «кольцо с точкой», как нуль в надписи 404 */
+/* буй — «кольцо с точкой», как нуль в надписи 404; вокруг расходится сонар — буй слушает воду */
 .buoy { position: relative; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--c-accent); background: var(--c-bg);
-  display: grid; place-items: center; box-sizing: border-box; }
+  display: grid; place-items: center; box-sizing: border-box; transition: transform .2s var(--ease-spring); }
+.leaflet-marker-icon:hover .buoy, .buoy:hover { transform: scale(1.25); }
 .buoy::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent); }
+.buoy .sonar { position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid var(--c-accent); opacity: 0; pointer-events: none;
+  animation: sonar 3.6s var(--ease-out) infinite; animation-delay: var(--d, 0s); }
+@keyframes sonar { 0% { transform: scale(1); opacity: .75; } 75%, 100% { transform: scale(3.4); opacity: 0; } }
 .buoy--warn { border-color: var(--c-warn); }
 .buoy--warn::after { background: var(--c-warn); }
-.buoy--offline { border-color: var(--c-grey); }
+.buoy--warn .sonar { border-color: var(--c-warn); animation-duration: 2.2s; }
+.buoy--offline { border-color: var(--c-grey); background: rgba(11, 22, 40, .7); }
 .buoy--offline::after { background: var(--c-grey); }
-.buoy--alert { width: 24px; height: 24px; border-width: 4px; border-color: var(--c-alert); }
+.buoy--offline .sonar, .buoy--alert .sonar { display: none; }
+.buoy--alert { width: 24px; height: 24px; border-width: 4px; border-color: var(--c-alert); box-shadow: 0 0 18px rgba(239, 68, 68, .6); }
 .buoy--alert::after { width: 7px; height: 7px; background: var(--c-alert); }
 .buoy--alert .pulse { position: absolute; inset: -14px; border-radius: 50%; border: 2px solid var(--c-alert); animation: pulse 1.6s ease-out infinite; }
 .buoy--alert .pulse.p2 { animation-delay: .8s; }
-@keyframes pulse { from { transform: scale(.45); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
+@keyframes pulse { from { transform: scale(.45); opacity: .9; } to { transform: scale(1.6); opacity: 0; } }
 
-/* вы — катер инспектора */
+/* при загрузке буи появляются по очереди */
+.booting .buoy { animation: pop .6s var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 70ms + .6s); }
+.booting .sector-label, .booting .tick { animation: fade-in .6s ease both; animation-delay: .5s; }
+.booting .packet { animation-delay: calc(var(--d, 0s) + 1.6s); }
+
+/* вы — катер инспектора: вокруг медленно ходит луч радара */
 .inspector { position: relative; width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); border: 2px solid var(--c-bg);
-  box-sizing: border-box; box-shadow: 0 0 0 4px rgba(226, 232, 240, .25); }
+  box-sizing: border-box; box-shadow: 0 0 0 4px rgba(226, 232, 240, .22), 0 0 14px rgba(226, 232, 240, .35); }
+.inspector::before { content: ''; position: absolute; inset: -18px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(226, 232, 240, 0) 290deg, rgba(226, 232, 240, .16) 360deg);
+  -webkit-mask: radial-gradient(circle, transparent 7px, #000 8px); mask: radial-gradient(circle, transparent 7px, #000 8px);
+  animation: radar 4s linear infinite; }
+@keyframes radar { to { transform: rotate(360deg); } }
 .inspector .map-label { left: calc(100% + 8px); font-weight: 600; }
 
-@media (prefers-reduced-motion: reduce) { .buoy--alert .pulse { animation: none; opacity: .4; } }
-
 .route-label { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; background: var(--c-surface); color: var(--c-text);
-  border: 1px solid var(--c-line); border-radius: 6px; padding: 3px 7px; font-size: 12px; font-family: var(--font-sans); }
+  border: 1px solid var(--c-line); border-radius: 6px; padding: 3px 7px; font-size: 12px; font-family: var(--font-mono);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35); animation: fade-in .4s ease both; }
 
 /* ---------- спутник (Яндекс): снимок приглушён, чтобы швы мозаики не спорили со слоем 404 ---------- */
 .map-photo [class*="-ground-pane"] { filter: saturate(.55) brightness(.78) contrast(1.06); }
-.map-photo .map-label { text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); }
+.map-photo .map-label, .map-photo .tick { text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 6px rgba(0, 0, 0, .9); }
+
+/* ---------- без лишнего движения, если так настроена система ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important;
+    transition-duration: .001ms !important; }
+}
