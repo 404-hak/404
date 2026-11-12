@@ -199,13 +199,30 @@ const clockAt = (() => {
     return null;
   }
 })();
-const loadedAt = Date.now();
-/** Текущее время неба: настоящее, а при ?sky — выбранный момент, идущий дальше в реальном темпе */
-export const liveAt = () => (clockAt ? new Date(clockAt.valueOf() + (Date.now() - loadedAt)) : new Date());
-let pref: ThemePref = clockAt ? 'auto' : readPref();
+/** ?speed=3600 — небо «Авто» идёт быстрее (3600 — час в секунду) */
+const speedAt = (() => {
+  try {
+    const v = Number(new URLSearchParams(location.search).get('speed'));
+    return Number.isFinite(v) && v > 1 ? Math.min(v, 86400) : 1;
+  } catch {
+    return 1;
+  }
+})();
+/**
+ * Часы неба: настоящее время или перемотка (проверить «Авто» за минуту: рассвет, день, закат, ночь).
+ * virt — время неба в момент real, дальше оно идёт со скоростью speed.
+ */
+let clk = { real: Date.now(), virt: (clockAt ?? new Date()).valueOf(), speed: speedAt };
+/** Текущее время неба: настоящее, при ?sky или перемотке — выбранный момент, идущий в своём темпе */
+export const liveAt = () => new Date(clk.virt + (Date.now() - clk.real) * clk.speed);
+export const skySpeed = () => clk.speed;
+/** Небо показывает настоящее время (без перемотки) */
+export const skyIsLive = () => clk.speed === 1 && Math.abs(liveAt().valueOf() - Date.now()) < 90_000;
+let pref: ThemePref = clockAt || speedAt > 1 ? 'auto' : readPref();
 let sky: Sky = computeSky(pref);
 let theme: Theme = sky.ui >= 0.5 ? 'day' : 'night';
 const listeners = new Set<() => void>();
+const clockListeners = new Set<() => void>();
 
 function computeSky(p: ThemePref, at: Date = liveAt()): Sky {
   if (p !== 'auto') {
@@ -251,11 +268,39 @@ function apply(animate: boolean) {
   el.style.colorScheme = theme === 'day' ? 'light' : 'dark';
 }
 
-function update(animate: boolean) {
-  const before = sky.ui;
+/**
+ * Пересчёт неба и темы. При перемотке зовётся 10 раз в секунду: цвета идут без анимации переходов
+ * (иначе переходы на всех элементах шли бы непрерывно), анимируется только скачок через «серое на сером»;
+ * компоненты перерисовываются, лишь когда тема сменилась.
+ */
+function update(animate: boolean, fast = false) {
+  const before = sky.ui, was = theme;
   sky = computeSky(pref);
-  apply(animate && Math.abs(sky.ui - before) > 0.02);
-  listeners.forEach((l) => l());
+  apply(animate && Math.abs(sky.ui - before) > (fast ? 0.15 : 0.02));
+  if (!fast || theme !== was) listeners.forEach((l) => l());
+  clockListeners.forEach((l) => l());
+}
+
+let fastTimer = 0;
+function syncTicker() {
+  if (clk.speed > 1 && pref === 'auto') {
+    if (!fastTimer) fastTimer = window.setInterval(() => update(true, true), 100);
+  } else if (fastTimer) {
+    window.clearInterval(fastTimer);
+    fastTimer = 0;
+  }
+}
+
+/**
+ * Перемотка неба «Авто»: скорость (1 — настоящее время, 600 — 10 минут в секунду, 3600 — час в секунду)
+ * и/или момент. at: null — вернуться к настоящему времени.
+ */
+export function setSkyClock({ speed, at }: { speed?: number; at?: Date | null }) {
+  const virt = at === null ? Date.now() : (at ?? liveAt()).valueOf();
+  clk = { real: Date.now(), virt, speed: at === null ? 1 : speed ?? clk.speed };
+  if (pref !== 'auto') setThemePref('auto');
+  syncTicker();
+  update(true);
 }
 
 /** Применить тему до первой отрисовки — без вспышки неверных цветов. */
@@ -263,13 +308,15 @@ export function initTheme() {
   readPalettes();
   sky = computeSky(pref);
   apply(false);
-  window.setInterval(() => { if (pref === 'auto') update(true); }, 60_000);   // «Авто»: небо сдвигается раз в минуту
-  window.addEventListener('storage', (e) => { if (e.key === KEY) { pref = readPref(); update(true); } });
+  window.setInterval(() => { if (pref === 'auto' && clk.speed === 1) update(true); }, 60_000);   // «Авто»: небо сдвигается раз в минуту
+  window.addEventListener('storage', (e) => { if (e.key === KEY) { pref = readPref(); syncTicker(); update(true); } });
+  syncTicker();
 }
 
 export function setThemePref(p: ThemePref) {
   pref = p;
   try { localStorage.setItem(KEY, p); } catch { /* только на эту вкладку */ }
+  syncTicker();
   update(true);
 }
 
@@ -283,6 +330,18 @@ export function useTheme() {
     listeners.add(l);
     return () => { listeners.delete(l); };
   }, []);
-  const { rise, set } = sunTimes();
+  const { rise, set } = sunTimes(liveAt());
   return { pref, theme, sky, setPref: setThemePref, rise: fmtMsk(rise), set: fmtMsk(set) };
+}
+
+/** Часы неба для показа: время неба, скорость, идёт ли настоящее время (обновляется и при перемотке) */
+export function useSkyClock() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const l = () => force((x) => x + 1);
+    clockListeners.add(l);
+    listeners.add(l);
+    return () => { clockListeners.delete(l); listeners.delete(l); };
+  }, []);
+  return { at: liveAt(), speed: clk.speed, live: skyIsLive() };
 }

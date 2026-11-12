@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { showIntro } from '../introBus';
 import type { Route } from '../route';
 import { setSound, useSoundOn } from '../sound';
-import { useTheme, type ThemePref } from '../theme';
+import { fmtMsk, setSkyClock, useSkyClock, useTheme, type ThemePref } from '../theme';
 
 const I = ({ children }: { children: ReactNode }) => (
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -60,8 +60,48 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
           </button>
         ))}
       </div>
-      {pref === 'auto' && <div className="mt-1.5 hidden px-1 font-mono text-[10px] text-muted xl:block">день {rise}–{set} МСК</div>}
+      {pref === 'auto' && <SkyClock rise={rise} set={set} />}
     </>
+  );
+}
+
+const MSK_MS = 3 * 3600_000, DAY_MS = 86400_000;
+const SPEEDS = [
+  { v: 1, label: '×1', title: 'Настоящее время' },
+  { v: 600, label: '10 мин/с', title: '10 минут неба в секунду: закат за полминуты' },
+  { v: 3600, label: '1 ч/с', title: 'Час неба в секунду: сутки за 24 секунды' },
+];
+
+/**
+ * Перемотка неба «Авто»: время неба по МСК, ползунок по часам суток и скорость.
+ * Проверить, как тема и фон проходят рассвет, день, закат и ночь, не дожидаясь их.
+ */
+function SkyClock({ rise, set }: { rise: string; set: string }) {
+  const { at, speed, live } = useSkyClock();
+  const msk = at.valueOf() + MSK_MS;
+  const minutes = Math.floor((msk % DAY_MS) / 60000);
+  const seek = (m: number) => setSkyClock({ at: new Date(msk - (msk % DAY_MS) + m * 60000 - MSK_MS) });
+  return (
+    <div className="mt-2 hidden px-1 xl:block">
+      <div className="flex items-baseline justify-between font-mono text-[10px] text-muted">
+        <span>небо <b className="font-medium text-primary">{fmtMsk(at)}</b> МСК</span>
+        {live ? <span>сейчас</span> : (
+          <button type="button" onClick={() => setSkyClock({ at: null })} className="text-accent hover:text-primary" title="Вернуть настоящее время">к сейчас</button>
+        )}
+      </div>
+      <input type="range" min={0} max={1439} step={5} value={minutes} aria-label="Время неба, МСК"
+        onChange={(e) => seek(Number(e.target.value))} className="sky-range mt-1 w-full" />
+      <div role="radiogroup" aria-label="Скорость неба" className="mt-1 grid grid-cols-3 gap-1">
+        {SPEEDS.map((s) => (
+          <button key={s.v} type="button" role="radio" aria-checked={speed === s.v} title={s.title}
+            onClick={() => setSkyClock({ speed: s.v })}
+            className={`h-6 rounded-[6px] font-mono text-[10px] ${speed === s.v ? 'bg-white/10 text-primary' : 'text-muted hover:text-primary'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 font-mono text-[10px] text-muted">день {rise}–{set}</div>
+    </div>
   );
 }
 

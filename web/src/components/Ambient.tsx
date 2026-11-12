@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 import Reeds from './Reeds';
-import { HZ } from '../theme';
+import { HZ, skySpeed } from '../theme';
 import { SPEED, createSea, follow, frameFrom, lerp3, seaClock, targets, trackBody } from '../sea';
 import { introCovering } from '../introBus';
 
@@ -70,7 +70,8 @@ export default function Ambient({ mode, quiet = false, moon = 0.5 }: { mode: Mod
       f.t += dt * f.speed;
       // цвета неба и воды мягко идут к цели (смена режима и темы); светила — точно по дуге
       const key = `${m}|${mp}`;
-      if (now - tgAt > 250 || key !== tgKey) { tg = targets(m, mp); tgAt = now; tgKey = key; }
+      // при перемотке неба солнце идёт быстро — его место считаем каждый кадр, иначе оно двигалось бы ступеньками
+      if (now - tgAt > (skySpeed() > 1 ? 0 : 250) || key !== tgKey) { tg = targets(m, mp); tgAt = now; tgKey = key; }
       const kc = follow(1.2, dt);
       for (const n of PAL_KEYS) lerp3(f.pal[n], tg.pal[n], kc);
       lerp3(f.moonC, tg.moonC, kc);
