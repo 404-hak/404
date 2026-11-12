@@ -1,0 +1,26 @@
+// Зеркало моделей API (api/app/models.py)
+export type AlertKind = 'motor' | 'shot' | 'silence' | 'offline';
+export type AlertStatus = 'new' | 'intercept' | 'resolved';
+export type BuoyStatus = 'ok' | 'warn' | 'alert' | 'offline';
+export type Mode = 'calm' | 'alertness' | 'alarm' | 'intercept';
+
+export interface Buoy {
+  id: string; name: string; lat: number; lon: number; sector: number;
+  status: BuoyStatus; battery: number; last_seen: string; health: number;
+}
+export interface Match { vessel_id: string; last_seen: string; similarity: number }
+export interface Alert {
+  id: string; buoy_id: string; buoy_name: string; sector: number; kind: AlertKind; ts: string;
+  lat: number; lon: number; confidence: number; status: AlertStatus; message: string;
+  distance_km: number | null; match: Match | null; prev_hash: string; hash: string;
+}
+export interface Forecast {
+  ts: string; moon_phase: string; moon_illumination: number; weekday: string; water_temp: number;
+  wind_ms: number; risk: number; level: 'low' | 'elevated' | 'high'; hot_sectors: number[];
+  message: string; demo: boolean;
+}
+export interface Sector { n: number; south: number; west: number; north: number; east: number }
+export interface State {
+  mode: Mode; now: string; buoys: Buoy[]; alerts: Alert[]; forecast: Forecast; sectors: Sector[];
+  links: [string, string][]; inspector: [number, number]; center: [number, number];
+}

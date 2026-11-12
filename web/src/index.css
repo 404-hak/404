@@ -1,0 +1,37 @@
+@import '../../brand/tokens/tokens.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { -webkit-font-smoothing: antialiased; }
+
+.cap { font-size: 10px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--c-text-2); }
+
+/* карта в цветах бренда */
+.leaflet-container { background: var(--c-bg); font-family: var(--font-sans); }
+.leaflet-bar a, .leaflet-bar a:hover { background: var(--c-surface); color: var(--c-text); border-color: var(--c-line); }
+.leaflet-control-attribution { background: rgba(11, 22, 40, .75) !important; color: var(--c-text-2) !important; font-size: 10px; }
+.leaflet-control-attribution a { color: var(--c-text-2) !important; }
+.leaflet-tooltip.tip { background: var(--c-surface); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; box-shadow: none; font-size: 12px; padding: 4px 8px; }
+.leaflet-tooltip.tip::before { display: none; }
+.sector-label { font-family: var(--font-mono); font-size: 11px; color: var(--c-grey); white-space: nowrap; }
+.sector-label.hot { color: var(--c-warn); }
+
+/* буй — «кольцо с точкой», как нуль в надписи 404 */
+.buoy { position: relative; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--c-accent); background: var(--c-bg);
+  display: grid; place-items: center; box-sizing: border-box; }
+.buoy::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--c-accent); }
+.buoy--warn { border-color: var(--c-warn); }
+.buoy--warn::after { background: var(--c-warn); }
+.buoy--offline { border-color: var(--c-grey); }
+.buoy--offline::after { background: var(--c-grey); }
+.buoy--alert { width: 24px; height: 24px; border-width: 4px; border-color: var(--c-alert); }
+.buoy--alert::after { width: 7px; height: 7px; background: var(--c-alert); }
+.buoy--alert .pulse { position: absolute; inset: -14px; border-radius: 50%; border: 2px solid var(--c-alert); animation: pulse 1.6s ease-out infinite; }
+.buoy--alert .pulse.p2 { animation-delay: .8s; }
+@keyframes pulse { from { transform: scale(.45); opacity: .9; } to { transform: scale(1.5); opacity: 0; } }
+
+.inspector { width: 14px; height: 14px; border-radius: 50%; background: var(--c-primary); box-shadow: 0 0 0 5px rgba(226, 232, 240, .18); }
+
+@media (prefers-reduced-motion: reduce) { .buoy--alert .pulse { animation: none; opacity: .4; } }

@@ -1,0 +1,11 @@
+{
+  "name": "404-geo",
+  "private": true,
+  "type": "module",
+  "description": "Сборка офлайн-подложки дельты Волги из Natural Earth",
+  "scripts": { "build": "node build-delta.mjs" },
+  "devDependencies": {
+    "world-atlas": "2.0.2",
+    "topojson-client": "3.1.0"
+  }
+}
