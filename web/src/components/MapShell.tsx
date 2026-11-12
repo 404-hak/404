@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import type { State } from '../types';
-import type { MapHandle } from '../geo';
+import type { MapHandle, Selection } from '../geo';
 import { hasYandexKey } from '../yandex';
 import MapView from './MapView';
 import YandexMapView from './YandexMapView';
@@ -88,7 +88,7 @@ function Legend({ intercept, inline }: { intercept: boolean; inline: boolean }) 
 }
 
 /** Карта с одинаковым управлением для спутника и схемы. */
-export default function MapShell({ state, handle }: { state: State; handle: MutableRefObject<MapHandle | null> }) {
+export default function MapShell({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
   const [basemap, setBasemap] = useState<Basemap>(hasYandexKey ? 'photo' : 'scheme');
   const [notice, setNotice] = useState<string | null>(null);
   const intercept = state.alerts.some((a) => a.status === 'intercept');
@@ -101,13 +101,13 @@ export default function MapShell({ state, handle }: { state: State; handle: Muta
   return (
     <div ref={root} className="relative h-full w-full overflow-hidden">
       {basemap === 'photo' ? (
-        <YandexMapView state={state} handle={handle} onFail={(why) => {
+        <YandexMapView state={state} handle={handle} selected={selected} onSelect={onSelect} onFail={(why) => {
           // кнопка «Спутник» остаётся активной: нажатие повторит загрузку без перезагрузки страницы
           setBasemap('scheme');
           setNotice(`Спутник недоступен: ${why}. Показана офлайн-схема — кнопка «Спутник» попробует снова.`);
         }} />
       ) : (
-        <MapView state={state} handle={handle} />
+        <MapView state={state} handle={handle} selected={selected} onSelect={onSelect} />
       )}
 
       {/* глубина по краям и свечение цвета режима; в тревоге край пульсирует */}

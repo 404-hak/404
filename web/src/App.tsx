@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import TopBar from './components/TopBar';
 import MapShell from './components/MapShell';
 import SidePanel from './components/SidePanel';
@@ -27,6 +27,16 @@ export default function App() {
   const { state, online } = useLiveState();
   const lastAlert = useRef<string | null>(null);
   const map = useRef<MapHandle | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  // новая тревога важнее выбранного буя; Esc снимает выделение
+  const freshId = state?.alerts.find((a) => a.status === 'new')?.id;
+  useEffect(() => { if (freshId) setSelected(null); }, [freshId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const fresh = state?.alerts.find((a) => a.status === 'new');
@@ -45,9 +55,9 @@ export default function App() {
       {state ? (
         <main className="flex min-h-0 flex-1 flex-col md:flex-row">
           <div className="h-[52vh] shrink-0 md:h-auto md:flex-1">
-            <MapShell state={state} handle={map} />
+            <MapShell state={state} handle={map} selected={selected} onSelect={setSelected} />
           </div>
-          <SidePanel state={state} handle={map} />
+          <SidePanel state={state} handle={map} selected={selected} onSelect={setSelected} />
         </main>
       ) : (
         <div className="grid flex-1 place-items-center">

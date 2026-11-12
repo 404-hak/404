@@ -3,21 +3,23 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import type { State } from '../types';
 import { km } from '../format';
 import { loadYmaps } from '../yandex';
-import { BUOY_STATUS, areaOf, brackets, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle } from '../geo';
+import { BUOY_STATUS, areaOf, brackets, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 
 const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
 // зазор вокруг района [сверху, справа, снизу, слева]: видна граница, кнопки и легенда её не закрывают
 const ZOOM_MARGIN = [64, 64, 64, 28];
 
-interface Props { state: State; handle: MutableRefObject<MapHandle | null>; onFail: (why: string) => void }
+interface Props extends Selection { state: State; handle: MutableRefObject<MapHandle | null>; onFail: (why: string) => void }
 
 /**
  * Яндекс Карты, «Гибрид»: спутниковый снимок дельты с подписями.
  * Карта не уходит за район дежурства: панорама ограничена, снаружи — затемнение.
  * Поверх — слой 404: сектора, связи буёв, буи, катер инспектора и маршрут перехвата.
  */
-export default function YandexMapView({ state, handle, onFail }: Props) {
+export default function YandexMapView({ state, handle, onFail, selected, onSelect }: Props) {
+  const pick = useRef(onSelect);
+  pick.current = onSelect;
   const el = useRef<HTMLDivElement>(null);
   const ym = useRef<any>(null);
   const map = useRef<any>(null);
@@ -60,11 +62,12 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
         fitArea();
         labels();
         m.container.events.add('sizechange', limit);
+        m.events.add('click', () => pick.current(null));
         m.events.add('boundschange', labels);
 
         layouts.current = {
           buoy: y.templateLayoutFactory.createClass(
-            '<div class="buoy buoy--{{ properties.status }}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
+            '<div class="buoy buoy--{{ properties.status }}{% if properties.selected %} buoy--selected{% endif %}" style="--i:{{ properties.i }};--d:{{ properties.d }}s">'
             + '{% if properties.status == "alert" %}<span class="pulse"></span><span class="pulse p2"></span>{% else %}<span class="sonar"></span>{% endif %}'
             + '<span class="map-label">{{ properties.name }}</span></div>'),
           inspector: y.templateLayoutFactory.createClass('<div class="inspector"><span class="map-label">Вы</span></div>'),
@@ -157,11 +160,12 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
     state.buoys.forEach((b, i) => {
       const r = b.status === 'alert' ? 12 : 9;
       const pm = new y.Placemark([b.lat, b.lon], {
-        status: b.status, name: b.name, i, d: ((i * 0.83) % 3.6).toFixed(2), hintContent: hint(b),
+        status: b.status, name: b.name, i, d: ((i * 0.83) % 3.6).toFixed(2), hintContent: hint(b), selected: b.id === selected,
       }, {
         iconLayout: L.buoy, iconOffset: [-r, -r], iconShape: { type: 'Circle', coordinates: [r, r], radius: r + 4 },
         zIndex: b.status === 'alert' ? 1000 : 500,
       });
+      pm.events.add('click', () => pick.current(b.id));
       marks.current[b.id] = pm;
       g.add(pm);
     });
@@ -169,6 +173,15 @@ export default function YandexMapView({ state, handle, onFail }: Props) {
       iconLayout: L.inspector, iconOffset: [-7, -7], iconShape: { type: 'Circle', coordinates: [7, 7], radius: 10 }, zIndex: 900,
     }));
   }, [ready, key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // выделение меняет только сам значок, без перерисовки слоя
+  useEffect(() => {
+    if (!ready) return;
+    for (const [id, pm] of Object.entries(marks.current)) {
+      pm.properties.set('selected', id === selected);
+      pm.options.set('zIndex', id === selected ? 1200 : pm.properties.get('status') === 'alert' ? 1000 : 500);
+    }
+  }, [ready, selected, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // подсказки с зарядом батареи — без перерисовки слоя
   useEffect(() => {

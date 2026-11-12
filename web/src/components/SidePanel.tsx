@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import type { Alert, Buoy, Forecast, State } from '../types';
 import { KIND_TITLE, coord, fmtDM, fmtHM, fmtTime, isToday, km, pct, plural, shortHash } from '../format';
-import { BUOY_STATUS, sectorCenter, type MapHandle } from '../geo';
+import { BUOY_STATUS, sectorCenter, type MapHandle, type Selection } from '../geo';
 import { api } from '../live';
 import { useTween } from '../motion';
 import Moon from './Moon';
@@ -137,6 +137,66 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
   );
 }
 
+const ago = (iso: string, now: string) => {
+  const s = Math.max(0, Math.round((new Date(now).getTime() - new Date(iso).getTime()) / 1000));
+  return s < 15 ? 'только что' : s < 60 ? `${s} с назад` : s < 3600 ? `${Math.round(s / 60)} мин назад` : `${Math.round(s / 3600)} ч назад`;
+};
+
+/** Карточка выбранного буя: состояние, связь, его события. */
+function BuoyCard({ b, state, handle, onClose, alert }: { b: Buoy; state: State; handle: Handle; onClose: () => void; alert?: Alert }) {
+  const events = state.alerts.filter((a) => a.buoy_id === b.id);
+  const tone = { ok: 'text-accent', warn: 'text-warn', alert: 'text-alert', offline: 'text-grey' }[b.status];
+  return (
+    <section className="enter border-b border-line">
+      {alert && (
+        <button type="button" onClick={onClose}
+          className="flex w-full items-center gap-2 bg-alert/15 px-5 py-2 text-left text-[12px] font-medium text-alert hover:bg-alert/25">
+          <span className="live-dot h-1.5 w-1.5 rounded-full bg-alert" />Тревога у буя {alert.buoy_name} — вернуться к ней
+        </button>
+      )}
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-full border-[3px] ${RING[b.status]}`}>
+              <span className={`h-2.5 w-2.5 rounded-full ${BAR[b.status]}`} />
+            </span>
+            <div>
+              <div className="cap">Акустический буй</div>
+              <h2 className="text-[19px] font-semibold leading-[24px]">{b.name}</h2>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Снять выделение" title="Снять выделение (Esc)"
+            className="-mr-1 grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary">✕</button>
+        </div>
+        <p className="mt-3 text-[13px] text-muted">
+          <span className={`font-semibold ${tone}`}>{BUOY_STATUS[b.status]}</span> · сектор {b.sector} · на связи {ago(b.last_seen, state.now)}
+        </p>
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <Stat label="батарея" value={`${b.battery}\u00a0%`} tone={b.battery < 30 ? 'text-warn' : ''} />
+          <Stat label="сигнал" value={pct(b.health)} icon={<Signal health={b.health} status={b.status} />} />
+          <Stat label="событий" value={String(events.length)} />
+        </div>
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <button type="button" onClick={() => handle.current?.flyTo(b.lat, b.lon, 12)}
+            className="h-9 rounded-[9px] border border-line px-3 text-[12px] font-semibold hover:border-grey hover:bg-white/[.04]">Показать на карте</button>
+          <span className="font-mono text-[10px] text-muted">{coord(b.lat, b.lon)}</span>
+        </div>
+        {events.length > 0 && (
+          <ul className="mt-4 border-t border-line">
+            {events.slice(0, 5).map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-2 border-b border-line py-2 text-[12px]">
+                <span><span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${KIND_DOT[a.kind]}`} />{KIND_TITLE[a.kind]}
+                  <span className="text-muted"> · {STATUS[a.status]}</span></span>
+                <span className="font-mono text-[11px] text-muted">{isToday(a.ts, state.now) ? fmtHM(a.ts) : fmtDM(a.ts)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offline: 'bg-grey' } as const;
 const STATUS = { new: 'ждёт решения', intercept: 'перехват', resolved: 'закрыт' } as const;
 
@@ -186,15 +246,15 @@ const Signal = ({ health, status }: { health: number; status: Buoy['status'] }) 
   );
 };
 
-function BuoyList({ buoys, handle }: { buoys: Buoy[]; handle: Handle }) {
+function BuoyList({ buoys, handle, selected, onSelect }: { buoys: Buoy[]; handle: Handle } & Selection) {
   const delay = useStagger();
   const sorted = [...buoys].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.sector - b.sector);
   return (
     <ul className="px-5">
       {sorted.map((b, i) => (
         <li key={b.id} className="row-in" style={delay(i)}>
-          <button type="button" onClick={() => handle.current?.flyTo(b.lat, b.lon)}
-            className="group grid w-full grid-cols-[18px_1fr_auto_auto] items-center gap-3 border-b border-line py-2.5 text-left text-[13px] leading-[18px] hover:bg-white/[.03]">
+          <button type="button" onClick={() => { onSelect(b.id); handle.current?.flyTo(b.lat, b.lon, 12); }} aria-pressed={b.id === selected}
+            className={`group grid w-full grid-cols-[18px_1fr_auto_auto] items-center gap-3 border-b border-line py-2.5 text-left text-[13px] leading-[18px] hover:bg-white/[.03] ${b.id === selected ? 'bg-white/[.06]' : ''}`}>
             <span className={`relative h-3.5 w-3.5 rounded-full border-[2.5px] transition-transform group-hover:scale-125 ${RING[b.status]} ${b.status === 'alert' ? 'live-dot bg-alert' : ''}`} />
             <span>
               <span className="font-medium">{b.name}</span>
@@ -235,18 +295,26 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; labe
   );
 }
 
-export default function SidePanel({ state, handle }: { state: State; handle: Handle }) {
+export default function SidePanel({ state, handle, selected, onSelect }: { state: State; handle: Handle } & Selection) {
   const [tab, setTab] = useState<'events' | 'buoys'>('events');
   const active = state.alerts.find((a) => a.status === 'intercept') ?? state.alerts.find((a) => a.status === 'new');
   const online = state.buoys.filter((b) => b.status !== 'offline').length;
   const health = state.buoys.reduce((s, b) => s + b.health, 0) / (state.buoys.length || 1);
   const open = state.alerts.filter((a) => a.status !== 'resolved').length;
+  const buoy = state.buoys.find((b) => b.id === selected);
+  // выбрали буй — карточка сверху должна быть видна
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) scroller.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selected]);
   return (
     <aside className="panel flex min-h-0 flex-1 flex-col border-line md:w-[380px] md:flex-none md:shrink-0 md:border-l">
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {active
-          ? <AlertCard key={`${active.id}-${active.status}`} a={active} handle={handle} />
-          : <ForecastCard key="forecast" f={state.forecast} state={state} handle={handle} />}
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+        {buoy
+          ? <BuoyCard key={buoy.id} b={buoy} state={state} handle={handle} alert={active} onClose={() => onSelect(null)} />
+          : active
+            ? <AlertCard key={`${active.id}-${active.status}`} a={active} handle={handle} />
+            : <ForecastCard key="forecast" f={state.forecast} state={state} handle={handle} />}
         <Tabs value={tab} onChange={setTab} tabs={[
           { id: 'events', label: <>Журнал событий{open > 0 && <span className="ml-1.5 rounded-full bg-alert px-1.5 py-px font-mono text-[10px] text-bg">{open}</span>}</> },
           { id: 'buoys', label: <>Буи <span className="font-mono text-[11px] text-muted">{online}/{state.buoys.length}</span></> },
@@ -256,7 +324,7 @@ export default function SidePanel({ state, handle }: { state: State; handle: Han
             <p className="px-5 pt-3 text-[12px] leading-[17px] text-muted">
               На связи {plural(online, ['буй', 'буя', 'буёв'])} из {state.buoys.length} · здоровье сети {pct(health)}. Нажмите на буй — карта покажет его.
             </p>
-            <BuoyList buoys={state.buoys} handle={handle} />
+            <BuoyList buoys={state.buoys} handle={handle} selected={selected} onSelect={onSelect} />
           </div>
         )}
       </div>

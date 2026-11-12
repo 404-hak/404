@@ -57,6 +57,9 @@ export function gridTicks(sectors: Sector[]) {
   ];
 }
 
+/** Выбранный буй: подсвечен на карте, его карточка — в панели. */
+export interface Selection { selected: string | null; onSelect: (id: string | null) => void }
+
 /** Управление картой — одинаковое для спутника и схемы. */
 export interface MapHandle {
   zoomIn(): void;

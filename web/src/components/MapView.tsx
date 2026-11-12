@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import L from 'leaflet';
 import type { GeoJsonObject } from 'geojson';
-import { AttributionControl, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap } from 'react-leaflet';
+import { AttributionControl, GeoJSON, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { Buoy, State } from '../types';
 import { km } from '../format';
-import { BUOY_STATUS, areaOf, brackets, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle } from '../geo';
+import { BUOY_STATUS, areaOf, brackets, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 
 const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', land: '#15253B', coast: '#2B3D55', mask: '#050B16', signal: '#D3DEC6' };
@@ -16,12 +16,12 @@ const memo = (key: string, make: () => L.DivIcon) => {
   return icons.get(key)!;
 };
 
-const buoyIcon = (b: Buoy, i: number) => memo(`b|${b.id}|${b.status}|${b.name}|${i}`, () => {
+const buoyIcon = (b: Buoy, i: number, sel: boolean) => memo(`b|${b.id}|${b.status}|${b.name}|${i}|${sel}`, () => {
   const s = b.status === 'alert' ? 24 : 18;
   const fx = b.status === 'alert' ? '<span class="pulse"></span><span class="pulse p2"></span>' : '<span class="sonar"></span>';
   return L.divIcon({
     className: '',
-    html: `<div class="buoy buoy--${b.status}" style="--i:${i};--d:${((i * 0.83) % 3.6).toFixed(2)}s">${fx}<span class="map-label">${esc(b.name)}</span></div>`,
+    html: `<div class="buoy buoy--${b.status}${sel ? ' buoy--selected' : ''}" style="--i:${i};--d:${((i * 0.83) % 3.6).toFixed(2)}s">${fx}<span class="map-label">${esc(b.name)}</span></div>`,
     iconSize: [s, s], iconAnchor: [s / 2, s / 2],
   });
 });
@@ -61,6 +61,16 @@ function Bounded({ area, handle, focus, booting }: {
       map.setMinZoom(map.getBoundsZoom(view, false));
     };
     const labels = () => map.getContainer().classList.toggle('compact', isCompact(map.getSize().x, map.getZoom()));
+    // Центр полёта сразу поджимается внутрь границ: иначе после полёта к бую у края
+    // ограничение панорамы дёргает карту назад.
+    const inside = (lat: number, lon: number, zoom: number) => {
+      const size = map.getSize(), half = size.divideBy(2);
+      const nw = map.project(view.getNorthWest(), zoom), se = map.project(view.getSouthEast(), zoom);
+      const p = map.project([lat, lon], zoom);
+      const x = se.x - nw.x <= size.x ? (nw.x + se.x) / 2 : Math.min(Math.max(p.x, nw.x + half.x), se.x - half.x);
+      const y = se.y - nw.y <= size.y ? (nw.y + se.y) / 2 : Math.min(Math.max(p.y, nw.y + half.y), se.y - half.y);
+      return map.unproject([x, y], zoom);
+    };
     map.setMaxBounds(view);
     limit();
     map.fitBounds(area, { ...fit, animate: false });
@@ -71,7 +81,7 @@ function Bounded({ area, handle, focus, booting }: {
       zoomIn: () => map.zoomIn(),
       zoomOut: () => map.zoomOut(),
       fitArea: () => map.flyToBounds(area, { ...fit, duration: 0.7 }),
-      flyTo: (lat, lon, zoom = 11.5) => map.flyTo([lat, lon], zoom, { duration: 0.9, easeLinearity: 0.2 }),
+      flyTo: (lat, lon, zoom = 11.5) => map.flyTo(inside(lat, lon, zoom), zoom, { duration: 0.9, easeLinearity: 0.2 }),
     };
     return () => {
       map.off('resize', limit);
@@ -87,15 +97,21 @@ function Bounded({ area, handle, focus, booting }: {
   // к новой тревоге — подлёт, после её закрытия — обратно ко всему району
   const seen = useRef(false);
   useEffect(() => {
-    if (focus) map.flyTo([focus.lat, focus.lon], 11.5, { duration: 1.2, easeLinearity: 0.2 });
+    if (focus) handle.current?.flyTo(focus.lat, focus.lon, 11.5);
     else if (seen.current) handle.current?.fitArea();
     seen.current = Boolean(focus);
   }, [focus?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
+/** Клик по пустой карте снимает выделение. */
+function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
+  useMapEvents({ click: () => onSelect(null) });
+  return null;
+}
+
 /** Офлайн-схема дельты (Natural Earth) — работает без интернета и без ключа. */
-export default function MapView({ state, handle }: { state: State; handle: MutableRefObject<MapHandle | null> }) {
+export default function MapView({ state, handle, selected, onSelect }: { state: State; handle: MutableRefObject<MapHandle | null> } & Selection) {
   const [delta, setDelta] = useState<GeoJsonObject | null>(null);
   const booting = useBooting();
   useEffect(() => {
@@ -115,6 +131,7 @@ export default function MapView({ state, handle }: { state: State; handle: Mutab
       zoomControl={false} attributionControl={false} className="map-scheme h-full w-full">
       <AttributionControl prefix={false} position="bottomright" />
       <Bounded area={area} handle={handle} focus={active} booting={booting} />
+      <ClickAway onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
       <Pane name="land" style={{ zIndex: 350 }}>
         {delta && (
@@ -172,7 +189,8 @@ export default function MapView({ state, handle }: { state: State; handle: Mutab
         <Marker key={`l${s.n}-${hot.includes(s.n)}`} position={[s.north, s.west]} icon={sectorIcon(s.n, hot.includes(s.n))} interactive={false} />
       ))}
       {state.buoys.map((b, i) => (
-        <Marker key={`${b.id}-${b.status}`} position={[b.lat, b.lon]} icon={buoyIcon(b, i)} zIndexOffset={b.status === 'alert' ? 1000 : 0}>
+        <Marker key={`${b.id}-${b.status}`} position={[b.lat, b.lon]} icon={buoyIcon(b, i, b.id === selected)}
+          zIndexOffset={b.id === selected ? 1200 : b.status === 'alert' ? 1000 : 0} eventHandlers={{ click: () => onSelect(b.id) }}>
           <Tooltip className="tip" direction="top" offset={[0, -12]}>
             {b.name} · {BUOY_STATUS[b.status]} · сектор {b.sector} · батарея {b.battery} %
           </Tooltip>
