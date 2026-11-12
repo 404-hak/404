@@ -1,6 +1,7 @@
 import type { Mode } from './types';
 import { currentSky, liveAt, skyBodies } from './theme';
 import { hex, palAt, type Pal, type V3 } from './skyPalette';
+import { WARN, design } from './design';
 
 /**
  * Море дельты — один рисовальщик для фона сайта и для интро: одно небо, одна вода, одни светила.
@@ -9,11 +10,11 @@ import { hex, palAt, type Pal, type V3 } from './skyPalette';
 
 /** Режим подкрашивает море: настороженность — янтарём, тревога — красным */
 export const TINT: Record<Mode, { c: V3; k: number }> = {
-  calm: { c: [0, 0, 0], k: 0 }, alertness: { c: hex('#F59E0B'), k: 0.12 }, alarm: { c: hex('#EF4444'), k: 0.18 }, intercept: { c: hex('#EF4444'), k: 0.14 },
+  calm: { c: [0, 0, 0], k: 0 }, alertness: { c: hex(WARN.night), k: design === 'upk' ? 0.05 : 0.12 }, alarm: { c: hex('#EF4444'), k: 0.18 }, intercept: { c: hex('#EF4444'), k: 0.14 },
 };
 export const SPEED: Record<Mode, number> = { calm: 1, alertness: 1.2, alarm: 1.55, intercept: 1.4 };
 /** Огоньки буёв сети: спокойно — шалфей, настороженность — янтарь, тревога — красный */
-const BEACON: Record<Mode, V3> = { calm: hex('#D2E4BF'), alertness: hex('#FFC46E'), alarm: hex('#FF6C5E'), intercept: hex('#FF6C5E') };
+const BEACON: Record<Mode, V3> = { calm: hex('#D2E4BF'), alertness: hex(design === 'upk' ? '#E9D29A' : '#FFC46E'), alarm: hex('#FF6C5E'), intercept: hex('#FF6C5E') };
 
 const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 /** Растяжка кадра, нарисованного мельче (расфокус камеры в интро): одна выборка с линейной фильтрацией */

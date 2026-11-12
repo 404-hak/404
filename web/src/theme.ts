@@ -313,11 +313,11 @@ export function initTheme() {
   syncTicker();
 }
 
-export function setThemePref(p: ThemePref) {
+export function setThemePref(p: ThemePref, animate = true) {
   pref = p;
   try { localStorage.setItem(KEY, p); } catch { /* только на эту вкладку */ }
   syncTicker();
-  update(true);
+  update(animate);
 }
 
 export const currentTheme = () => theme;

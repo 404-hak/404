@@ -9,6 +9,7 @@ import type { Buoy, BuoyStatus, Sector, State } from './types';
 import type { Bounds, MapHandle } from './geo';
 import { pad } from './geo';
 import { km } from './format';
+import { WARN, design } from './design';
 
 /**
  * 3D-карта района: плита дельты по OpenStreetMap (вода, протоки, плавни) — как диорама,
@@ -22,12 +23,12 @@ const PALETTE = {
   night: {
     land: '#131d29', wetland: '#1a2925', water: '#0c1d33', river: '#16375a', coast: 'rgba(140,180,215,.5)',
     outside: 'rgba(4,9,18,.6)', primary: '#E2E8F0', grid: '#E2E8F0', sideTop: '#11223a', sideBottom: '#050b15', glint: '#cfe3ff',
-    ok: '#A3B58F', warn: '#F59E0B', alert: '#EF4444', offline: '#6B7686', shadow: 0.55, additive: true, glowK: 1,
+    ok: '#A3B58F', warn: WARN.night, alert: '#EF4444', offline: '#6B7686', shadow: 0.55, additive: true, glowK: 1,
   },
   day: {
     land: '#e2e2d4', wetland: '#cbd5ba', water: '#a7c3db', river: '#97b7d4', coast: 'rgba(60,95,130,.55)',
     outside: 'rgba(244,247,250,.58)', primary: '#0B1628', grid: '#0B1628', sideTop: '#c3d1de', sideBottom: '#8ea4b8', glint: '#ffffff',
-    ok: '#7A8F69', warn: '#D98A10', alert: '#D63131', offline: '#9AA3B0', shadow: 0.22, additive: false, glowK: 0.35,
+    ok: '#7A8F69', warn: design === 'upk' ? WARN.day : '#D98A10', alert: '#D63131', offline: '#9AA3B0', shadow: 0.22, additive: false, glowK: 0.35,
   },
 };
 type Pal = (typeof PALETTE)['night'];

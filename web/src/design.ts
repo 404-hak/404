@@ -26,3 +26,11 @@ function pick(): Design {
 
 export const design: Design = pick();
 document.documentElement.dataset.design = design;
+
+/**
+ * Цвет «повышенного риска». В оформлении «УПК» вместо яркого оранжевого — приглушённый янтарь
+ * с прошлого сайта, и только в мелких отметках (см. design-upk.css); в прежнем — как было.
+ */
+export const WARN = design === 'upk'
+  ? { night: '#E2B65E', day: '#946713', rgb: [226, 182, 94] as [number, number, number] }
+  : { night: '#F59E0B', day: '#8F5406', rgb: [245, 158, 11] as [number, number, number] };

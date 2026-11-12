@@ -3,6 +3,7 @@ import type { Alert, AlertStatus, State, Stats } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM, isToday, km, pct } from '../format';
 import { api } from '../live';
 import { Kpi, Page } from './common';
+import { scrambleRef } from '../upkMotion';
 
 const COLS: { id: AlertStatus; title: string; hint: string; dot: string }[] = [
   { id: 'new', title: 'Ждут решения', hint: 'Начните перехват или отметьте ложную тревогу', dot: 'bg-alert' },
@@ -17,7 +18,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
     <article className={`ui-tile enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
       style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
       <div className="ui-meta flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
-        <span>{a.id.replace(/^A-\d+-/, '№ ')}</span>
+        <span ref={scrambleRef}>{a.id.replace(/^A-\d+-/, '№ ')}</span>
         <span>{isToday(a.ts, now) ? fmtHM(a.ts) : `${fmtDM(a.ts)} · ${fmtHM(a.ts)}`}</span>
       </div>
       <h3 className="mt-2 flex items-center gap-2 text-[15px] font-semibold leading-5">

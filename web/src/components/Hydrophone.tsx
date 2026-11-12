@@ -3,9 +3,10 @@ import { currentTheme } from '../theme';
 import type { Mode } from '../types';
 import { reducedMotion } from '../motion';
 import { introCovering } from '../introBus';
+import { WARN } from '../design';
 
 const COLOR: Record<Mode, [number, number, number]> = {
-  calm: [140, 160, 128], alertness: [245, 158, 11], alarm: [239, 68, 68], intercept: [239, 68, 68],
+  calm: [140, 160, 128], alertness: WARN.rgb, alarm: [239, 68, 68], intercept: [239, 68, 68],
 };
 /** Днём волна темнее — на светлой шапке */
 const COLOR_DAY: Record<Mode, [number, number, number]> = {

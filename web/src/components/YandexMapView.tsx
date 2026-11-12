@@ -5,8 +5,9 @@ import { km } from '../format';
 import { loadYmaps } from '../yandex';
 import { BUOY_STATUS, areaOf, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { reducedMotion } from '../motion';
+import { WARN } from '../design';
 
-const C = { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
+const C = { accent: '#7A866F', warn: WARN.night, alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
 // зазор вокруг района [сверху, справа, снизу, слева]: видна граница, кнопки и легенда её не закрывают
 const ZOOM_MARGIN = [64, 64, 64, 28];
 const easeOut = (k: number) => 1 - (1 - k) ** 3;

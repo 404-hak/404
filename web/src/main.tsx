@@ -14,8 +14,10 @@ import './index.css';
 import './design-upk.css';
 import App from './App';
 import { initTheme } from './theme';
+import { initUpkMotion } from './upkMotion';
 
-initTheme();   // тема — до первой отрисовки, без вспышки
+initTheme();
+initUpkMotion();   // указатель-искра, искры выделения, магнитные кнопки — только в оформлении «УПК»   // тема — до первой отрисовки, без вспышки
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

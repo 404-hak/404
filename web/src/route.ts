@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { sparkTransition } from './upkMotion';
 
 export type Route = 'map' | 'alerts' | 'stats' | 'forecast' | 'buoys' | 'evidence';
 export const ROUTES: Route[] = ['map', 'alerts', 'stats', 'forecast', 'buoys', 'evidence'];
@@ -12,7 +13,8 @@ const parse = (): Route => {
 export function useRoute(): [Route, (r: Route) => void] {
   const [route, setRoute] = useState<Route>(parse);
   useEffect(() => {
-    const on = () => setRoute(parse());
+    // в оформлении «УПК» новый раздел раскрывается знаком 404 из точки нажатия
+    const on = () => sparkTransition(() => setRoute(parse()));
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);

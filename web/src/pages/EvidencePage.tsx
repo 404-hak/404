@@ -1,3 +1,4 @@
+import { scrambleRef } from '../upkMotion';
 import { useEffect, useRef, useState } from 'react';
 import type { Alert, ChainCheck, State } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM } from '../format';
@@ -71,11 +72,11 @@ export default function EvidencePage({ state }: { state: State }) {
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                       <span className="text-[13px]"><b className="font-semibold">{KIND_TITLE[a.kind]}</b> <span className="text-muted">· {a.buoy_name} · {fmtDM(a.ts)} {fmtHM(a.ts)}</span>
                         {a.synthetic && <span className="ml-2 rounded-[4px] border border-line px-1 text-[10px] text-muted">демо</span>}</span>
-                      <span className="keep-mono font-mono text-[11px] text-muted">{a.id}</span>
+                      <span ref={scrambleRef} className="keep-mono font-mono text-[11px] text-muted">{a.id}</span>
                     </div>
                     <div className="keep-mono mt-1.5 grid gap-x-4 gap-y-0.5 font-mono text-[11px] sm:grid-cols-2">
-                      <span className="truncate" title={a.hash}><span className="text-muted">хэш</span> {short(a.hash)}</span>
-                      <span className="truncate" title={a.prev_hash}><span className="text-muted">предыдущий</span> {short(a.prev_hash)}</span>
+                      <span className="truncate" title={a.hash}><span className="text-muted">хэш</span> <span ref={scrambleRef}>{short(a.hash)}</span></span>
+                      <span className="truncate" title={a.prev_hash}><span className="text-muted">предыдущий</span> <span ref={scrambleRef}>{short(a.prev_hash)}</span></span>
                       {a.audio_sha256 && (
                         <span className="flex items-center gap-2 truncate sm:col-span-2" title={`SHA-256 звука: ${a.audio_sha256}`}>
                           <span className="text-muted">звук</span> {short(a.audio_sha256)}

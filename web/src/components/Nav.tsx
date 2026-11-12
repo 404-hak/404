@@ -1,3 +1,5 @@
+import { sparkTransition } from '../upkMotion';
+import { design } from '../design';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { showIntro } from '../introBus';
 import type { Route } from '../route';
@@ -42,7 +44,7 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
   const { pref, theme, setPref, rise, set } = useTheme();
   const hint = themeHint(pref, theme, rise, set);
   const cycle = (
-    <button type="button" onClick={() => setPref(NEXT[pref])} title={`${hint}. Нажмите — ${THEME_LABEL[NEXT[pref]].toLowerCase()}`}
+    <button type="button" onClick={() => sparkTransition(() => setPref(NEXT[pref], design !== 'upk'), 980)} title={`${hint}. Нажмите — ${THEME_LABEL[NEXT[pref]].toLowerCase()}`}
       aria-label={`Тема: ${THEME_LABEL[pref]}`}
       className={`h-8 w-8 place-items-center rounded-full text-muted hover:bg-white/5 hover:text-primary ${compact ? 'grid md:hidden' : 'mx-auto grid xl:hidden'}`}>
       {THEME_ICON[pref]}
@@ -54,7 +56,7 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
       {cycle}
       <div role="radiogroup" aria-label="Тема" title={hint} className="ui-seg hidden grid-cols-3 gap-1 rounded-[10px] border border-line bg-white/[.03] p-1 xl:grid">
         {(['night', 'day', 'auto'] as ThemePref[]).map((p) => (
-          <button key={p} type="button" role="radio" aria-checked={pref === p} onClick={() => setPref(p)}
+          <button key={p} type="button" role="radio" aria-checked={pref === p} onClick={() => { if (p !== pref) sparkTransition(() => setPref(p, design !== 'upk'), 980); }}
             className={`ui-seg-btn flex h-8 items-center justify-center gap-1.5 rounded-[7px] text-[12px] font-medium ${pref === p ? 'bg-white/10 text-primary' : 'text-muted hover:text-primary'}`}>
             <span className="scale-[.8]">{THEME_ICON[p]}</span>{THEME_LABEL[p]}
           </button>

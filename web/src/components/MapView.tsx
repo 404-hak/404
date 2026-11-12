@@ -7,12 +7,13 @@ import { km } from '../format';
 import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 import { useTheme } from '../theme';
+import { WARN } from '../design';
 
 /** Цвета схемы по теме: ночью вода темнее суши, днём — синее, вне района — затемнение или высветление */
 const PALETTE = {
-  night: { accent: '#7A866F', warn: '#F59E0B', alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', maskOpacity: 0.62,
+  night: { accent: '#7A866F', warn: WARN.night, alert: '#EF4444', primary: '#E2E8F0', mask: '#050B16', maskOpacity: 0.62,
     water: '#0A1628', coast: 'rgba(132,170,205,.32)', reeds: 'rgba(122,134,111,.16)' },
-  day: { accent: '#5E6A57', warn: '#8F5406', alert: '#C02626', primary: '#0B1628', mask: '#F4F7FA', maskOpacity: 0.6,
+  day: { accent: '#5E6A57', warn: WARN.day, alert: '#C02626', primary: '#0B1628', mask: '#F4F7FA', maskOpacity: 0.6,
     water: '#B4CADC', coast: 'rgba(60,95,130,.4)', reeds: 'rgba(94,106,87,.24)' },
 };
 type Palette = (typeof PALETTE)['night'];
