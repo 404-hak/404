@@ -14,9 +14,9 @@ const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offl
 function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => void; i: number }) {
   const minutes = a.intercept_at ? Math.round((new Date(a.intercept_at).getTime() - new Date(a.ts).getTime()) / 60000) : null;
   return (
-    <article className={`enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
+    <article className={`ui-tile enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
       style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
-      <div className="flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
+      <div className="ui-meta flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
         <span>{a.id.replace(/^A-\d+-/, '№ ')}</span>
         <span>{isToday(a.ts, now) ? fmtHM(a.ts) : `${fmtDM(a.ts)} · ${fmtHM(a.ts)}`}</span>
       </div>
@@ -24,7 +24,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
         <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_DOT[a.kind]} ${a.status === 'new' ? 'ping-dot' : ''}`} />{KIND_TITLE[a.kind]}
       </h3>
       <p className="mt-1 text-[13px] text-muted">у буя {a.buoy_name} · сектор {a.sector}</p>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted">
+      <div className="ui-meta mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted">
         <span>уверенность {pct(a.confidence)}</span>
         {a.distance_km != null && <span>{km(a.distance_km)} от катера</span>}
         {minutes != null && a.status === 'resolved' && <span>реакция {minutes} мин</span>}
@@ -33,13 +33,13 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
       <div className="mt-3 flex gap-2">
         {a.status === 'new' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-alert/90">Начать перехват</button>
+            className="ui-btn ui-btn-danger btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-alert/90">Начать перехват</button>
         )}
         {a.status !== 'resolved' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved')}
-            className="h-8 flex-1 rounded-[8px] border border-line text-[12px] font-semibold hover:border-grey">{a.status === 'new' ? 'Ложная' : 'Задержан'}</button>
+            className="ui-btn h-8 flex-1 rounded-[8px] border border-line text-[12px] font-semibold hover:border-grey">{a.status === 'new' ? 'Ложная' : 'Задержан'}</button>
         )}
-        <button type="button" onClick={onMap} className="h-8 rounded-[8px] border border-line px-3 text-[12px] font-medium text-muted hover:border-grey hover:text-primary">На карте</button>
+        <button type="button" onClick={onMap} className="ui-btn ui-btn-quiet h-8 rounded-[8px] border border-line px-3 text-[12px] font-medium text-muted hover:border-grey hover:text-primary">На карте</button>
       </div>
     </article>
   );
@@ -64,10 +64,10 @@ export default function AlertsPage({ state, toBuoy }: { state: State; toBuoy: (i
           const items = state.alerts.filter((a) => a.status === c.id).slice(0, c.id === 'resolved' ? 8 : 20);
           return (
             <section key={c.id} className="card enter !p-3" style={{ animationDelay: `${120 + ci * 80}ms` }}>
-              <header className="flex items-center gap-2 px-2 pb-3 pt-1">
+              <header className="ui-col-head flex items-center gap-2 px-2 pb-3 pt-1">
                 <span className={`h-2 w-2 rounded-full ${c.dot}`} />
-                <h2 className="text-[14px] font-semibold">{c.title}</h2>
-                <span className="font-mono text-[12px] text-muted">{c.id === 'resolved' ? 'последние' : state.alerts.filter((a) => a.status === c.id).length}</span>
+                <h2 className="card-title text-[14px] font-semibold">{c.title}</h2>
+                <span className="ui-count font-mono text-[12px] text-muted">{c.id === 'resolved' ? 'последние' : state.alerts.filter((a) => a.status === c.id).length}</span>
               </header>
               <div className="space-y-2.5">
                 {items.length ? items.map((a, i) => <AlertTile key={a.id} a={a} now={state.now} i={i} onMap={() => toBuoy(a.buoy_id)} />)

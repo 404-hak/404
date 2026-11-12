@@ -16,9 +16,9 @@ const LEVEL = {
 
 
 const Stat = ({ label, value, icon, tone = '' }: { label: string; value: string; icon?: ReactNode; tone?: string }) => (
-  <div className="rounded-[10px] border border-line bg-white/[.02] px-2.5 py-2 transition-colors hover:border-white/25 hover:bg-white/[.04]">
+  <div className="ui-stat rounded-[10px] border border-line bg-white/[.02] px-2.5 py-2 transition-colors hover:border-white/25 hover:bg-white/[.04]">
     <div className="flex items-center justify-between gap-1 text-[11px] leading-4 text-muted">{label}{icon}</div>
-    <div className={`mt-0.5 font-mono text-[14px] font-medium leading-5 ${tone}`}>{value}</div>
+    <div className={`ui-stat-value mt-0.5 font-mono text-[14px] font-medium leading-5 ${tone}`}>{value}</div>
   </div>
 );
 
@@ -61,7 +61,7 @@ function ForecastCard({ f, state, handle }: { f: Forecast; state: State; handle:
     <section className="enter border-b border-line p-5">
       <div className="cap">Риск браконьерства этой ночью{f.demo ? ' · демо' : ''}</div>
       <div className="mt-2 flex items-baseline gap-3">
-        <span className={`font-light tabular-nums text-[56px] leading-[60px] tracking-[-.03em] transition-colors duration-700 ${lv.text}`}>
+        <span className={`ui-hero-num font-light tabular-nums text-[56px] leading-[60px] tracking-[-.03em] transition-colors duration-700 ${lv.text}`}>
           {Math.round(risk)}<span className="text-[32px] tracking-normal">&nbsp;%</span>
         </span>
         <span key={f.level} className={`enter text-[14px] font-semibold ${lv.text}`}>{lv.word}</span>
@@ -73,7 +73,7 @@ function ForecastCard({ f, state, handle }: { f: Forecast; state: State; handle:
           <span className="text-[12px] text-muted">Показать на карте:</span>
           {hot.map((s, i) => (
             <button key={s.n} type="button" onClick={() => handle.current?.flyTo(...sectorCenter(s), 11)} style={{ animationDelay: `${200 + i * 80}ms` }}
-              className="enter h-7 rounded-chip border border-warn/50 bg-warn/10 px-2.5 text-[12px] font-medium text-warn hover:border-warn hover:bg-warn/20">
+              className="ui-chip enter h-7 rounded-chip border border-warn/50 bg-warn/10 px-2.5 text-[12px] font-medium text-warn hover:border-warn hover:bg-warn/20">
               сектор {s.n} →
             </button>
           ))}
@@ -124,11 +124,11 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
       <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
         {!intercept && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
-            className="btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-alert/90">
+            className="ui-btn ui-btn-danger btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-alert/90">
             Начать перехват
           </button>
         )}
-        <button type="button" className="ink-host relative h-10 flex-1 overflow-hidden rounded-[9px] border border-line text-[13px] font-semibold hover:border-grey hover:bg-white/[.04]"
+        <button type="button" className="ui-btn ink-host relative h-10 flex-1 overflow-hidden rounded-[9px] border border-line text-[13px] font-semibold hover:border-grey hover:bg-white/[.04]"
           onClick={() => api.setAlertStatus(a.id, 'resolved')}>
           {intercept ? 'Задержан — закрыть' : 'Ложная тревога'}
         </button>
@@ -182,7 +182,7 @@ function BuoyCard({ b, state, handle, onClose, alert }: { b: Buoy; state: State;
         </div>
         <div className="mt-4 flex items-center justify-between gap-2">
           <button type="button" onClick={() => handle.current?.flyTo(b.lat, b.lon, 12)}
-            className="h-9 rounded-[9px] border border-line px-3 text-[12px] font-semibold hover:border-grey hover:bg-white/[.04]">Показать на карте</button>
+            className="ui-btn h-9 rounded-[9px] border border-line px-3 text-[12px] font-semibold hover:border-grey hover:bg-white/[.04]">Показать на карте</button>
           <span className="font-mono text-[10px] text-muted">{coord(b.lat, b.lon)}</span>
         </div>
         {events.length > 0 && (
@@ -288,7 +288,7 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; labe
         {tabs.map((t) => (
           <button key={t.id} ref={(el) => { refs.current[t.id] = el; }} type="button" role="tab" aria-selected={t.id === value}
             onClick={() => onChange(t.id)}
-            className={`h-11 text-[13px] font-medium ${t.id === value ? 'text-primary' : 'text-muted hover:text-primary'}`}>
+            className={`ui-tab h-11 text-[13px] font-medium ${t.id === value ? 'text-primary' : 'text-muted hover:text-primary'}`}>
             {t.label}
           </button>
         ))}

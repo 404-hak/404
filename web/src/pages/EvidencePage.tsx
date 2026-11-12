@@ -46,7 +46,7 @@ export default function EvidencePage({ state }: { state: State }) {
       lead="Каждое событие записывается с отпечатком SHA-256, и в него входит отпечаток предыдущей записи и звука, который услышал буй. Поменять задним числом время, буй, уверенность или подменить запись звука нельзя: сломается вся цепочка дальше. Для суда это доказательство, что улику не трогали."
       aside={
         <button type="button" onClick={verify} disabled={!chain || scan >= 0}
-          className="btn-shine ink-host h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-bg hover:bg-white disabled:opacity-60">
+          className="ui-btn ui-btn-primary btn-shine ink-host h-10 rounded-[10px] bg-primary px-4 text-[13px] font-semibold text-bg hover:bg-white disabled:opacity-60">
           {scan >= 0 ? 'Проверяю…' : 'Проверить цепочку'}
         </button>
       }>
@@ -71,9 +71,9 @@ export default function EvidencePage({ state }: { state: State }) {
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                       <span className="text-[13px]"><b className="font-semibold">{KIND_TITLE[a.kind]}</b> <span className="text-muted">· {a.buoy_name} · {fmtDM(a.ts)} {fmtHM(a.ts)}</span>
                         {a.synthetic && <span className="ml-2 rounded-[4px] border border-line px-1 text-[10px] text-muted">демо</span>}</span>
-                      <span className="font-mono text-[11px] text-muted">{a.id}</span>
+                      <span className="keep-mono font-mono text-[11px] text-muted">{a.id}</span>
                     </div>
-                    <div className="mt-1.5 grid gap-x-4 gap-y-0.5 font-mono text-[11px] sm:grid-cols-2">
+                    <div className="keep-mono mt-1.5 grid gap-x-4 gap-y-0.5 font-mono text-[11px] sm:grid-cols-2">
                       <span className="truncate" title={a.hash}><span className="text-muted">хэш</span> {short(a.hash)}</span>
                       <span className="truncate" title={a.prev_hash}><span className="text-muted">предыдущий</span> {short(a.prev_hash)}</span>
                       {a.audio_sha256 && (

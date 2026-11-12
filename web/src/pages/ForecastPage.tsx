@@ -44,7 +44,7 @@ export default function ForecastPage() {
                 <div className="mt-1 text-[13px] text-muted">{worst.moon_phase}, вода {worst.water_temp > 0 ? '+' : ''}{Math.round(worst.water_temp)}°. Усилить патрули в горячих секторах.</div>
               </div>
               <div className="text-right">
-                <div className="font-light tabular-nums text-[48px] leading-[52px] text-warn">{Math.round(worst.risk * 100)}<span className="text-[22px]"> %</span></div>
+                <div className="ui-hero-num font-light tabular-nums text-[48px] leading-[52px] text-warn">{Math.round(worst.risk * 100)}<span className="text-[22px]"> %</span></div>
                 <div className="text-[12px] text-muted">риск</div>
               </div>
             </section>
@@ -61,7 +61,7 @@ export default function ForecastPage() {
                     <Moon illumination={n.moon_illumination} phase={n.moon_phase} size={18} />
                   </div>
                   <div className="mt-0.5 text-[13px]">{d.d} {d.m.slice(0, 3)}</div>
-                  <div className={`mt-2 font-light tabular-nums text-[28px] leading-8 ${lv.text}`}>{Math.round(n.risk * 100)}<span className="text-[14px]"> %</span></div>
+                  <div className={`ui-num mt-2 font-light tabular-nums text-[28px] leading-8 ${lv.text}`}>{Math.round(n.risk * 100)}<span className="text-[14px]"> %</span></div>
                   <div className="mt-1 h-1 rounded-full bg-white/10"><div className={`h-full rounded-full ${n.level === 'low' ? 'bg-accent' : 'bg-warn'}`} style={{ width: `${n.risk * 100}%` }} /></div>
                   <div className="mt-2 text-[11px] text-muted">луна {pct(n.moon_illumination)} · {n.water_temp > 0 ? '+' : ''}{Math.round(n.water_temp)}°{n.weather === 'open-meteo' && n.wind_ms != null ? ` · ${Math.round(n.wind_ms)} м/с` : ''}</div>
                   {isTop && <span className="absolute -top-2 right-2 rounded-full bg-warn px-1.5 py-px text-[9px] font-bold uppercase tracking-[.06em] text-bg">патруль</span>}

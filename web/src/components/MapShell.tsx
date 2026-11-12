@@ -100,7 +100,7 @@ export default function MapShell({ state, handle, selected, onSelect }: { state:
   const inline = useWidth(root) >= 1000;
 
   const seg = (on: boolean) =>
-    `relative z-10 h-8 w-[78px] text-[12px] font-medium rounded-[7px] ${on ? 'text-bg' : 'text-muted hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-40`;
+    `ui-seg-btn relative z-10 h-8 w-[78px] text-[12px] font-medium rounded-[7px] ${on ? 'text-bg' : 'text-muted hover:text-primary'} disabled:cursor-not-allowed disabled:opacity-40`;
 
   return (
     <div ref={root} className="relative h-full w-full overflow-hidden">

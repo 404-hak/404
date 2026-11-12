@@ -23,8 +23,8 @@ export function Page({ title, lead, aside, children }: { cap?: string; title: st
       <div className="mx-auto max-w-[1180px] px-4 pb-10 pt-6 md:px-8 md:pt-9">
         <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-[640px]">
-            <h1 className="on-sky text-[30px] font-semibold leading-[36px] tracking-[-.015em] md:text-[38px] md:leading-[44px]"><Words text={title} /></h1>
-            {lead && <p className="on-sky enter mt-3 text-[14px] leading-[22px] text-muted" style={{ animationDelay: '180ms' }}>{lead}</p>}
+            <h1 className="page-title on-sky text-[30px] font-semibold leading-[36px] tracking-[-.015em] md:text-[38px] md:leading-[44px]"><Words text={title} /></h1>
+            {lead && <p className="page-lead on-sky enter mt-3 text-[14px] leading-[22px] text-muted" style={{ animationDelay: '180ms' }}>{lead}</p>}
           </div>
           {aside && <div className="enter" style={{ animationDelay: '240ms' }}>{aside}</div>}
         </header>
@@ -38,9 +38,9 @@ export function Card({ title, note, children, className = '', delay = 0 }: { tit
   return (
     <section className={`card enter ${className}`} style={{ animationDelay: `${delay}ms` }}>
       {(title || note) && (
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-          {title && <h2 className="text-[15px] font-semibold">{title}</h2>}
-          {note && <span className="text-[12px] text-muted">{note}</span>}
+        <div className="card-head mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          {title && <h2 className="card-title text-[15px] font-semibold">{title}</h2>}
+          {note && <span className="card-note text-[12px] text-muted">{note}</span>}
         </div>
       )}
       {children}
@@ -54,12 +54,12 @@ export function Kpi({ label, value, suffix = '', hint, tone = '', delay = 0, dig
 }) {
   const v = useTween(value ?? 0, 1000);
   return (
-    <div className="card enter !p-4" style={{ animationDelay: `${delay}ms` }}>
-      <div className="text-[12px] text-muted">{label}</div>
-      <div className={`mt-1 font-light tabular-nums text-[32px] leading-[38px] tracking-[-.02em] ${tone}`}>
+    <div className="kpi card enter !p-4" style={{ animationDelay: `${delay}ms` }}>
+      <div className="kpi-label text-[12px] text-muted">{label}</div>
+      <div className={`kpi-value mt-1 font-light tabular-nums text-[32px] leading-[38px] tracking-[-.02em] ${tone}`}>
         {value == null ? '—' : v.toFixed(digits).replace('.', ',')}<span className="ml-1 text-[15px] text-muted">{suffix}</span>
       </div>
-      {hint && <div className="mt-1 text-[12px] leading-4 text-muted">{hint}</div>}
+      {hint && <div className="kpi-sub mt-1 text-[12px] leading-4 text-muted">{hint}</div>}
     </div>
   );
 }

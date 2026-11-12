@@ -26,10 +26,10 @@ export default function StatsPage({ state }: { state: State }) {
     <Page cap="Аналитика" title="Статистика"
       lead={<>Что услышали буи за последние ночи и совпадает ли это с прогнозом риска.{s?.synthetic && <> В демо сюда входит <b className="font-medium text-primary">сгенерированная история</b>: настоящих данных заповедника пока нет.</>}</>}
       aside={
-        <div className="flex rounded-[10px] border border-line bg-bg/70 p-[3px]" role="group" aria-label="Период">
+        <div className="ui-seg flex rounded-[10px] border border-line bg-bg/70 p-[3px]" role="group" aria-label="Период">
           {[7, 14, 30, 60].map((d) => (
             <button key={d} type="button" onClick={() => setDays(d)} aria-pressed={d === days}
-              className={`h-8 rounded-[7px] px-3 text-[12px] font-medium ${d === days ? 'bg-primary text-bg' : 'text-muted hover:text-primary'}`}>{d} ночей</button>
+              className={`ui-seg-btn h-8 rounded-[7px] px-3 text-[12px] font-medium ${d === days ? 'bg-primary text-bg' : 'text-muted hover:text-primary'}`}>{d} ночей</button>
           ))}
         </div>
       }>
