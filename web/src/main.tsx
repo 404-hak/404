@@ -16,10 +16,12 @@ import './delta.css';
 import App from './App';
 import { initTheme } from './theme';
 import { initUpkMotion } from './upkMotion';
+import { initUpkUi } from './upkUi';
 import { initSceneLight } from './sceneLight';
 
 initTheme();
 initUpkMotion();
+initUpkUi();
 initSceneLight();   // листы и док освещены солнцем или луной с неба   // указатель-искра, искры выделения, магнитные кнопки — только в оформлении «УПК»   // тема — до первой отрисовки, без вспышки
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

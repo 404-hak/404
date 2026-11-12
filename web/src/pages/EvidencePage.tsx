@@ -1,4 +1,5 @@
 import { scrambleRef } from '../upkMotion';
+import Clip from '../components/Clip';
 import { useEffect, useRef, useState } from 'react';
 import type { Alert, ChainCheck, State } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM } from '../format';
@@ -80,7 +81,7 @@ export default function EvidencePage({ state }: { state: State }) {
                       {a.audio_sha256 && (
                         <span className="flex items-center gap-2 truncate sm:col-span-2" title={`SHA-256 звука: ${a.audio_sha256}`}>
                           <span className="text-muted">звук</span> {short(a.audio_sha256)}
-                          <audio controls preload="none" src={`/api/alerts/${a.id}/audio`} className="h-7 max-w-[260px] flex-1" aria-label="Звук-улика" />
+                          <span className="max-w-[300px] flex-1"><Clip src={`/api/alerts/${a.id}/audio`} compact /></span>
                         </span>
                       )}
                     </div>

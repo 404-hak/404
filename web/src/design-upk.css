@@ -206,7 +206,7 @@ html[data-design="upk"] nav.md\:hidden button > span.absolute.top-0 { background
 /* указатель-поплавок в стиле знака: игла и кольцо буя, только линии; точка указателя — на ватерлинии */
 .float { position: fixed; left: 0; top: 0; z-index: 2147483000; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity .2s ease; will-change: transform; }
 .float.is-on { opacity: 1; }
-.float-tilt { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: transform .3s ease-out; }
+.float-tilt { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: transform .12s linear; }
 .float-bob { position: absolute; left: -10px; top: -26px; width: 20px; height: 40px; translate: 0 0;
   transition: translate .28s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease; animation: float-idle 2.8s ease-in-out infinite;
   filter: drop-shadow(0 0 1px rgb(0 0 0 / .6)) drop-shadow(0 0 5px rgb(var(--rgb-accent) / .45)); }
@@ -228,10 +228,40 @@ html[data-design="upk"] nav.md\:hidden button > span.absolute.top-0 { background
 .float.is-down .float-bob { translate: 0 8px; }
 .float.is-disabled .float-bob { opacity: .45; }
 /* над полем ввода — тонкая черта ввода вместо поплавка */
-.float-beam { position: absolute; left: 0; top: 0; opacity: 0; transition: opacity .18s ease; color: var(--c-text); }
-.float-beam i { position: absolute; left: -1px; top: -10px; width: 2px; height: 20px; border-radius: 1px; background: currentColor; box-shadow: 0 0 1px rgb(0 0 0 / .7); }
-.float.is-text .float-bob, .float.is-text .float-ring { opacity: 0; }
-.float.is-text .float-beam { opacity: 1; }
+.float-bob, .float-ring { transition: translate .28s cubic-bezier(.34, 1.56, .64, 1), opacity .22s ease, scale .3s cubic-bezier(.34, 1.56, .64, 1); }
+/* над текстом — игла-курсор: черта с засечками и колечком посередине; поплавок ныряет, игла всплывает */
+.float-beam { position: absolute; left: -7px; top: -13px; width: 14px; height: 26px; opacity: 0; scale: .4 1; transform-origin: 50% 50%;
+  transition: opacity .2s ease, scale .32s cubic-bezier(.34, 1.56, .64, 1);
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / .65)) drop-shadow(0 0 4px rgb(var(--rgb-accent) / .5)); }
+.float-beam svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.float .b-line { fill: none; stroke: var(--c-text); stroke-width: 1.5; stroke-linecap: round; }
+.float .b-ring { fill: var(--c-bg); stroke: var(--c-accent); stroke-width: 1.6; }
+.float.is-text .float-bob { opacity: 0; translate: 0 10px; scale: .7; }
+.float.is-text .float-ring { opacity: 0; scale: .4; }
+.float.is-text .float-beam { opacity: 1; scale: 1; animation: beam-breathe 2.4s ease-in-out .3s infinite; }
+@keyframes beam-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+/* над картой и тем, что тянут: кольцо раскрыто пунктиром — «можно взять» */
+.float.is-grab .f-ring { stroke-dasharray: 3.3 2.2; animation: grab-spin 6s linear infinite; transform-origin: 10px 18px; }
+.float.is-grab .f-dot { opacity: 0; }
+.float.is-grab .float-ring { scale: 1.25; }
+@keyframes grab-spin { to { transform: rotate(360deg); } }
+/* тянут: поплавок на натянутой леске — от иглы вверх уходит тонкая линия, кольцо сжато, точка крупнее */
+.float-line { position: absolute; left: -.5px; top: -76px; width: 1px; height: 52px; opacity: 0; transform-origin: 50% 100%; scale: 1 .3;
+  background: linear-gradient(to top, rgb(var(--rgb-primary) / .75), transparent); transition: opacity .2s ease, scale .35s cubic-bezier(.34, 1.56, .64, 1); }
+.float.is-grabbing .float-line { opacity: 1; scale: 1 1; }
+.float.is-grabbing .float-bob { translate: 0 4px; animation: none; }
+.float.is-grabbing .f-ring { stroke: var(--c-text); stroke-width: 2.6; }
+.float.is-grabbing .f-dot { fill: var(--c-text); r: 2.4; }
+.float.is-grabbing .float-ring { scale: .8 .7; opacity: .9; animation: none; }
+/* над ссылкой: рядом стрелка «уведёт» */
+.float-link { position: absolute; left: 7px; top: -30px; width: 10px; height: 10px; opacity: 0; scale: .3; transition: opacity .18s ease, scale .3s cubic-bezier(.34, 1.56, .64, 1);
+  background: no-repeat center / 10px 10px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='none' stroke='%23E2E8F0' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M3 1h6v6M9 1 1.5 8.5'/%3E%3C/svg%3E"); }
+html[data-theme="day"] .float-link { filter: invert(1) brightness(.4); }
+.float.is-link .float-link { opacity: 1; scale: 1; }
+/* колесо: вода качнулась */
+.float.is-swell .float-bob { translate: 0 3px; }
+.float.is-disabled .float-bob { translate: 0 6px; }
+.float.is-disabled .f-ring { stroke-dasharray: 1.5 2.5; }
 @media (prefers-reduced-motion: reduce) { .float-bob, .float-ring { animation: none !important; } }
 @media print { .float, .ripple { display: none; } }
 
@@ -268,23 +298,23 @@ html[data-design="upk"] .ui-btn-primary:active:not(:disabled)::after,
 html[data-design="upk"] .ui-btn-danger:active:not(:disabled)::after { --lvl: 24%; }
 html[data-design="upk"] .ui-btn:disabled::after { animation: none; }
 
-/* вкладки: под выбранной — волна, а не прямая черта */
-html[data-design="upk"] .ui-tab-bar {
-  height: 6px; bottom: -3px; border-radius: 0; background: var(--c-text);
-  -webkit-mask: var(--wave-line) repeat-x 0 50% / 20px 6px; mask: var(--wave-line) repeat-x 0 50% / 20px 6px;
-  animation: line-drift 3s linear infinite;
-}
-@keyframes line-drift { to { -webkit-mask-position: 20px 50%; mask-position: 20px 50%; } }
+/* вкладки: тонкая черта с тающими концами; при переходе по ней пробегает волна и успокаивается (TabWave) */
+.ui-tab-wave { position: absolute; left: 0; bottom: -4px; height: 8px; overflow: visible; pointer-events: none;
+  transition: transform .6s cubic-bezier(.3, .9, .3, 1), width .6s cubic-bezier(.3, .9, .3, 1);
+  -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+.ui-tab-wave path { fill: none; stroke: var(--c-text); stroke-width: 2; stroke-linecap: round; }
+html[data-design="upk"] .ui-tab-wave path { stroke: var(--c-text); filter: drop-shadow(0 0 3px rgb(var(--rgb-accent) / .7)); }
 
 /* переключатель «Спутник · Схема · 3D»: выбранное — плашка-вода с волной по верху */
 html[data-design="upk"] .map-seg { border-radius: 12px; }
 html[data-design="upk"] .map-seg-plate {
   border-radius: 0 0 8px 8px; top: 1px !important;
-  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
-          mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
-  animation: seg-drift 2.6s linear infinite;
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 39px 5px, linear-gradient(#000 0 0) no-repeat 0 4.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 39px 5px, linear-gradient(#000 0 0) no-repeat 0 4.5px / 100% 100%;
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / .18), transparent 60%);
+  animation: seg-drift 4.2s linear infinite;
 }
-@keyframes seg-drift { to { -webkit-mask-position: 26px 0, 0 5.5px; mask-position: 26px 0, 0 5.5px; } }
+@keyframes seg-drift { to { -webkit-mask-position: 39px 0, 0 4.5px; mask-position: 39px 0, 0 4.5px; } }
 html[data-design="upk"] .map-seg .ui-seg-btn { padding-top: 3px; }
 
 /* кнопки масштаба — буи: круглые, с кольцом; под курсором буй «слушает» — кольцо расходится */
@@ -303,19 +333,149 @@ html[data-design="upk"] .map-legend-btn { display: inline-flex; align-items: cen
 html[data-design="upk"] .map-legend-btn::before { content: ''; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; border: 2.5px solid var(--c-accent);
   background: radial-gradient(circle, var(--c-accent) 0 1.6px, transparent 2px); }
 @media (prefers-reduced-motion: reduce) {
-  html[data-design="upk"] .ui-btn::after, html[data-design="upk"] .ui-tab-bar, html[data-design="upk"] .map-seg-plate, html[data-design="upk"] .map-ctl-btn::after { animation: none !important; }
+  html[data-design="upk"] .ui-btn::after, html[data-design="upk"] .map-seg-plate, html[data-design="upk"] .map-ctl-btn::after { animation: none !important; }
 }
 /* переключатели на страницах («7 · 14 · 30 ночей»): выбранное — та же вода с волной по верху */
 html[data-design="upk"] .ui-seg .ui-seg-btn { position: relative; isolation: isolate; overflow: hidden; }
 html[data-design="upk"] .ui-seg .ui-seg-btn[aria-pressed="true"],
 html[data-design="upk"] .ui-seg .ui-seg-btn[aria-checked="true"] { background: transparent; box-shadow: none; }
 html[data-design="upk"] .ui-seg .ui-seg-btn::after {
-  content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: 0; z-index: -1; pointer-events: none; background: var(--c-surface); border-radius: 0 0 8px 8px;
-  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
-          mask: var(--wave-fill) repeat-x 0 0 / 26px 6px, linear-gradient(#000 0 0) no-repeat 0 5.5px / 100% 100%;
+  content: ''; position: absolute; left: 0; right: 0; top: -5px; bottom: 0; z-index: -1; pointer-events: none; background: var(--c-surface); border-radius: 0 0 8px 8px;
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 39px 5px, linear-gradient(#000 0 0) no-repeat 0 4.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 39px 5px, linear-gradient(#000 0 0) no-repeat 0 4.5px / 100% 100%;
   transform: translateY(100%); transition: transform .5s cubic-bezier(.2, .8, .2, 1);
 }
 html[data-design="upk"] .ui-seg .ui-seg-btn:hover::after { transform: translateY(78%); }
 html[data-design="upk"] .ui-seg .ui-seg-btn[aria-pressed="true"]::after,
 html[data-design="upk"] .ui-seg .ui-seg-btn[aria-checked="true"]::after { transform: translateY(14%); animation: seg-drift 2.6s linear infinite; }
 html[data-design="upk"][data-theme="day"] .ui-seg .ui-seg-btn::after { background: #fff; }
+
+
+/* ================= своё вместо браузерного (upkUi.ts) ================= */
+html[data-design="upk"] img { -webkit-user-drag: none; }
+/* подсказки */
+.ui-tip { position: fixed; left: 0; top: 0; z-index: 2147482500; max-width: min(300px, calc(100vw - 16px)); padding: 6px 11px; border-radius: 10px;
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent); color: var(--c-text); font-size: 12.5px; font-weight: 500; line-height: 1.38;
+  box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / .14), 0 10px 28px -10px rgb(0 0 0 / .55); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  pointer-events: none; opacity: 0; translate: 0 -4px; transition: opacity .18s ease, translate .32s cubic-bezier(.2, .8, .2, 1); }
+.ui-tip.is-above { translate: 0 4px; }
+.ui-tip.is-on { opacity: 1; translate: 0 0; }
+/* куда ведёт ссылка — вместо серой строки браузера */
+.ui-link { position: fixed; left: 14px; bottom: 14px; z-index: 2147482500; display: flex; align-items: center; gap: 9px; max-width: min(560px, calc(100vw - 28px));
+  padding: 5px 12px 5px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-surface) 90%, transparent); color: var(--c-text); font-size: 12.5px; line-height: 1.3;
+  box-shadow: inset 0 0 0 1px rgb(var(--rgb-accent) / .4), 0 12px 30px -14px rgb(0 0 0 / .6); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  pointer-events: none; overflow: hidden; opacity: 0; transform: translateY(10px) scale(.97); transform-origin: 0 100%; transition: opacity .18s ease, transform .4s cubic-bezier(.2, .8, .2, 1); }
+.ui-link.is-right { left: auto; right: 14px; transform-origin: 100% 100%; }
+.ui-link.is-on { opacity: 1; transform: none; }
+.ui-link::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--c-accent), transparent); opacity: 0; transform: scaleX(0); }
+.ui-link.is-swap::after { animation: ui-link-beam .9s cubic-bezier(.2, .8, .2, 1) both; }
+.ui-link-ic { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--c-accent);
+  background: radial-gradient(closest-side, rgb(var(--rgb-accent) / .3), transparent); }
+.ui-link.is-swap .ui-link-ic > * { animation: ui-link-spin .6s cubic-bezier(.2, .8, .2, 1) both; }
+.ui-link-text { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ui-link-text b { flex: none; font-weight: 600; white-space: nowrap; }
+.ui-link-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text-2); font-family: var(--font-mono, ui-monospace); font-size: 11.5px; }
+.ui-link-flag { flex: none; padding: 2px 8px; border-radius: 999px; background: rgb(var(--rgb-accent) / .2); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.ui-link.is-swap .ui-link-text { animation: ui-link-text .34s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes ui-link-beam { 0% { opacity: 0; transform: scaleX(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: scaleX(1); } }
+@keyframes ui-link-spin { from { opacity: 0; transform: scale(.4) rotate(-90deg); } }
+@keyframes ui-link-text { from { opacity: 0; transform: translateX(-6px); } }
+a[data-href] { cursor: pointer; }
+
+/* меню по правой кнопке: пункты наливаются водой, как кнопки */
+.ctx-menu { position: fixed; z-index: 2147482600; min-width: 252px; max-width: min(310px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px; border-radius: 16px; background: color-mix(in srgb, var(--c-surface) 93%, transparent); color: var(--c-text); font-size: 13.5px;
+  box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / .13), 0 24px 54px -18px rgb(0 0 0 / .65); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+  transform-origin: 0 0; animation: ctx-in .26s cubic-bezier(.2, .9, .25, 1) both; scrollbar-width: none; }
+.ctx-menu.from-right { transform-origin: 100% 0; }
+.ctx-menu.from-bottom { transform-origin: 0 100%; }
+.ctx-menu.from-right.from-bottom { transform-origin: 100% 100%; }
+.ctx-menu.is-leaving { animation: ctx-out .15s ease-in both; pointer-events: none; }
+@keyframes ctx-in { from { opacity: 0; transform: scale(.94) translateY(-4px); clip-path: inset(0 0 60% 0 round 16px); } to { clip-path: inset(0 0 0 0 round 16px); } }
+@keyframes ctx-out { to { opacity: 0; transform: scale(.97); } }
+.ctx-item { position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 10px;
+  background: transparent; color: inherit; font: inherit; text-align: left; white-space: nowrap; --lvl: 100%; }
+.ctx-item::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: 0; z-index: -1; pointer-events: none; background: rgb(var(--rgb-accent) / .26);
+  -webkit-mask: var(--wave-fill) repeat-x 0 0 / 30px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+          mask: var(--wave-fill) repeat-x 0 0 / 30px 8px, linear-gradient(#000 0 0) no-repeat 0 7.5px / 100% 100%;
+  transform: translateY(var(--lvl)); transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+.ctx-item:hover:not(:disabled)::after, .ctx-item:focus-visible::after, .ctx-item[aria-expanded="true"]::after { --lvl: 0%; animation: water-drift 2.2s linear infinite; }
+.ctx-item:focus-visible { outline: none; }
+.ctx-item .ui-ic { flex: none; color: var(--c-text-2); transition: color .2s, transform .4s cubic-bezier(.34, 1.56, .64, 1); }
+.ctx-item:hover:not(:disabled) .ui-ic { color: var(--c-text); transform: scale(1.08); }
+.ctx-item:disabled { color: rgb(var(--rgb-primary) / .35); }
+.ctx-item:disabled .ui-ic { opacity: .45; }
+.ctx-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ctx-item kbd { font: inherit; font-size: 11.5px; color: var(--c-text-2); }
+.ctx-chevron { margin-right: -3px; }
+.ctx-check { opacity: 0; }
+.ctx-item[aria-checked="true"] .ctx-check { opacity: 1; color: var(--c-accent); }
+.ctx-item.is-danger, .ctx-item.is-danger .ui-ic { color: var(--c-alert); }
+.ctx-item.is-danger::after { background: rgb(var(--rgb-alert) / .2); }
+.ctx-title { max-width: 296px; padding: 7px 10px 5px; overflow: hidden; color: var(--c-text-2); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-tools { display: flex; gap: 2px; }
+.ctx-item.ctx-tool { flex: 1; justify-content: center; width: auto; padding: 0; }
+.ctx-sep { height: 1px; margin: 5px 8px; background: rgb(var(--rgb-primary) / .1); }
+.ctx-foot { margin-top: 5px; padding: 7px 10px 4px; border-top: 1px solid rgb(var(--rgb-primary) / .1); color: var(--c-text-2); font-size: 11.5px; }
+.ctx-target { outline: 1.5px solid rgb(var(--rgb-accent) / .8); outline-offset: -1.5px; border-radius: 8px; }
+
+/* своё перетаскивание: взятое приподнято и идёт за мышью */
+html.is-lifting, html.is-lifting * { user-select: none !important; }
+.is-lifted { opacity: .22; filter: grayscale(1); transition: opacity .2s ease, filter .2s ease; }
+.lift { position: fixed; left: 0; top: 0; z-index: 2147482800; pointer-events: none; will-change: transform; }
+.lift-img { display: grid; place-items: center; border-radius: 14px; filter: drop-shadow(0 18px 26px rgb(0 0 0 / .45)) drop-shadow(0 0 18px rgb(var(--rgb-accent) / .35)); }
+.lift-img img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.lift-link { display: inline-flex; align-items: center; gap: 10px; max-width: min(360px, calc(100vw - 24px)); padding: 9px 15px 9px 12px; border-radius: 14px;
+  background: var(--c-surface); color: var(--c-text); font-size: 13px; line-height: 1.3; box-shadow: inset 0 0 0 1px rgb(var(--rgb-accent) / .5), 0 22px 44px -16px rgb(0 0 0 / .6); }
+.lift-link .ui-ic { color: var(--c-accent); flex: none; }
+.lift-link > span { display: flex; flex-direction: column; min-width: 0; }
+.lift-link b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lift-link b + span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text-2); font-family: var(--font-mono, ui-monospace); font-size: 11.5px; }
+
+/* свой курсор ввода: игла с колечком у основания, «дышит», при наборе не мигает, от букв — круги */
+.has-ui-caret { caret-color: transparent !important; }
+.ui-caret-mirror { position: absolute; top: 0; left: -9999px; visibility: hidden; overflow: hidden; height: auto; }
+.ui-caret { position: fixed; left: 0; top: 0; z-index: 2147482000; width: 2px; height: 18px; pointer-events: none; opacity: 0;
+  transition: transform .12s cubic-bezier(.2, .8, .3, 1), height .15s ease, opacity .15s ease; }
+.ui-caret i { position: absolute; inset: 0; border-radius: 1px; background: var(--c-text); box-shadow: 0 0 7px rgb(var(--rgb-accent) / .9); }
+.ui-caret i::after { content: ''; position: absolute; left: -2.5px; bottom: -3px; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--c-accent); background: var(--c-bg); }
+.ui-caret.is-on { opacity: 1; animation: caret-breathe 1.2s ease-in-out infinite; }
+.ui-caret.is-on.is-typing { animation: none; opacity: 1; }
+.ui-caret.is-on.is-appearing { animation: caret-in .36s cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes caret-breathe { 0%, 100% { opacity: 1; } 55% { opacity: .15; } }
+@keyframes caret-in { from { clip-path: inset(50% 0 50% 0); } to { clip-path: inset(-6px -6px -6px -6px); } }
+
+/* короткие сообщения */
+.ui-toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 2147482400; display: flex; align-items: center; gap: 8px; padding: 9px 16px 9px 12px; border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent); color: var(--c-text); font-size: 13.5px; font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgb(var(--rgb-accent) / .45), 0 16px 36px -14px rgb(0 0 0 / .6); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  pointer-events: none; opacity: 0; transform: translate(-50%, 14px) scale(.96); transition: opacity .22s ease, transform .5s cubic-bezier(.2, .9, .25, 1); }
+.ui-toast .ui-ic { color: var(--c-accent); }
+.ui-toast.is-error .ui-ic { color: var(--c-alert); }
+.ui-toast.is-on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+
+/* полосы прокрутки — тонкие, цвета интерфейса, появляются под мышью */
+html[data-design="upk"] * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+html[data-design="upk"] *:hover { scrollbar-color: rgb(var(--rgb-primary) / .22) transparent; }
+html[data-design="upk"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+html[data-design="upk"] ::-webkit-scrollbar-track { background: transparent; }
+html[data-design="upk"] ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: transparent; background-clip: padding-box; }
+html[data-design="upk"] *:hover::-webkit-scrollbar-thumb { background-color: rgb(var(--rgb-primary) / .22); }
+html[data-design="upk"] ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--rgb-primary) / .4) !important; }
+
+/* Яндекс Карты: лишние ссылки («Открыть в Яндекс Картах», «Создать свою карту») убраны; логотип, «© Яндекс»
+   и «Условия» обязаны оставаться по правилам Яндекса — они приглушены и набраны нашим шрифтом */
+[class*="ymaps-2"][class*="gototech"], [class*="ymaps-2"][class*="copyrights-promo"], [class*="ymaps-2"][class*="map-copyrights-promo"] { display: none !important; }
+[class*="ymaps-2"][class*="copyright__content"], [class*="ymaps-2"][class*="copyright__agreement"] { font-family: var(--font-sans) !important; font-size: 10px !important; }
+[class*="ymaps-2"][class*="copyright__content"] { background: rgb(11 22 40 / .55) !important; color: #CBD5E1 !important; border-radius: 6px 0 0 6px; padding: 1px 6px !important; }
+[class*="ymaps-2"][class*="copyright__agreement"] { background: rgb(11 22 40 / .55) !important; border-radius: 0 6px 6px 0; }
+[class*="ymaps-2"][class*="copyright__link"], [class*="ymaps-2"][class*="copyright__agreement"] a { color: #E2E8F0 !important; }
+[class*="ymaps-2"][class*="copyright__logo"] { opacity: .7; filter: grayscale(1) brightness(1.6); }
+[class*="ymaps-2"][class*="copyright__fog"] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ctx-menu, .ctx-menu.is-leaving, .ctx-item::after { animation: none !important; }
+  .ui-tip, .ui-link, .ui-toast { transition: none; }
+  .float.is-text .float-beam, .float.is-grab .f-ring { animation: none; }
+}
+@media print { .ui-tip, .ui-link, .ctx-menu, .lift, .ui-caret, .ui-toast { display: none !important; } }

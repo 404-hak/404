@@ -362,3 +362,37 @@ nav.md\:flex { padding-top: env(safe-area-inset-top); }
 .sat-big-frame .leaflet-bar a { width: 40px; height: 40px; line-height: 38px; border-radius: 50% !important; border: 1.5px solid rgb(255 255 255 / .22); color: #E2E8F0;
   background: rgb(11 22 40 / .72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font: 400 22px/37px var(--font-sans); }
 .sat-big-frame .leaflet-bar a:hover { background: rgb(11 22 40 / .9); border-color: #7A866F; color: #fff; }
+
+/* ---------- звук-улика: свой проигрыватель (Clip.tsx) ---------- */
+.clip { display: flex; align-items: center; gap: 10px; height: 46px; padding: 5px 12px 5px 5px; border-radius: 999px;
+  background: rgb(var(--rgb-primary) / .05); box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / .1); }
+.clip.is-compact { height: 34px; gap: 8px; padding: 4px 10px 4px 4px; }
+.clip-play { position: relative; flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%;
+  color: var(--c-bg); background: var(--c-text); transition: scale .3s cubic-bezier(.34, 1.56, .64, 1), box-shadow .3s; }
+.clip.is-compact .clip-play { width: 26px; height: 26px; }
+.clip-play svg { position: relative; z-index: 1; }
+.clip-play:hover { scale: 1.07; box-shadow: 0 0 0 4px rgb(var(--rgb-accent) / .22); }
+.clip-play:active { scale: .9; }
+.clip-play i { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--c-accent); opacity: 0; pointer-events: none; }
+.clip.is-playing .clip-play i { animation: clip-listen 1.8s ease-out infinite; }
+.clip.is-playing .clip-play i + i { animation-delay: .9s; }
+@keyframes clip-listen { from { transform: scale(1); opacity: .85; } to { transform: scale(1.9); opacity: 0; } }
+.clip-wave { position: relative; flex: 1; min-width: 60px; height: 28px; border-radius: 6px; cursor: pointer; touch-action: none; outline: none; }
+.clip.is-compact .clip-wave { height: 20px; }
+.clip-wave:focus-visible { box-shadow: 0 0 0 2px rgb(var(--rgb-accent) / .55); }
+.clip-bars { position: absolute; inset: 0; display: flex; align-items: center; gap: 2px; pointer-events: none; }
+.clip-bars span { flex: 1; min-width: 1px; border-radius: 2px; background: rgb(var(--rgb-primary) / .24); transform-origin: 50% 50%;
+  transition: height .6s cubic-bezier(.2, .8, .2, 1), background-color .3s; }
+.clip:not(.is-ready) .clip-bars span { animation: clip-wait 1.4s ease-in-out infinite alternate; }
+@keyframes clip-wait { to { transform: scaleY(.6); } }
+.clip-fill { clip-path: inset(0 calc((1 - var(--p, 0)) * 100%) 0 0); }
+.clip-fill span { background: var(--c-text); }
+.clip-wave:hover .clip-bars:not(.clip-fill) span { background: rgb(var(--rgb-primary) / .34); }
+.clip-wave::after { content: ''; position: absolute; top: 2px; bottom: 2px; left: calc(var(--hover, 0) * 100%); width: 1px; background: var(--c-accent); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.clip-wave:hover::after { opacity: .9; }
+.clip-head { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 2px; background: var(--c-accent); box-shadow: 0 0 8px var(--c-accent); opacity: 0; transition: opacity .3s; pointer-events: none; }
+.clip.is-playing .clip-head, .clip-wave:active .clip-head { opacity: 1; }
+.clip-time { flex: none; min-width: 74px; text-align: right; font-family: var(--font-mono, ui-monospace); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--c-text-2, #A2A9B4); }
+.clip.is-compact .clip-time { min-width: 62px; font-size: 10.5px; }
+.clip audio { display: none; }
+@media (prefers-reduced-motion: reduce) { .clip-play i, .clip-bars span { animation: none !important; } }

@@ -119,33 +119,77 @@ export function scramble(el: HTMLElement | null, { duration = 900, delay = 0 } =
 export const scrambleRef = (el: HTMLElement | null) => scramble(el);
 
 // ---------- указатель-поплавок ----------
-const INTERACTIVE = 'a[href], button, [role="button"], [role="tab"], [role="radio"], [role="option"], label, select, summary, input[type="range"], input[type="checkbox"], .buoy, .leaflet-interactive, [tabindex]:not([tabindex="-1"])';
+const INTERACTIVE = 'a[href], a[data-href], button, [role="button"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"], [role="menuitemradio"], label, select, summary, input[type="checkbox"], .buoy, .leaflet-interactive, [tabindex]:not([tabindex="-1"])';
 const TEXT_FIELD = 'input:not([type="checkbox"], [type="radio"], [type="file"], [type="button"], [type="submit"], [type="range"]), textarea, [contenteditable="true"]';
 const DISABLED = 'button:disabled, input:disabled, select:disabled, [aria-disabled="true"]';
-const FOLLOW = 0.32;       // поплавок догоняет мышь с небольшой задержкой — как на воде
+/** то, что тянут: карта, ручка листа, ползунки, дорожка звука */
+const GRAB = '.leaflet-container, .delta-grab, input[type="range"], .clip-wave';
+/** над текстом поплавок становится иглой-курсором; в картах, снимках и рисунках — нет */
+const NO_TEXT = '.leaflet-container, .sat-snap, svg, canvas, button, [role="button"], .ctx-menu';
 const WAKE_STEP = 120;     // через сколько пикселей быстрого пути оставлять тихий след
+const DRAG_STEP = 70;      // когда тянут — след чаще
 /**
  * Поплавок в стиле знака 404: тонкая игла, как у знака, и кольцо с точкой, как у буя на карте;
  * без заливок, только линии. Точка указателя — на ватерлинии.
  */
 const FLOAT = '<svg viewBox="0 0 20 40" aria-hidden="true"><path class="f-needle" d="M10 2v36"/><circle class="f-ring" cx="10" cy="18" r="5"/><circle class="f-dot" cx="10" cy="18" r="1.6"/></svg>';
+/** над текстом: та же игла с засечками и колечком посередине — курсор-поплавок */
+const BEAM = '<svg viewBox="0 0 14 26" aria-hidden="true"><path class="b-line" d="M7 1.5v23M4 1.5h6M4 24.5h6"/><circle class="b-ring" cx="7" cy="13" r="2.6"/></svg>';
+
+let floatEl: HTMLElement | null = null;
+const floatHeld = new Set<string>();
+/** Состояние поплавка снаружи: is-grabbing (несут картинку), is-link (над ссылкой) */
+export function floatState(name: string, on: boolean) {
+  if (on) floatHeld.add(name); else floatHeld.delete(name);
+  floatEl?.classList.toggle(name, on);
+}
+
+/** Мышь над буквами, а не над пустым местом блока: прямоугольники строк текста под точкой */
+const textRange = typeof document !== 'undefined' ? document.createRange() : null;
+function overText(target: Element, x: number, y: number) {
+  if (!textRange || target.closest(NO_TEXT)) return false;
+  const style = getComputedStyle(target);
+  if (style.userSelect === 'none' || style.webkitUserSelect === 'none') return false;
+  for (const n of target.childNodes) {
+    if (n.nodeType !== 3 || !n.nodeValue?.trim()) continue;
+    textRange.selectNodeContents(n);
+    for (const r of textRange.getClientRects()) if (x >= r.left - 2 && x <= r.right + 2 && y >= r.top - 1 && y <= r.bottom + 1) return true;
+  }
+  return false;
+}
+
+const directText = new WeakMap<Element, boolean>();
+const texty = (el: Element) => {
+  let v = directText.get(el);
+  if (v === undefined) { v = [...el.childNodes].some((n) => n.nodeType === 3 && !!n.nodeValue?.trim()); directText.set(el, v); }
+  return v;
+};
 
 function startCursor() {
   const float = document.createElement('div');
+  floatEl = float;
   float.className = 'float';
   float.setAttribute('aria-hidden', 'true');
-  float.innerHTML = `<div class="float-tilt"><div class="float-bob">${FLOAT}</div><div class="float-beam"><i></i></div></div><span class="float-ring"></span>`;
+  float.innerHTML = `<div class="float-tilt"><span class="float-line"></span><div class="float-bob">${FLOAT}</div><div class="float-beam">${BEAM}</div><span class="float-link"></span></div><span class="float-ring"></span>`;
   const tilt = float.firstElementChild as HTMLElement;
-  let x = 0, y = 0, fx = 0, fy = 0, vx = 0, frame = 0, shown = false, travelled = 0;
+  let x = 0, y = 0, fx = 0, fy = 0, vx = 0, frame = 0, last = 0, shown = false, travelled = 0, held = false, grabbing = false;
   let lastTarget: EventTarget | null = null;
-  const tick = () => {
+  // плавность не зависит от частоты экрана (60, 120, 144 Гц): сглаживание по времени, а не по кадрам
+  const tick = (now: number) => {
     frame = 0;
-    const nx = fx + (x - fx) * FOLLOW, ny = fy + (y - fy) * FOLLOW;
-    vx += ((nx - fx) - vx) * 0.25;
+    const dt = last ? Math.min(0.05, (now - last) / 1000) : 1 / 60;
+    last = now;
+    const pulled = grabbing || floatHeld.has('is-grabbing');
+    const k = 1 - Math.exp(-dt * (pulled ? 30 : 23));
+    const nx = fx + (x - fx) * k, ny = fy + (y - fy) * k;
+    vx += ((nx - fx) / dt / 60 - vx) * (1 - Math.exp(-dt * 14));
     fx = nx; fy = ny;
     float.style.transform = `translate3d(${fx}px, ${fy}px, 0)`;
-    tilt.style.transform = `rotate(${Math.max(-22, Math.min(22, vx * 1.6))}deg)`;
-    if (Math.abs(x - fx) + Math.abs(y - fy) > 0.2 || Math.abs(vx) > 0.05) frame = requestAnimationFrame(tick);
+    // плывёт — наклон по ходу; тянут за леску — игла отстаёт и клонится назад
+    const lean = pulled ? -vx * 2.4 : vx * 1.6;
+    tilt.style.transform = `rotate(${Math.max(-26, Math.min(26, lean))}deg)`;
+    if (Math.abs(x - fx) + Math.abs(y - fy) > 0.2 || Math.abs(vx) > 0.04) frame = requestAnimationFrame(tick);
+    else last = 0;
   };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(tick); };
   const show = () => {
@@ -154,18 +198,26 @@ function startCursor() {
     if (!float.isConnected) {
       document.body.append(float);
       document.documentElement.classList.add('has-cursor');
+      floatHeld.forEach((n) => float.classList.add(n));
     }
     fx = x; fy = y; travelled = 0;
     float.classList.add('is-on');
   };
   const hide = () => { shown = false; float.classList.remove('is-on'); };
-  const describe = (target: EventTarget | null) => {
+  const set = (name: string, on: boolean) => float.classList.toggle(name, on);
+  const describe = (target: EventTarget | null, px: number, py: number) => {
     if (!(target instanceof Element)) return;
     const disabled = !!target.closest(DISABLED);
-    const text = !disabled && !!target.closest(TEXT_FIELD);
-    float.classList.toggle('is-disabled', disabled);
-    float.classList.toggle('is-text', text);
-    float.classList.toggle('is-bite', !disabled && !text && !!target.closest(INTERACTIVE));
+    const field = !disabled && !!target.closest(TEXT_FIELD);
+    const interactive = !disabled && !field && target.closest(INTERACTIVE);
+    const grabEl = !disabled && !field && target.closest(GRAB);
+    // кнопка внутри карты (буй, маркер) важнее карты; дорожка звука — сама «тянется»
+    const grab = !!grabEl && (!interactive || grabEl.contains(interactive) === false || interactive === grabEl);
+    const text = field || (!interactive && !grab && overText(target, px, py));
+    set('is-disabled', disabled);
+    set('is-text', text);
+    set('is-bite', !!interactive && !grab);
+    set('is-grab', grab && !held);
   };
 
   document.addEventListener('pointermove', (e) => {
@@ -173,12 +225,16 @@ function startCursor() {
     const distance = shown ? Math.hypot(e.clientX - x, e.clientY - y) : 0;
     x = e.clientX; y = e.clientY;
     show();
-    if (e.target !== lastTarget) { lastTarget = e.target; describe(e.target); }
-    // быстрое движение оставляет на воде тихий след
-    travelled += distance > 6 ? distance : 0;
-    if (travelled >= WAKE_STEP && !float.classList.contains('is-text')) {
+    // цель та же — состояние меняется, только если это текст (мышь могла уйти с букв на поля блока)
+    if (!held && (e.target !== lastTarget || (e.target instanceof Element && texty(e.target)))) {
+      lastTarget = e.target;
+      describe(e.target, x, y);
+    }
+    // быстрое движение оставляет на воде тихий след; когда тянут — чаще
+    travelled += distance > 6 || grabbing ? distance : 0;
+    if (travelled >= (grabbing ? DRAG_STEP : WAKE_STEP) && !float.classList.contains('is-text')) {
       travelled = 0;
-      ripples(x, y, { count: 1, size: 26, duration: 900 });
+      ripples(x, y, { count: 1, size: grabbing ? 22 : 26, duration: 900 });
     }
     schedule();
   }, { passive: true });
@@ -187,18 +243,39 @@ function startCursor() {
     x = e.clientX; y = e.clientY;
     show();
     lastTarget = e.target;
-    describe(e.target);
+    describe(e.target, x, y);
     schedule();
+    held = true;
     float.classList.add('is-down');
-    if (!float.classList.contains('is-text')) {
+    // тянут карту, ручку листа, ползунок: поплавок «на леске»
+    if (float.classList.contains('is-grab')) { grabbing = true; set('is-grab', false); set('is-grabbing', true); }
+    if (!float.classList.contains('is-text') && !grabbing) {
       const strong = e.target instanceof Element && !!e.target.closest('.ui-btn-primary, .ui-btn-danger');
       ripples(x, y, { count: 3, size: strong ? 90 : 60, strong });
-    }
+    } else if (grabbing) ripples(x, y, { count: 1, size: 30, duration: 700 });
   }, { passive: true });
-  const release = () => float.classList.remove('is-down');
+  const release = () => {
+    held = false;
+    float.classList.remove('is-down');
+    if (grabbing) {
+      grabbing = false;
+      if (!floatHeld.has('is-grabbing')) set('is-grabbing', false);
+      ripples(x, y, { count: 2, size: 34, duration: 900 });
+      lastTarget = null;
+      describe(document.elementFromPoint(x, y), x, y);
+      schedule();
+    }
+  };
   document.addEventListener('pointerup', release, { passive: true });
   document.addEventListener('pointercancel', release, { passive: true });
   window.addEventListener('blur', release);
+  // колесо: вода под поплавком качается
+  let wheelT = 0;
+  window.addEventListener('wheel', () => {
+    float.classList.add('is-swell');
+    window.clearTimeout(wheelT);
+    wheelT = window.setTimeout(() => float.classList.remove('is-swell'), 260);
+  }, { passive: true });
   document.documentElement.addEventListener('mouseleave', hide);
 }
 

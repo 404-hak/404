@@ -30,7 +30,7 @@ export default function BuoysPage({ state, toBuoy }: { state: State; toBuoy: (id
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[...state.buoys].sort((a, b) => order[a.status] - order[b.status] || a.sector - b.sector).map((b, i) => (
-          <button key={b.id} type="button" onClick={() => toBuoy(b.id)}
+          <button key={b.id} type="button" onClick={() => toBuoy(b.id)} data-buoy-id={b.id}
             className="card enter group !p-4 text-left transition-[transform,border-color] hover:-translate-y-0.5 hover:border-white/25"
             style={{ animationDelay: `${100 + i * 40}ms` }}>
             <div className="flex items-start gap-3">

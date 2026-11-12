@@ -6,6 +6,7 @@ import { api } from '../live';
 import { useTween } from '../motion';
 import Moon from './Moon';
 import SatSnap from './SatSnap';
+import Clip from './Clip';
 
 type Handle = MutableRefObject<MapHandle | null>;
 
@@ -93,7 +94,7 @@ function ForecastCard({ f, state, handle }: { f: Forecast; state: State; handle:
 function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
   const intercept = a.status === 'intercept';
   return (
-    <section className="alert-flash border-b border-alert/30 p-5">
+    <section className="alert-flash border-b border-alert/30 p-5" data-alert-id={a.id}>
       <div className="enter flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-[12px] font-semibold text-alert">
           <span className="ping-dot h-2 w-2 rounded-full bg-alert" />{intercept ? 'Перехват — катер в пути' : 'Тревога — нужно ваше решение'}
@@ -122,7 +123,7 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
       {a.audio_sha256 && (
         <div className="enter mt-3" style={{ animationDelay: '240ms' }}>
           <div className="mb-1 text-[11px] text-muted">Звук-улика с гидрофона · распознала нейросеть</div>
-          <audio controls preload="none" src={`/api/alerts/${a.id}/audio`} className="h-8 w-full" aria-label="Звук-улика" />
+          <Clip src={`/api/alerts/${a.id}/audio`} />
         </div>
       )}
 
@@ -156,7 +157,7 @@ function BuoyCard({ b, state, handle, onClose, alert }: { b: Buoy; state: State;
   const events = state.alerts.filter((a) => a.buoy_id === b.id);
   const tone = { ok: 'text-accent', warn: 'text-warn', alert: 'text-alert', offline: 'text-grey' }[b.status];
   return (
-    <section className="enter border-b border-line">
+    <section className="enter border-b border-line" data-buoy-id={b.id}>
       {alert && (
         <button type="button" onClick={onClose}
           className="flex w-full items-center gap-2 bg-alert/15 px-5 py-2 text-left text-[12px] font-medium text-alert hover:bg-alert/25">
@@ -222,7 +223,7 @@ function EventFeed({ state, handle }: { state: State; handle: Handle }) {
   return (
     <ul className="px-5">
       {state.alerts.map((a, i) => (
-        <li key={a.id} className={a.status === 'resolved' ? 'row-in' : 'row-hot'} style={delay(i)}>
+        <li key={a.id} className={a.status === 'resolved' ? 'row-in' : 'row-hot'} style={delay(i)} data-alert-id={a.id}>
           <button type="button" onClick={() => handle.current?.flyTo(a.lat, a.lon)}
             className="grid w-full grid-cols-[52px_1fr] gap-2 border-b border-line py-2.5 text-left text-[13px] leading-[18px] hover:bg-white/[.03]">
             <span className="font-mono text-[11px] leading-[18px] text-muted">{isToday(a.ts, state.now) ? fmtHM(a.ts) : fmtDM(a.ts)}</span>
@@ -261,7 +262,7 @@ function BuoyList({ buoys, handle, selected, onSelect }: { buoys: Buoy[]; handle
   return (
     <ul className="px-5">
       {sorted.map((b, i) => (
-        <li key={b.id} className="row-in" style={delay(i)}>
+        <li key={b.id} className="row-in" style={delay(i)} data-buoy-id={b.id}>
           <button type="button" onClick={() => { onSelect(b.id); handle.current?.flyTo(b.lat, b.lon, 12); }} aria-pressed={b.id === selected}
             className={`group grid w-full grid-cols-[18px_1fr_auto_auto] items-center gap-3 border-b border-line py-2.5 text-left text-[13px] leading-[18px] hover:bg-white/[.03] ${b.id === selected ? 'bg-white/[.06]' : ''}`}>
             <span className={`relative h-3.5 w-3.5 rounded-full border-[2.5px] transition-transform group-hover:scale-125 ${RING[b.status]} ${b.status === 'alert' ? 'ping-dot bg-alert' : ''}`} />
@@ -275,6 +276,45 @@ function BuoyList({ buoys, handle, selected, onSelect }: { buoys: Buoy[]; handle
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Черта под выбранной вкладкой. В покое — ровная тонкая линия с тающими концами; при переходе
+ * к другой вкладке она плывёт, и по ней пробегает волна, которая успокаивается, — как леска на воде.
+ */
+function TabWave({ x, w }: { x: number; w: number }) {
+  const path = useRef<SVGPathElement>(null);
+  const prev = useRef<number | null>(null);
+  const flat = (width: number) => `M1 4H${Math.max(1, width - 1)}`;
+  useEffect(() => {
+    const from = prev.current;
+    prev.current = x;
+    const el = path.current;
+    if (!el || from === null || from === x || !w || matchMedia('(prefers-reduced-motion: reduce)').matches) { el?.setAttribute('d', flat(w)); return; }
+    const dir = Math.sign(x - from);
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / 1100);
+      const amp = 2.4 * (1 - k) ** 2.2;
+      const N = 36;
+      let d = '';
+      for (let i = 0; i <= N; i++) {
+        const u = i / N;
+        const y = 4 + amp * Math.sin(Math.PI * u) * Math.sin(u * Math.PI * 5 - dir * k * 14);
+        d += `${i ? 'L' : 'M'}${(1 + u * (w - 2)).toFixed(1)} ${y.toFixed(2)}`;
+      }
+      el.setAttribute('d', d);
+      if (k < 1) raf = requestAnimationFrame(tick); else el.setAttribute('d', flat(w));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [x, w]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <svg className="ui-tab-wave" aria-hidden width={w} height={8} viewBox={`0 0 ${w || 1} 8`} style={{ width: w, transform: `translateX(${x}px)` }}>
+      <path ref={path} d={flat(w)} />
+    </svg>
   );
 }
 
@@ -297,8 +337,7 @@ function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: T; labe
             {t.label}
           </button>
         ))}
-        <span className="ui-tab-bar absolute -bottom-px left-0 h-0.5 rounded-full bg-primary transition-[transform,width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)]"
-          style={{ width: bar.w, transform: `translateX(${bar.x}px)` }} />
+        <TabWave x={bar.x} w={bar.w} />
       </div>
     </div>
   );

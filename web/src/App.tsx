@@ -19,6 +19,7 @@ import { haptic } from './native';
 import { useSurfaces } from './motion';
 import Intro from './components/Intro';
 import DeltaShell from './components/DeltaShell';
+import { useContextActions } from './components/ContextActions';
 import { layout } from './design';
 import { INTRO_EVENT, appSettled } from './introBus';
 
@@ -69,6 +70,8 @@ export default function App() {
 
   const navigate = (r: Route) => { if (r !== route) sound.tick(); go(r); };
   const select = (id: string | null) => { if (id && id !== selected) sound.ping(); setSelected(id); };
+  // своё меню по правой кнопке: действия с тем, что под мышью, и общее
+  useContextActions({ state, route, go: navigate, map, select });
 
   // из любого раздела — к бую на карте: карта монтируется, затем подлетает
   const toBuoy = (id: string) => { select(id); pendingFly.current = id; navigate('map'); };

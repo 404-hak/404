@@ -48,6 +48,9 @@ export const sound = {
   ok() { tone(784, 0, 0.18, 0.04); tone(1046, 0.12, 0.3, 0.04); },
 };
 
+/** Звук сейчас включён (для меню правой кнопки) */
+export const soundEnabled = () => enabled;
+
 export function setSound(on: boolean) {
   enabled = on;
   try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch { /* без хранилища — только на эту вкладку */ }

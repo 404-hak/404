@@ -3,7 +3,8 @@ import L from 'leaflet';
 import type { Feature, FeatureCollection } from 'geojson';
 import { AttributionControl, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { Buoy, State } from '../types';
-import { km } from '../format';
+import { coord, km } from '../format';
+import { contextActions, copyText } from '../upkUi';
 import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 import { useTheme } from '../theme';
@@ -175,6 +176,41 @@ function Bounded({ area, handle, focus, booting, fitPad }: {
   return null;
 }
 
+/** Меню правой кнопки на карте: у буя — его действия, на воде — приблизить сюда, весь район, координаты точки */
+function MapMenu({ buoys, markers, handle, onSelect }: {
+  buoys: Buoy[]; markers: MutableRefObject<Record<string, L.Marker>>; handle: MutableRefObject<MapHandle | null>; onSelect: Selection['onSelect'];
+}) {
+  const map = useMap();
+  const live = useRef({ buoys, onSelect });
+  live.current = { buoys, onSelect };
+  useEffect(() => contextActions('.map-scheme', (_el, e) => {
+    const icon = (e.target as Element).closest?.('.leaflet-marker-icon');
+    const id = icon && Object.entries(markers.current).find(([, m]) => m.getElement() === icon)?.[0];
+    const b = id ? live.current.buoys.find((x) => x.id === id) : undefined;
+    if (b) {
+      return {
+        title: `Буй ${b.name} · ${BUOY_STATUS[b.status]} · сектор ${b.sector}`,
+        items: [
+          { label: 'Открыть карточку буя', ic: 'buoy', action: () => live.current.onSelect(b.id) },
+          { label: 'Приблизить к бую', ic: 'zoomIn', action: () => handle.current?.flyTo(b.lat, b.lon, 12.5) },
+          { label: 'Скопировать координаты', ic: 'copy', action: () => copyText(coord(b.lat, b.lon), 'Координаты скопированы') },
+        ],
+      };
+    }
+    const at = map.mouseEventToLatLng(e);
+    return {
+      title: 'Карта',
+      items: [
+        { label: 'Приблизить сюда', ic: 'zoomIn', action: () => map.flyTo(at, Math.min(map.getMaxZoom(), map.getZoom() + 1), { duration: 0.6 }) },
+        { label: 'Отдалить', ic: 'zoomOut', action: () => map.zoomOut() },
+        { label: 'Показать весь район', ic: 'fit', action: () => handle.current?.fitArea() },
+        { label: 'Координаты точки', ic: 'pin', hint: `${at.lat.toFixed(2)}, ${at.lng.toFixed(2)}`, action: () => copyText(coord(at.lat, at.lng), 'Координаты скопированы') },
+      ],
+    };
+  }), [map]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 /** Клик по пустой карте снимает выделение. */
 function ClickAway({ onSelect }: { onSelect: Selection['onSelect'] }) {
   useMapEvents({ click: () => onSelect(null) });
@@ -215,6 +251,7 @@ export default function MapView({ state, handle, selected, onSelect, live = fals
       {live && <MapHaze buoys={state.buoys} />}
       {live && <LiveDelta area={area} buoys={state.buoys} alerts={state.alerts} />}
       <ClickAway onSelect={onSelect} />
+      <MapMenu buoys={state.buoys} markers={markers} handle={handle} onSelect={onSelect} />
       {/* суша грузится позже остальных слоёв — своя панель под ними, иначе она перекроет сетку и маску */}
       <Pane name="land" style={{ zIndex: 350 }}><DeltaLayer c={C} /></Pane>
 

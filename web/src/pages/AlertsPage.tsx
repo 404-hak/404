@@ -16,7 +16,7 @@ const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offl
 function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => void; i: number }) {
   const minutes = a.intercept_at ? Math.round((new Date(a.intercept_at).getTime() - new Date(a.ts).getTime()) / 60000) : null;
   return (
-    <article className={`ui-tile enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
+    <article data-alert-id={a.id} className={`ui-tile enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
       style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }}>
       <div className="ui-meta flex items-center justify-between gap-2 font-mono text-[11px] text-muted">
         <span ref={scrambleRef}>{a.id.replace(/^A-\d+-/, '№ ')}</span>

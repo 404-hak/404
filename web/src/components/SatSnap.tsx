@@ -78,7 +78,7 @@ export default function SatSnap({ lat, lon, title, tone = 'alert', zoom = 15, he
 
   return (
     <>
-      <div ref={box} className={`sat-snap is-${phase}`} style={{ height }}>
+      <div ref={box} className={`sat-snap is-${phase}`} style={{ height }} data-lat={lat} data-lon={lon}>
         <Imagery lat={lat} lon={lon} zoom={zoom} interactive={false} onPhase={(p) => setPhase(p)} />
         <Mark tone={tone} />
         <span className="sat-cap">Спутник · кадр ≈ {spanLabel(lat, zoom, w)}</span>
