@@ -32,14 +32,16 @@ function buildPalette(sky: Sky) {
   const b = useSun ? sky.sun : sky.moon;
   const seen = useSun ? sky.sun.visible : sky.moon.visible;
   const skyBands = [0, 1, 2, 3].map((i) => css(mixV(p.hz, p.top, i / 3)));
-  const by = HORIZON - 34 - Math.min(1, Math.max(0, (b.y - 0.812) / 0.115)) * (HORIZON - 130);
+  // та же дуга, что на фоне (theme.toScreen): ниже нуля светило уходит за горизонт и скрыто водой
+  const by = HORIZON - ((b.y - 0.8) / 0.13) * (HORIZON - 120);
   const band = skyBands[Math.min(3, Math.floor(((HORIZON - by) / HORIZON) * 4))];
   return {
     light, skyBands, band,
+    skyTop: css(p.top), skyMid: css(mixV(p.hz, p.top, 0.45)), skyHz: css(p.hz), seaFar: css(p.far), seaNear: css(p.near),
     seaBands: [0, 1, 2, 3].map((i) => css(mixV(p.far, p.near, i / 3))),
     line: css(p.line), island: css(p.isle), stars: p.stars, horizon: css(mixV(p.hz, [1, 1, 1], 0.35)),
-    body: seen > 0.15 ? { x: clearOfTitle(140 + b.x * (W - 280), by), y: by, sun: useSun, illum: sky.moon.illum >= 0 ? sky.moon.illum : 0.75, waxing: sky.moon.waxing } : null,
-    bodyC: useSun ? css(p.sun) : '#F1F4FA',
+    body: seen > 0.05 ? { x: clearOfTitle(140 + b.x * (W - 280), by), y: by, sun: useSun, seen, illum: sky.moon.illum >= 0 ? sky.moon.illum : 0.75, waxing: sky.moon.waxing } : null,
+    bodyC: useSun ? css(p.sun) : css(mixV(hex('#F2C79A'), hex('#EEF1F8'), Math.min(1, Math.max(0, sky.moon.alt / 14)))),
     primary: '#FFFFFF', accent: light ? '#5E6A57' : '#8E9C80', muted: light ? '#505968' : '#B4BAC4',
     vignette: 0.12 + 0.4 * (1 - sky.day),
     reedMid: css(mixV(hex('#07101F'), hex('#4A5A42'), sky.day)), reedNear: css(mixV(hex('#02060D'), hex('#25311F'), sky.day)),
@@ -203,6 +205,32 @@ export default function Intro({ onDone }: { onDone: () => void }) {
       <div className="absolute inset-0" style={{ filter: camBlur > 0.2 ? `blur(${camBlur}px)` : undefined, transform: `scale(${camScale})`, opacity: camOpacity }}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden>
           <defs>
+            <linearGradient id="i-sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={C.skyTop} /><stop offset="0.55" stopColor={C.skyMid} /><stop offset="1" stopColor={C.skyHz} />
+            </linearGradient>
+            <linearGradient id="i-sea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={C.seaFar} /><stop offset="0.3" stopColor={C.seaBands[1]} /><stop offset="1" stopColor={C.seaNear} />
+            </linearGradient>
+            <radialGradient id="i-bodyGlow">
+              <stop offset="0" stopColor={C.bodyC} stopOpacity={C.body?.sun ? 0.55 : 0.32} />
+              <stop offset="0.3" stopColor={C.bodyC} stopOpacity={C.body?.sun ? 0.16 : 0.08} />
+              <stop offset="1" stopColor={C.bodyC} stopOpacity="0" />
+            </radialGradient>
+            <linearGradient id="i-haze" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={C.skyHz} stopOpacity="0" /><stop offset="0.5" stopColor="#FFFFFF" stopOpacity="0.14" /><stop offset="1" stopColor={C.skyHz} stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="i-swell" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={C.line} stopOpacity="0" /><stop offset="0.5" stopColor={C.line} stopOpacity="1" /><stop offset="1" stopColor={C.line} stopOpacity="0" />
+            </linearGradient>
+            <filter id="i-soft2" x="-10%" y="-60%" width="120%" height="220%"><feGaussianBlur stdDeviation="1.1" /></filter>
+            <clipPath id="i-skyClip"><rect x="0" y="0" width={W} height={HORIZON} /></clipPath>
+            {C.body && !C.body.sun && (
+              <mask id="i-phase" maskUnits="userSpaceOnUse">
+                <circle cx={C.body.x} cy={C.body.y} r="34" fill="#fff" />
+                {C.body.illum < 0.97 && <circle cx={C.body.x + (C.body.waxing ? -1 : 1) * 58 * C.body.illum} cy={C.body.y} r="31" fill="#000" />}
+              </mask>
+            )}
+            <filter id="i-disc" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6" /></filter>
             <radialGradient id="i-vignette" cx="50%" cy="48%" r="75%">
               <stop offset="0.55" stopColor="#000" stopOpacity="0" />
               <stop offset="1" stopColor="#000" stopOpacity={C.vignette} />
@@ -225,56 +253,53 @@ export default function Intro({ onDone }: { onDone: () => void }) {
             <filter id="i-tag" x="-20%" y="-150%" width="140%" height="400%"><feGaussianBlur stdDeviation={8 * (1 - tagK)} /></filter>
           </defs>
 
-          {/* небо: четыре ровные полосы, звёзды-искорки, солнце или луна — плоские диски с кольцами */}
-          {[0, 0.18, 0.4, 0.68].map((f0, i, arr) => {
-            const f1 = arr[i + 1] ?? 1;
-            return <rect key={`sky${i}`} x="0" y={HORIZON * (1 - f1)} width={W} height={HORIZON * (f1 - f0) + 1} fill={C.skyBands[i]} />;
-          })}
-          {C.stars > 0.02 && scene.stars.map((s, i) => {
-            const on = Math.sin(T * s.sp + s.ph) > -0.4 ? 1 : 0.25;
-            const r = 2 + s.s * 2.4;
-            return <path key={i} d={`M${s.x - r},${s.y}H${s.x + r}M${s.x},${s.y - r}V${s.y + r}`} stroke="#FFF9EA" strokeWidth="1.3" strokeLinecap="round" opacity={on * C.stars * 0.9} />;
-          })}
+          {/* небо: мягкий градиент, звёзды-точки, солнце или луна с мягким ореолом */}
+          <rect width={W} height={HORIZON} fill="url(#i-sky)" />
+          {C.stars > 0.02 && scene.stars.map((s, i) => (
+            <circle key={i} cx={s.x} cy={s.y} r={s.s} fill="#F4F6FB" opacity={(0.25 + 0.55 * (0.5 + 0.5 * Math.sin(T * s.sp * 0.6 + s.ph))) * C.stars} />
+          ))}
           {C.body && (
-            <g>
-              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 88 : 64} fill={C.bodyC} opacity="0.1" />
-              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 58 : 46} fill={C.bodyC} opacity="0.2" />
-              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 36 : 30} fill={C.bodyC} />
-              {!C.body.sun && C.body.illum < 0.97 && (
-                <circle cx={C.body.x + (C.body.waxing ? -1 : 1) * 60 * C.body.illum} cy={C.body.y} r="30.5" fill={C.band} opacity="0.94" />
-              )}
+            <g clipPath="url(#i-skyClip)" opacity={Math.min(1, C.body.seen * 1.2)}>
+              <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 230 : 170} fill="url(#i-bodyGlow)" />
+              <g filter="url(#i-disc)">
+                {!C.body.sun && <circle cx={C.body.x} cy={C.body.y} r="29" fill={C.bodyC} opacity="0.07" />}
+                <circle cx={C.body.x} cy={C.body.y} r={C.body.sun ? 34 : 29} fill={C.bodyC} mask={C.body.sun ? undefined : 'url(#i-phase)'} />
+              </g>
             </g>
           )}
 
-          {/* море: плоские слои глубины, ленты зыби, значки волн «~», мигающая дорожка под светилом */}
-          {[0, 0.06, 0.2, 0.45].map((f0, i, arr) => {
-            const f1 = arr[i + 1] ?? 1;
-            return <rect key={`sea${i}`} x="0" y={HORIZON + (H - HORIZON) * f0} width={W} height={(H - HORIZON) * (f1 - f0) + 1} fill={C.seaBands[i]} />;
-          })}
-          {Array.from({ length: 9 }, (_, i) => {
-            const p = ((i / 9 + T * 0.03) % 1);
+          {/* море: мягкий градиент, зыбь катится к зрителю, изобаты, переливающаяся дорожка под светилом */}
+          <rect y={HORIZON} width={W} height={H - HORIZON} fill="url(#i-sea)" />
+          {Array.from({ length: 10 }, (_, i) => {
+            const p = ((i / 10 + T * 0.03) % 1);
             const k = p ** 1.9;
-            const y = HORIZON + (H - HORIZON) * k;
-            return <rect key={`sw${i}`} x="0" y={y} width={W} height={2 + 30 * k} fill={C.line} opacity={Math.sin(Math.PI * p) > 0.55 ? 0.07 : 0} />;
+            const h = 2 + 44 * k;
+            return <rect key={`sw${i}`} x="0" y={HORIZON + (H - HORIZON) * k - h / 2} width={W} height={h} fill="url(#i-swell)" opacity={0.06 * Math.sin(Math.PI * p)} />;
           })}
-          {scene.streaks.map((s, i) => {
-            const k = (s.y - HORIZON) / (H - HORIZON);
-            const L = 6 + 26 * k, A = 1.5 + 6 * k;
-            const x = s.x + Math.sin(T * 0.8 + i) * (2 + 6 * k);
-            return <path key={`wv${i}`} d={`M${x - L},${s.y} q${L / 2},${-A} ${L},0 t${L},0`} fill="none" stroke={C.line} strokeWidth={1 + 1.6 * k}
-              strokeLinecap="round" opacity={0.25 + 0.4 * k} />;
+          {Array.from({ length: 13 }, (_, i) => {
+            const p = ((i / 13 + T * 0.012) % 1);
+            const k = p ** 1.7;
+            const y = HORIZON + 10 + (H - HORIZON - 10) * k;
+            const A = 2 + 9 * k, L = 140 + 260 * k, ph = T * 0.35 + i * 1.7;
+            let d = `M-40,${y + A * Math.sin(ph)}`;
+            for (let x = 0; x <= W + 40; x += 40) d += ` L${x},${(y + A * Math.sin((x / L) * Math.PI * 2 + ph)).toFixed(1)}`;
+            return <path key={`iso${i}`} d={d} fill="none" stroke={C.line} strokeWidth={0.8 + 1.2 * k} opacity={0.1 * Math.sin(Math.PI * p)} />;
           })}
-          {C.body && scene.glints.map((g, i) => {
-            const k = (g.y - HORIZON) / (H - HORIZON);
-            const len = 8 + k * 90 * (0.4 + g.j);
-            const x = C.body!.x + (g.j - 0.5) * (6 + k * 50) - len / 2;
-            const on = Math.sin(T * g.sp * 1.4 + g.ph) > -0.2 ? 1 : 0;
-            return <rect key={`gl${i}`} x={x} y={g.y} width={len} height={2 + k * 3} rx={1 + k * 1.5} fill={C.bodyC} opacity={on * (C.body!.sun ? 0.95 : 0.8)} />;
-          })}
+          {C.body && (
+            <g filter="url(#i-soft2)">
+              {scene.glints.map((g, i) => {
+                const k = (g.y - HORIZON) / (H - HORIZON);
+                const len = 8 + k * 95 * (0.4 + g.j);
+                const x = C.body!.x + Math.sin(T * 0.7 + g.ph) * (4 + k * 40) - len / 2;
+                return <rect key={`gl${i}`} x={x} y={g.y} width={len} height={1.5 + k * 2.4} rx="1.5" fill={C.bodyC}
+                  opacity={(0.15 + 0.6 * (0.5 + 0.5 * Math.sin(T * g.sp + g.ph))) * (1 - k * 0.45) * (C.body!.sun ? 1 : 0.85) * Math.min(1, C.body!.seen * 1.2)} />;
+              })}
+            </g>
+          )}
 
-          {/* горизонт: чёткая линия и плоские острова */}
-          <rect y={HORIZON - 1} width={W} height="2" fill={C.horizon} opacity="0.55" />
-          {scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} />)}
+          {/* горизонт: светлая дымка и острова в лёгкой дымке */}
+          <rect y={HORIZON - 40} width={W} height="80" fill="url(#i-haze)" />
+          <g filter="url(#i-soft2)">{scene.islands.map((d, i) => <path key={`is${i}`} d={d} fill={C.island} opacity="0.92" />)}</g>
 
           {/* круги от падения и сигнал буя */}
           {tau > 0 && [0, 0.22, 0.44].map((d, k) => {

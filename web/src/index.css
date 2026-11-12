@@ -256,7 +256,7 @@ body { -webkit-font-smoothing: antialiased; }
 /* камыш дельты: интро и фон */
 .reed { transform-box: fill-box; transform-origin: 50% 100%; animation: reed-sway 6s ease-in-out infinite alternate; }
 @keyframes reed-sway { from { transform: rotate(-1.6deg); } to { transform: rotate(1.8deg); } }
-.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); transition: color 1s, opacity 1s; }
+.sea .reeds { position: absolute; bottom: -3vh; height: min(44vh, 460px); width: min(28vw, 320px); color: var(--c-reed); opacity: var(--reed-opacity); filter: blur(1.5px); transition: color 1s, opacity 1s; }
 .sea .reeds-left { left: -1vw; }
 .sea .reeds-right { right: -1vw; }
 .sea .mist { position: absolute; left: -15%; right: -15%; top: calc(20% - 6vh); height: 12vh; pointer-events: none;

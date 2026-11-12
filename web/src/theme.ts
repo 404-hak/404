@@ -29,7 +29,8 @@ function horizontal(d: number, raV: number, decV: number) {
   const H = sidereal(d, lw) - raV;
   const alt = Math.asin(Math.sin(phi) * Math.sin(decV) + Math.cos(phi) * Math.cos(decV) * Math.cos(H));
   const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(decV) * Math.cos(phi)); // от юга, запад +
-  return { alt: alt / RAD, az: az / RAD };
+  const ha = ((((H / RAD) % 360) + 540) % 360) - 180;           // часовой угол: 0 — на юге, растёт равномерно со временем
+  return { alt: alt / RAD, az: az / RAD, ha };
 }
 function sunEcl(d: number) {
   const M = RAD * (357.5291 + 0.98560028 * d);
@@ -81,11 +82,27 @@ export interface Sky {
 }
 
 const HZ = 0.8;                                   // горизонт фона: доля высоты снизу
-/** Азимут (от юга) и высота → точка на небе фона. Море смотрит на юг: восток слева, запад справа. */
-const toScreen = (alt: number, az: number) => ({
-  x: Math.min(0.95, Math.max(0.05, 0.5 + az / 260)),
-  y: HZ + 0.012 + Math.min(1, Math.max(-0.2, alt / 55)) * 0.115,
+/**
+ * Положение светила → точка на небе фона. Море смотрит на юг: восток слева, запад справа.
+ * По горизонтали — часовой угол (растёт равномерно со временем: светило идёт по небу с ровной
+ * скоростью, верхняя точка — на юге), по высоте — настоящая высота с плавным приближением к верху
+ * кадра. Получается ровная симметричная дуга; ниже нуля светило уходит за горизонт.
+ */
+export const toScreen = (alt: number, ha: number) => ({
+  x: 0.5 + 0.44 * Math.tanh(ha / 75),
+  y: HZ + 0.13 * (1 - Math.exp(-Math.max(alt, -12) / 22)),
 });
+
+/** Положение светил на момент `at` — для фона каждый кадр (дёшево: десяток тригонометрий) */
+export function skyBodies(at: Date) {
+  const s = sunPosition(at), m = moonPosition(at);
+  const day = smooth(-10, 8, s.alt);
+  return {
+    sunAlt: s.alt, day,
+    sun: { ...toScreen(s.alt, s.ha), alt: s.alt, visible: smooth(-4, 0.5, s.alt) },
+    moon: { ...toScreen(m.alt, m.ha), alt: m.alt, visible: smooth(-3, 0.5, m.alt) * (1 - 0.6 * day), illum: m.illum, waxing: m.waxing },
+  };
+}
 
 // ---------- палитры интерфейса: читаются из CSS (единый источник — brand/tokens и index.css) ----------
 const COLOR_VARS = ['--c-bg', '--c-surface', '--c-primary', '--c-grey', '--c-accent', '--c-ok', '--c-warn', '--c-alert', '--c-text-2', '--c-line',
@@ -182,12 +199,15 @@ const clockAt = (() => {
     return null;
   }
 })();
+const loadedAt = Date.now();
+/** Текущее время неба: настоящее, а при ?sky — выбранный момент, идущий дальше в реальном темпе */
+export const liveAt = () => (clockAt ? new Date(clockAt.valueOf() + (Date.now() - loadedAt)) : new Date());
 let pref: ThemePref = clockAt ? 'auto' : readPref();
 let sky: Sky = computeSky(pref);
 let theme: Theme = sky.ui >= 0.5 ? 'day' : 'night';
 const listeners = new Set<() => void>();
 
-function computeSky(p: ThemePref, at: Date = clockAt ?? new Date()): Sky {
+function computeSky(p: ThemePref, at: Date = liveAt()): Sky {
   if (p !== 'auto') {
     const isDay = p === 'day';
     return {
@@ -196,16 +216,10 @@ function computeSky(p: ThemePref, at: Date = clockAt ?? new Date()): Sky {
       moon: { x: 0.84, y: 0.885, visible: isDay ? 0 : 1, alt: isDay ? -30 : 30, illum: -1, waxing: true },
     };
   }
-  const s = sunPosition(at), m = moonPosition(at);
-  const day = smooth(-10, 8, s.alt);                                  // небо: от гражданских сумерек до дня
-  const warm = Math.exp(-(((s.alt - 2) / 8) ** 2));                   // тепло у горизонта: рассвет и закат
-  const raw = smooth(-6, 10, s.alt);
-  const sp = toScreen(s.alt, s.az), mp = toScreen(m.alt, m.az);
-  return {
-    pref: p, sunAlt: s.alt, day, warm, ui: Object.keys(NIGHT).length ? safeUi(raw, warm) : raw,
-    sun: { ...sp, alt: s.alt, visible: smooth(-2.5, 1, s.alt) },
-    moon: { ...mp, alt: m.alt, visible: smooth(-2, 2, m.alt) * (1 - 0.65 * day), illum: m.illum, waxing: m.waxing },
-  };
+  const b = skyBodies(at);
+  const warm = Math.exp(-(((b.sunAlt - 2) / 8) ** 2));               // тепло у горизонта: рассвет и закат
+  const raw = smooth(-6, 10, b.sunAlt);
+  return { pref: p, ...b, warm, ui: Object.keys(NIGHT).length ? safeUi(raw, warm) : raw };
 }
 
 function apply(animate: boolean) {
