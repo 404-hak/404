@@ -219,8 +219,8 @@ function startLinks() {
     stashHref(a);
     floatState('is-link', true);
     if (!document.documentElement.classList.contains('is-lifting')) showLink(info, e.clientX, e.clientY);
-  });
-  document.addEventListener('pointerout', (e) => { if (linkEl && e.pointerType === 'mouse' && !linkEl.contains(e.relatedTarget as Node)) leaveLink(); });
+  }, true);   // в фазе захвата: карты (Яндекс) гасят всплытие событий внутри себя
+  document.addEventListener('pointerout', (e) => { if (linkEl && e.pointerType === 'mouse' && !linkEl.contains(e.relatedTarget as Node)) leaveLink(); }, true);
   document.addEventListener('pointerdown', (e) => { if (!linkEl) return; hideLink(); if (e.pointerType !== 'mouse' || e.button !== 0) restoreHref(linkEl); }, true);
   document.addEventListener('pointerup', (e) => { if (linkEl && e.button === 0 && !document.documentElement.classList.contains('is-lifting')) restoreHref(linkEl); }, true);
   document.addEventListener('keydown', (e) => { const t = e.target as HTMLElement; if (e.key === 'Enter' && t?.dataset?.href !== undefined) restoreHref(t as HTMLAnchorElement); }, true);
@@ -423,10 +423,20 @@ function startMenu() {
 const LIFTABLE = 'img, a[href], a[data-href]';
 const NO_LIFT = '.leaflet-container, .sat-snap, .sat-big, .ctx-menu, [draggable="true"]';
 function startLift() {
-  // браузер не рисует свою полупрозрачную копию
-  document.addEventListener('dragstart', (e) => { if ((e.target as Element)?.closest?.(LIFTABLE)) e.preventDefault(); }, true);
+  // браузер не рисует свою полупрозрачную копию: ни картинки и ссылки, ни выделенного текста
+  document.addEventListener('dragstart', (e) => {
+    const t = e.target as Node | null;
+    const el = t instanceof Element ? t : t?.parentElement ?? null;
+    if (el?.closest?.(LIFTABLE)) { e.preventDefault(); return; }
+    const sel = getSelection();
+    const text = sel?.toString().trim() ?? '';
+    if (!text || !sel?.rangeCount || el?.closest('input, textarea, [contenteditable="true"], .leaflet-container, .ctx-menu')) return;
+    e.preventDefault();
+    pending = null;
+    beginText(text, sel.getRangeAt(0), e.clientX, e.clientY);
+  }, true);
   let pending: { el: HTMLElement; x: number; y: number } | null = null;
-  let lift: { el: HTMLElement; ghost: HTMLElement; ox: number; oy: number; px: number; py: number; vx: number; tx: number; ty: number; raf: number; last: number; rect: DOMRect } | null = null;
+  let lift: { el: HTMLElement; ghost: HTMLElement; ox: number; oy: number; px: number; py: number; vx: number; tx: number; ty: number; raf: number; last: number; rect: DOMRect; text?: boolean } | null = null;
 
   const begin = (p: NonNullable<typeof pending>, x: number, y: number) => {
     const { el } = p;
@@ -466,8 +476,51 @@ function startLift() {
     };
     lift.raf = requestAnimationFrame(tick);
   };
+  const signs = (n: number) => { const d = n % 10, t = n % 100; return d === 1 && t !== 11 ? 'знак' : d >= 2 && d <= 4 && (t < 12 || t > 14) ? 'знака' : 'знаков'; };
+  /** Выделенный текст «берётся» карточкой-цитатой; отпустили — она тает над своим местом */
+  const beginText = (text: string, range: Range, x: number, y: number) => {
+    const rect = range.getBoundingClientRect();
+    const short = text.length > 170 ? `${text.slice(0, 170).replace(/\s+\S*$/, '')}…` : text;
+    const ghost = h(`<div class="lift lift-text"><span class="lift-q" aria-hidden="true">“</span><span>${esc(short)}</span><small>${text.length} ${signs(text.length)}</small></div>`);
+    document.body.append(ghost);
+    document.documentElement.classList.add('is-lifting', 'is-lifting-text');
+    floatState('is-grabbing', true);
+    hideTip(); hideLink();
+    const anchor = (range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement) ?? document.body;
+    const ox = -16, oy = -22;
+    lift = { el: anchor as HTMLElement, ghost, ox, oy, px: x - ox, py: y - oy, vx: 0, tx: x - ox, ty: y - oy, raf: 0, last: 0, rect, text: true };
+    ripples(x, y, { count: 1, size: 22, duration: 700 });
+    const tick = (now: number) => {
+      if (!lift) return;
+      const dt = lift.last ? Math.min(0.05, (now - lift.last) / 1000) : 1 / 60;
+      lift.last = now;
+      const k = toward(18, dt);
+      const nx = lift.px + (lift.tx - lift.px) * k, ny = lift.py + (lift.ty - lift.py) * k;
+      lift.vx += ((nx - lift.px) / dt / 60 - lift.vx) * toward(12, dt);
+      lift.px = nx; lift.py = ny;
+      lift.ghost.style.transform = `translate3d(${nx}px, ${ny}px, 0) rotate(${clamp(lift.vx * 0.7, -10, 10)}deg)`;
+      lift.raf = requestAnimationFrame(tick);
+    };
+    lift.raf = requestAnimationFrame(tick);
+  };
   const end = () => {
     if (!lift) return;
+    if (lift.text) {
+      const { ghost, rect, raf } = lift;
+      cancelAnimationFrame(raf);
+      lift = null;
+      document.documentElement.classList.remove('is-lifting', 'is-lifting-text');
+      floatState('is-grabbing', false);
+      const anim = ghost.animate(
+        [{ transform: ghost.style.transform, opacity: 1 }, { transform: `translate3d(${rect.left}px, ${rect.top - 8}px, 0) rotate(0deg) scale(.96)`, opacity: 0 }],
+        { duration: reduced() ? 0 : 420, easing: 'cubic-bezier(.34, 1.3, .64, 1)', fill: 'forwards' },
+      );
+      anim.onfinish = anim.oncancel = () => {
+        ghost.remove();
+        ripples(rect.right, rect.bottom - 2, { count: 2, size: 34, duration: 900 });
+      };
+      return;
+    }
     const { el, ghost, rect, px, py, raf } = lift;
     cancelAnimationFrame(raf);
     lift = null;
@@ -498,6 +551,8 @@ function startLift() {
     pending = { el, x: e.clientX, y: e.clientY };
   }, true);
   document.addEventListener('pointermove', (e) => {
+    // кнопку отпустили, а события отпускания не было (после отменённого переноса браузер его иногда не шлёт)
+    if (lift && e.buttons === 0) { end(); return; }
     if (lift) { lift.tx = e.clientX - lift.ox; lift.ty = e.clientY - lift.oy; return; }
     if (pending && Math.hypot(e.clientX - pending.x, e.clientY - pending.y) > 6) {
       const p = pending; pending = null;
@@ -507,6 +562,7 @@ function startLift() {
   }, { passive: true });
   const up = () => { pending = null; end(); };
   document.addEventListener('pointerup', up, true);
+  for (const type of ['mouseup', 'dragend', 'drop']) document.addEventListener(type, up, true);
   document.addEventListener('pointercancel', up, true);
   window.addEventListener('blur', up);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lift) end(); });

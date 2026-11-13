@@ -1,15 +1,13 @@
-import { Suspense, lazy, useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject, type ReactNode, type RefObject } from 'react';
 import type { State } from '../types';
 import type { MapHandle, Selection } from '../geo';
 import { hasYandexKey } from '../yandex';
 import MapView, { type FitPad } from './MapView';
 import YandexMapView from './YandexMapView';
 
-// 3D (three.js) грузится только когда его выбрали — остальной сайт не тяжелеет
-const Map3D = lazy(() => import('./Map3D'));
 
-type Basemap = 'photo' | 'scheme' | '3d';
-const ORDER: Basemap[] = ['photo', 'scheme', '3d'];
+type Basemap = 'photo' | 'scheme';
+const ORDER: Basemap[] = ['photo', 'scheme'];
 
 function Btn({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
   return (
@@ -121,13 +119,6 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
           setBasemap('scheme');
           setNotice(`Спутник недоступен: ${why}. Показана офлайн-схема — кнопка «Спутник» попробует снова.`);
         }} />
-      ) : basemap === '3d' ? (
-        <Suspense fallback={<div className="grid h-full place-items-center text-[13px] text-muted"><span className="animate-pulse">Загружаю 3D…</span></div>}>
-          <Map3D state={state} handle={handle} selected={selected} onSelect={onSelect} onFail={(why) => {
-            setBasemap('scheme');
-            setNotice(`3D недоступно: ${why}. Показана схема.`);
-          }} />
-        </Suspense>
       ) : (
         <MapView state={state} handle={handle} selected={selected} onSelect={onSelect} live={live} pad={pad} />
       )}
@@ -147,8 +138,6 @@ export default function MapShell({ state, handle, selected, onSelect, live = fal
             title={hasYandexKey ? 'Спутниковый снимок (Яндекс Карты)' : 'Нужен ключ Яндекс Карт (VITE_YANDEX_MAPS_KEY)'}>Спутник</button>
           <button type="button" className={seg(basemap === 'scheme')} onClick={() => { setNotice(null); setBasemap('scheme'); }}
             title="Офлайн-схема, работает без интернета">Схема</button>
-          <button type="button" className={seg(basemap === '3d')} onClick={() => { setNotice(null); setBasemap('3d'); }}
-            title="Объёмная карта района: поворот и наклон правой кнопкой мыши, работает без интернета">3D</button>
         </div>
         {notice && (
           <div className="enter pointer-events-auto absolute right-3 top-[56px] flex max-w-[340px] gap-2 rounded-[9px] border border-line bg-bg/95 py-2 pl-3 pr-2 text-[12px] leading-[17px] text-muted shadow-[0_8px_24px_var(--c-shadow)]">

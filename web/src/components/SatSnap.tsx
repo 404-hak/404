@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { hasYandexKey, loadYmaps } from '../yandex';
+import YandexCredit from './YandexCredit';
 
 /**
  * Снимок места тревоги со спутника — сразу видно, что там: протока, камыш, берег, лодка у берега.
@@ -22,6 +23,7 @@ function spanLabel(lat: number, zoom: number, px: number) {
 
 function Imagery({ lat, lon, zoom, interactive, onPhase }: { lat: number; lon: number; zoom: number; interactive: boolean; onPhase: (p: Phase, by?: string) => void }) {
   const el = useRef<HTMLDivElement>(null);
+  const [yandex, setYandex] = useState(false);
   useEffect(() => {
     const host = el.current;
     if (!host) return;
@@ -53,13 +55,14 @@ function Imagery({ lat, lon, zoom, interactive, onPhase }: { lat: number; lon: n
         // метка тревоги стоит в центре: снимок не двигается, крупно — только кнопки масштаба
         m.behaviors.disable(['drag', 'scrollZoom', 'dblClickZoom', 'multiTouch', 'rightMouseButtonMagnifier']);
         onPhase('ready', 'yandex');
+        setYandex(true);
         destroy = () => m.destroy();
       }).catch(esri);
     } else esri();
 
     return () => { dead = true; destroy(); };
   }, [lat, lon, zoom, interactive]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <div ref={el} className="absolute inset-0" />;
+  return <><div ref={el} className="absolute inset-0" />{yandex && <YandexCredit host={el.current} />}</>;
 }
 
 /** Метка места: кольцо буя и круги, расходящиеся по воде */

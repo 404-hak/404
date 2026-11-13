@@ -6,6 +6,7 @@ import { loadYmaps } from '../yandex';
 import { BUOY_STATUS, areaOf, distanceKm, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { reducedMotion } from '../motion';
 import { WARN } from '../design';
+import YandexCredit from './YandexCredit';
 
 const C = { accent: '#7A866F', warn: WARN.night, alert: '#EF4444', primary: '#E2E8F0', mask: '#0B1628' };
 // зазор вокруг района [сверху, справа, снизу, слева]: видна граница, кнопки и легенда её не закрывают
@@ -298,5 +299,10 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
     seen.current = Boolean(focus);
   }, [ready, focus?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div ref={el} className="map-photo h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={el} className="map-photo h-full w-full" />
+      {ready && <YandexCredit host={el.current} />}
+    </div>
+  );
 }

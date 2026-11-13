@@ -249,6 +249,10 @@ html[data-design="upk"] nav.md\:hidden button > span.absolute.top-0 { background
 .float-line { position: absolute; left: -.5px; top: -76px; width: 1px; height: 52px; opacity: 0; transform-origin: 50% 100%; scale: 1 .3;
   background: linear-gradient(to top, rgb(var(--rgb-primary) / .75), transparent); transition: opacity .2s ease, scale .35s cubic-bezier(.34, 1.56, .64, 1); }
 .float.is-grabbing .float-line { opacity: 1; scale: 1 1; }
+/* несут текст или картинку — это поплавок на леске, а не курсор над текстом */
+.float.is-grabbing .float-beam { opacity: 0; animation: none; }
+.float.is-grabbing.is-text .float-bob { opacity: 1; scale: 1; }
+.float.is-grabbing.is-text .float-ring { opacity: .9; scale: .8 .7; }
 .float.is-grabbing .float-bob { translate: 0 4px; animation: none; }
 .float.is-grabbing .f-ring { stroke: var(--c-text); stroke-width: 2.6; }
 .float.is-grabbing .f-dot { fill: var(--c-text); r: 2.4; }
@@ -462,16 +466,6 @@ html[data-design="upk"] ::-webkit-scrollbar-track { background: transparent; }
 html[data-design="upk"] ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 8px; background: transparent; background-clip: padding-box; }
 html[data-design="upk"] *:hover::-webkit-scrollbar-thumb { background-color: rgb(var(--rgb-primary) / .22); }
 html[data-design="upk"] ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--rgb-primary) / .4) !important; }
-
-/* Яндекс Карты: лишние ссылки («Открыть в Яндекс Картах», «Создать свою карту») убраны; логотип, «© Яндекс»
-   и «Условия» обязаны оставаться по правилам Яндекса — они приглушены и набраны нашим шрифтом */
-[class*="ymaps-2"][class*="gototech"], [class*="ymaps-2"][class*="copyrights-promo"], [class*="ymaps-2"][class*="map-copyrights-promo"] { display: none !important; }
-[class*="ymaps-2"][class*="copyright__content"], [class*="ymaps-2"][class*="copyright__agreement"] { font-family: var(--font-sans) !important; font-size: 10px !important; }
-[class*="ymaps-2"][class*="copyright__content"] { background: rgb(11 22 40 / .55) !important; color: #CBD5E1 !important; border-radius: 6px 0 0 6px; padding: 1px 6px !important; }
-[class*="ymaps-2"][class*="copyright__agreement"] { background: rgb(11 22 40 / .55) !important; border-radius: 0 6px 6px 0; }
-[class*="ymaps-2"][class*="copyright__link"], [class*="ymaps-2"][class*="copyright__agreement"] a { color: #E2E8F0 !important; }
-[class*="ymaps-2"][class*="copyright__logo"] { opacity: .7; filter: grayscale(1) brightness(1.6); }
-[class*="ymaps-2"][class*="copyright__fog"] { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .ctx-menu, .ctx-menu.is-leaving, .ctx-item::after { animation: none !important; }

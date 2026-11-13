@@ -5,7 +5,7 @@
 ```
  Буй (гидрофон)                 Сервер (один процесс FastAPI)                       Дежурный
  ─────────────                 ─────────────────────────────                       ────────
- POST /api/buoys/{id}/audio ──▶ dsp.read_wav → нейросеть (NumPy) → решение      ┌─▶ браузер: React (карта Leaflet/Яндекс/3D,
+ POST /api/buoys/{id}/audio ──▶ dsp.read_wav → нейросеть (NumPy) → решение      ┌─▶ браузер: React (карта Leaflet/Яндекс,
  POST …/heartbeat          ──▶ World: буи, тревоги + цепочка SHA-256 ── WS /ws ─┤    лист разделов, тревоги, улики)
                                 SQLite (WAL) + data/clips/*.wav                    └─▶ iPhone: то же в WKWebView (ios/)
                                 Sim (симулятор/демо), погода Open-Meteo
