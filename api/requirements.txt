@@ -1,5 +1,5 @@
 fastapi==0.162.5
 starlette==1.10.0   # 0.46 — 14 известных уязвимостей (Range, Host, multipart), см. docs/audit/01-security.md
 uvicorn[standard]==0.54.0
-pydantic==2.11.3
+pydantic==2.14.3
 numpy==2.5.4
