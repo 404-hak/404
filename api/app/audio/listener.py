@@ -37,6 +37,7 @@ class Ear:
     motor_fp: list[float] | None = None       # его отпечаток — чтобы сверять катер по двум клипам
     last: dict[str, datetime] = field(default_factory=dict)
     offline_alerted: bool = False
+    bg_level: float | None = None             # обычная громкость фона у буя, дБ — чтобы мерить, насколько громче источник
 
 
 def hear(ear: Ear, an: Analysis, thresholds: dict[str, float], ts: datetime) -> tuple[str | None, float, str]:

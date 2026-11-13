@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import L from 'leaflet';
 import type { Feature, FeatureCollection } from 'geojson';
-import { AttributionControl, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
-import type { Buoy, State } from '../types';
-import { coord, km } from '../format';
+import { AttributionControl, Circle, MapContainer, Marker, Pane, Polygon, Polyline, Rectangle, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { target, type Buoy, type State } from '../types';
+import { coord, km, plural } from '../format';
 import { contextActions, copyText } from '../upkUi';
-import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
+import { BUOY_STATUS, areaOf, distanceKm, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { useBooting } from '../motion';
 import { useTheme } from '../theme';
 import { WARN } from '../design';
@@ -279,12 +279,26 @@ export default function MapView({ state, handle, selected, onSelect, live = fals
         );
       })}
 
+      {/* где катер: оценка по громкости у нескольких буёв — круг неопределённости и точка в центре */}
+      {active?.estimate && (
+        <Circle center={[active.estimate.lat, active.estimate.lon]} radius={active.estimate.radius_km * 1000} interactive={false}
+          pathOptions={{ color: C.alert, weight: 1.5, opacity: 0.85, dashArray: '5 6', fillColor: C.alert, fillOpacity: 0.08, className: 'fade-in' }} />
+      )}
+      {/* подпись — над верхним краем круга, чтобы не спорить с расстоянием маршрута в середине */}
+      {active?.estimate && (
+        <Circle center={[active.estimate.lat + active.estimate.radius_km / 110.57, active.estimate.lon]} radius={1} interactive={false}
+          pathOptions={{ opacity: 0, fillOpacity: 0 }}>
+          <Tooltip permanent direction="top" offset={[0, -2]} className="tip">где катер ± {km(active.estimate.radius_km)} · {plural(active.estimate.buoys, ['буй', 'буя', 'буёв'])}</Tooltip>
+        </Circle>
+      )}
+      {active?.estimate && (
+        <Circle center={[active.estimate.lat, active.estimate.lon]} radius={120} interactive={false}
+          pathOptions={{ color: C.alert, weight: 2, fillColor: C.alert, fillOpacity: 0.9 }} />
+      )}
       {intercept && (
-        <Polyline positions={[state.inspector, [intercept.lat, intercept.lon]]} interactive={false}
+        <Polyline positions={[state.inspector, target(intercept)]} interactive={false}
           pathOptions={{ color: C.primary, weight: 2.5, className: 'route' }}>
-          {intercept.distance_km != null && (
-            <Tooltip permanent direction="center" className="tip">{km(intercept.distance_km)}</Tooltip>
-          )}
+          <Tooltip permanent direction="center" className="tip">{km(distanceKm(state.inspector, target(intercept)))}</Tooltip>
         </Polyline>
       )}
 

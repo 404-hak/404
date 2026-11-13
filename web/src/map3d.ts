@@ -5,9 +5,9 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { FeatureCollection, Position } from 'geojson';
-import type { Buoy, BuoyStatus, Sector, State } from './types';
+import { target, type Buoy, type BuoyStatus, type Sector, type State } from './types';
 import type { Bounds, MapHandle } from './geo';
-import { pad } from './geo';
+import { distanceKm, pad } from './geo';
 import { km } from './format';
 import { WARN, design } from './design';
 
@@ -417,21 +417,20 @@ export class Delta3D {
     // маршрут перехвата: дуга над водой, пунктир бежит к цели
     const intercept = state.alerts.find((a) => a.status === 'intercept');
     if (intercept) {
-      const A = new THREE.Vector3(x(ilon), 0.2, z(ilat)), B = new THREE.Vector3(x(intercept.lon), 0.2, z(intercept.lat));
+      const [tlat, tlon] = target(intercept);                 // к оценке места по нескольким буям, если она есть
+      const A = new THREE.Vector3(x(ilon), 0.2, z(ilat)), B = new THREE.Vector3(x(tlon), 0.2, z(tlat));
       const mid = A.clone().lerp(B, 0.5);
       mid.y = Math.max(1.2, A.distanceTo(B) * 0.22);
       const curve = new THREE.QuadraticBezierCurve3(A, mid, B);
       const pts = curve.getPoints(80).flatMap((p) => [p.x, p.y, p.z]);
       const r = line(pts, { color: new THREE.Color(P.primary).getHex(), linewidth: 2.6, dashed: true, dashSize: 0.6, gapSize: 0.45, opacity: 0.95 } as never);
       this.route = r.mat;
-      if (intercept.distance_km != null) {
-        const d = document.createElement('div');
-        d.className = 'route-label';
-        d.textContent = km(intercept.distance_km);
-        const o = new CSS2DObject(d);
-        o.position.copy(curve.getPoint(0.5)).add(new THREE.Vector3(0, 0.4, 0));
-        this.dynamic.add(o);
-      }
+      const d = document.createElement('div');
+      d.className = 'route-label';
+      d.textContent = km(distanceKm([ilat, ilon], [tlat, tlon]));
+      const o = new CSS2DObject(d);
+      o.position.copy(curve.getPoint(0.5)).add(new THREE.Vector3(0, 0.4, 0));
+      this.dynamic.add(o);
     }
     this.lastActive = performance.now();
   }

@@ -36,7 +36,8 @@ export function useContextActions({ state, route, go, map, select }: {
           { label: 'Показать на карте', ic: 'pin', action: () => fly(a.lat, a.lon, 12) },
         ];
         if (a.status === 'new' && can('duty')) items.push({ label: 'Начать перехват', ic: 'boat', danger: true, action: () => api.setAlertStatus(a.id, 'intercept') });
-        if (a.status !== 'resolved' && can('duty')) items.push({ label: a.status === 'new' ? 'Ложная тревога' : 'Задержан — закрыть', ic: 'check', action: () => api.setAlertStatus(a.id, 'resolved') });
+        if (a.status !== 'resolved' && can('duty')) items.push({ label: a.status === 'new' ? 'Ложная тревога' : 'Задержан — закрыть', ic: 'check',
+          action: () => api.setAlertStatus(a.id, 'resolved', a.status === 'new' ? 'false' : 'confirmed') });
         items.push({ label: 'Скопировать координаты', ic: 'copy', action: () => copyText(coord(a.lat, a.lon), 'Координаты скопированы') });
         return { title: `${KIND_TITLE[a.kind]} · ${a.buoy_name}`, items };
       }),

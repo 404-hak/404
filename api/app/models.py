@@ -29,6 +29,24 @@ class Match(BaseModel):
     similarity: float
 
 
+class Heard(BaseModel):
+    """Буй, который слышал источник тревоги: насколько громко и каким клипом."""
+    buoy_id: str
+    ts: datetime
+    level_db: float = Field(description="Громкость клипа, дБ")
+    excess_db: float | None = Field(default=None, description="Насколько клип громче обычного фона этого буя, дБ (если фон буя уже известен)")
+    sha256: str | None = None
+
+
+class Estimate(BaseModel):
+    """Где источник: оценка по громкости у нескольких буёв (ближе — громче). Это не улика, а подсказка инспектору."""
+    lat: float
+    lon: float
+    radius_km: float = Field(description="Радиус неопределённости")
+    buoys: int = Field(description="Сколько буёв слышали")
+    method: Literal["loudness"] = "loudness"
+
+
 class Alert(BaseModel):
     id: str
     buoy_id: str
@@ -54,6 +72,10 @@ class Alert(BaseModel):
     audio_sha256: str | None = Field(default=None, description="SHA-256 звукового клипа-улики (входит в хэш алерта)")
     probs: dict[str, float] | None = Field(default=None, description="Ответ нейросети по классам для этого клипа")
     source: Literal["audio", "manual", "system"] = Field(default="manual", description="audio — нейросеть по звуку буя; system — связь, тишина")
+    heard_by: list[Heard] = Field(default_factory=list, description="Буи, которые слышали этот источник (в хэш не входит)")
+    estimate: Estimate | None = Field(default=None, description="Где катер: оценка по громкости у нескольких буёв (в хэш не входит)")
+    verdict: Literal["confirmed", "false"] | None = Field(
+        default=None, description="Итог от инспектора: подтверждена или ложная. Ложные — примеры для дообучения сети")
 
 
 class AlertIn(BaseModel):
@@ -66,6 +88,7 @@ class AlertIn(BaseModel):
 
 class AlertPatch(BaseModel):
     status: AlertStatus
+    verdict: Literal["confirmed", "false"] | None = Field(default=None, description="При закрытии: задержан (confirmed) или ложная тревога (false)")
 
 
 class Forecast(BaseModel):
@@ -125,6 +148,7 @@ class ClipResult(BaseModel):
     level_db: float
     f0_hz: float | None = Field(default=None, description="Частота вращения мотора по гармоникам")
     novelty: float = Field(default=0.0, description="Непривычность звука для сети: больше 1 — на таком она не училась")
+    clock_drift_s: float | None = Field(default=None, description="Насколько время буя расходится с сервером (если буй прислал своё время)")
     alert: Alert | None = None
     note: str = Field(description="Почему создан или не создан алерт")
 

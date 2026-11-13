@@ -117,6 +117,14 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
         <Stat label="уверенность" value={pct(a.confidence)} />
         <Stat label="сектор" value={String(a.sector)} />
       </div>
+      {a.estimate && (
+        <button type="button" onClick={() => handle.current?.flyTo(a.estimate!.lat, a.estimate!.lon, 11.5)}
+          className="enter mt-3 block w-full rounded-[9px] border border-alert/30 bg-alert/[.06] px-3 py-2 text-left text-[12px] leading-[17px] hover:bg-alert/10"
+          style={{ animationDelay: '200ms' }} title="Оценка по громкости: ближе к катеру — громче. Это подсказка, куда идти, а не улика">
+          <span className="font-semibold text-primary">Где катер: ± {km(a.estimate.radius_km)}</span>
+          <span className="text-muted"> · по громкости у {plural(a.estimate.buoys, ['буя', 'буёв', 'буёв'])} · {coord(a.estimate.lat, a.estimate.lon)}</span>
+        </button>
+      )}
       {a.match && (
         <p className="enter mt-3 text-[12px] leading-[17px] text-muted" style={{ animationDelay: '220ms' }}>
           Звук мотора совпал с катером <span className="font-mono text-primary">{a.match.vessel_id}</span> на {pct(a.match.similarity)}
@@ -141,7 +149,7 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
           </button>
         )}
         <button type="button" className="ui-btn ink-host relative h-10 flex-1 overflow-hidden rounded-[9px] border border-line text-[13px] font-semibold hover:border-grey hover:bg-white/[.04]"
-          onClick={() => api.setAlertStatus(a.id, 'resolved')}>
+          onClick={() => api.setAlertStatus(a.id, 'resolved', intercept ? 'confirmed' : 'false')}>
           {intercept ? 'Задержан — закрыть' : 'Ложная тревога'}
         </button>
       </div>}
@@ -215,6 +223,8 @@ function BuoyCard({ b, state, handle, onClose, alert }: { b: Buoy; state: State;
 
 const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offline: 'bg-grey' } as const;
 const STATUS = { new: 'ждёт решения', intercept: 'перехват', resolved: 'закрыт' } as const;
+const statusText = (a: Alert) => (a.status === 'resolved' && a.verdict === 'false' ? 'ложная тревога'
+  : a.status === 'resolved' && a.verdict === 'confirmed' ? 'задержан' : STATUS[a.status]);
 
 /** Задержка появления строк: лесенкой при первом показе, без задержки для новых. */
 function useStagger() {
@@ -237,7 +247,7 @@ function EventFeed({ state, handle }: { state: State; handle: Handle }) {
               <span className={`mr-1.5 inline-block h-1.5 w-1.5 -translate-y-px rounded-full align-middle ${KIND_DOT[a.kind]}`} />
               <span className="font-medium">{KIND_TITLE[a.kind]}</span>
               <span className="text-muted"> · {a.buoy_name}</span>
-              <span className={`block text-[12px] ${a.status === 'resolved' ? 'text-muted' : 'text-alert'}`}>{STATUS[a.status]}</span>
+              <span className={`block text-[12px] ${a.status === 'resolved' ? 'text-muted' : 'text-alert'}`}>{statusText(a)}</span>
             </span>
           </button>
         </li>

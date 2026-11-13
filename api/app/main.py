@@ -5,6 +5,8 @@
 Окружение:
   DATA_DIR     папка базы SQLite и звуковых улик (по умолчанию api/data)
   BUOY_TOKEN   если задан — буи присылают звук и пульс с заголовком Authorization: Bearer <токен>
+  BUOY_TOKENS  свой токен у каждого буя: "b01:токен1,b02:токен2" (буй из списка принимается только со своим)
+  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  тревоги — ещё и сообщением в Telegram (app/notify.py)
   WEATHER=0    не ходить в Open-Meteo (прогноз по сезонной модели)
   SIM_HEARTBEAT=0  буи без железа не «живут» сами: связь — только по настоящим пульсам и клипам
 """
@@ -30,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import security
+from . import notify, security
 from .accounts import ROLE_TITLE, ROLES, SESSION_DAYS, Accounts
 from .audio import dsp, lab
 from .ratelimit import Limiter
@@ -122,6 +124,7 @@ async def clip_janitor() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
     security.startup_warnings()
+    world.on_alert = notify.from_env()
     tasks = [asyncio.create_task(sim.run()), asyncio.create_task(clip_janitor())]
     if weather:
         tasks.append(asyncio.create_task(weather_loop()))
@@ -157,12 +160,17 @@ async def read_body(request: Request, limit: int = MAX_CLIP_BYTES) -> bytes:
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
-def buoy_auth(authorization: str | None = Header(default=None)) -> None:
-    """Звук и пульс принимаются только от своих буёв, если задан BUOY_TOKEN."""
-    if not BUOY_TOKEN:
+def buoy_auth(buoy_id: str, authorization: str | None = Header(default=None)) -> None:
+    """Звук и пульс принимаются только от своих буёв. У буя из BUOY_TOKENS — только его собственный токен;
+    у остальных — общий BUOY_TOKEN. Ничего не задано — открыто (режим показа)."""
+    own = security.buoy_tokens().get(buoy_id)
+    token = own or BUOY_TOKEN
+    if not token:
+        if security.buoy_tokens():                      # список задан, а этого буя в нём нет
+            raise HTTPException(401, f"Буй {buoy_id} не зарегистрирован в BUOY_TOKENS")
         return
-    if not authorization or not secrets.compare_digest(authorization, f"Bearer {BUOY_TOKEN}"):
-        raise HTTPException(401, "Нужен токен буя: Authorization: Bearer <BUOY_TOKEN>")
+    if not authorization or not secrets.compare_digest(authorization, f"Bearer {token}"):
+        raise HTTPException(401, "Нужен токен буя: Authorization: Bearer <токен этого буя>")
 
 
 @app.get("/api/health")
@@ -367,7 +375,7 @@ async def post_alert(data: AlertIn, u: dict = Depends(need("duty"))) -> Alert:
 async def patch_alert(alert_id: str, body: AlertPatch, u: dict = Depends(need("duty"))) -> Alert:
     before = next((x.status for x in world.alerts if x.id == alert_id), None)
     try:
-        a = world.patch_alert(alert_id, body.status, u["name"])
+        a = world.patch_alert(alert_id, body.status, u["name"], body.verdict)
     except KeyError:
         raise HTTPException(404, f"Нет алерта {alert_id}")
     # кто и когда решил — в журнал действий (хэш-цепочка): «закрыл как ложную» потом не оспорить

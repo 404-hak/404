@@ -17,7 +17,16 @@ export interface Alert {
   intercept_by?: string | null; resolved_by?: string | null;
   /** SHA-256 звукового клипа-улики (есть, если тревогу подняла нейросеть по звуку буя) */
   audio_sha256?: string | null; probs?: Record<string, number> | null; source?: 'audio' | 'manual' | 'system';
+  /** Буи, которые слышали этот источник, и где катер — оценка по громкости у нескольких буёв (не улика) */
+  heard_by?: { buoy_id: string; ts: string; level_db: number; excess_db: number | null }[];
+  estimate?: Estimate | null;
+  /** Итог инспектора: задержан или ложная тревога (ложные — примеры для дообучения сети) */
+  verdict?: Verdict | null;
 }
+export interface Estimate { lat: number; lon: number; radius_km: number; buoys: number; method: 'loudness' }
+export type Verdict = 'confirmed' | 'false';
+/** Куда вести катер инспектора: к оценке места по нескольким буям, если она есть, иначе — к бую. */
+export const target = (a: Alert): [number, number] => (a.estimate ? [a.estimate.lat, a.estimate.lon] : [a.lat, a.lon]);
 export interface Forecast {
   ts: string; moon_phase: string; moon_illumination: number; weekday: string; water_temp: number;
   wind_ms: number; risk: number; level: 'low' | 'elevated' | 'high'; hot_sectors: number[];

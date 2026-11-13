@@ -313,3 +313,92 @@ def test_unfamiliar_sound_gives_no_alarm():
     a = MODEL.analyze(x)
     assert a.novelty > 1 and a.unfamiliar
     assert _ear_alarms([x, x]) == [] and _ear_alarms([x, x], "water") == []
+
+
+# ---------- где катер, итог инспектора, токены буёв, часы буя, уведомления ----------
+def test_demo_boat_located_by_loudness_at_three_buoys():
+    """Тот же катер тише слышат соседи: тревога одна, а её «где катер» — по громкости у трёх буёв, у самого громкого."""
+    from app import geo
+    from app.sim import DEMO_NEIGHBOURS
+    clock = Clock()
+    w = World(clock=clock)
+    res = heard_motor(w, clock, "b04", [demo_clip(0), demo_clip(1)])
+    a = res.alert
+    assert a and a.estimate is None and [h.buoy_id for h in a.heard_by] == ["b04"]
+    for k in (0, 1):
+        clock.t += timedelta(seconds=2)
+        for bid, snr, seed in DEMO_NEIGHBOURS:
+            r = w.ingest(bid, demo_clip(seed + k, snr))
+            assert r.alert is None
+    est = a.estimate
+    assert est and est.buoys == 3 and 0.5 <= est.radius_km <= 6
+    b4 = w.buoys["b04"]
+    assert geo.haversine_km(b4.lat, b4.lon, est.lat, est.lon) < 2          # ближе всего к самому громкому бую
+    assert "где катер" in r.note
+    assert w.verify_chain().ok                                              # оценка вне хэша: цепочка цела
+
+
+def test_estimate_contains_true_source():
+    import math
+    from app import geo
+    from app.models import Heard
+    from app.world import estimate_source
+    w = World(clock=Clock())
+    B = w.buoys
+    for src in ((45.62, 47.80), (45.66, 47.74), (45.60, 47.76)):
+        hs = [Heard(buoy_id=k, ts=NIGHT, level_db=-20 - 15 * math.log10(max(0.2, geo.haversine_km(*src, B[k].lat, B[k].lon))))
+              for k in ("b04", "b09", "b01")]
+        e = estimate_source(hs, B)
+        assert geo.haversine_km(*src, e.lat, e.lon) <= e.radius_km, src
+    assert estimate_source(hs[:1], B) is None                               # один буй — места не знаем
+
+
+def test_inspector_verdict_is_kept_for_retraining():
+    with TestClient(main.app) as c:
+        a = c.post("/api/alerts", json={"buoy_id": "b03", "kind": "shot", "confidence": 0.9}).json()
+        r = c.patch(f"/api/alerts/{a['id']}", json={"status": "resolved", "verdict": "false"}).json()
+        assert r["status"] == "resolved" and r["verdict"] == "false"
+        assert c.get("/api/evidence/verify").json()["ok"]                  # итог инспектора — не улика, хэш не меняет
+
+
+def test_each_buoy_has_own_token(monkeypatch):
+    monkeypatch.setenv("BUOY_TOKENS", "b04:tok-four,b05:tok-five")
+    with TestClient(main.app) as c:
+        own = {"Authorization": "Bearer tok-four"}
+        assert c.post("/api/buoys/b04/heartbeat", json={"battery": 70}, headers=own).status_code == 200
+        assert c.post("/api/buoys/b05/heartbeat", json={"battery": 70}, headers=own).status_code == 401   # чужой токен
+        assert c.post("/api/buoys/b04/heartbeat", json={"battery": 70}).status_code == 401
+        assert c.post("/api/buoys/b06/heartbeat", json={"battery": 70}, headers=own).status_code == 401   # нет в списке
+
+
+def test_buoy_clock_drift_is_noted():
+    clock = Clock()
+    w = World(clock=clock)
+    r = w.ingest("b02", wav("background", 81, activity=0.6), ts=clock.t - timedelta(seconds=30))
+    assert r.clock_drift_s == -30 and "часы буя" in r.note
+    r = w.ingest("b02", wav("background", 82, activity=0.6), ts=clock.t)
+    assert r.clock_drift_s == 0 and "часы буя" not in r.note
+
+
+def test_telegram_message(monkeypatch):
+    from app import notify
+    sent = []
+    monkeypatch.setattr(notify, "post", lambda url, payload: sent.append((url, payload)))
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "-100")
+    monkeypatch.setenv("PUBLIC_URL", "https://404.example")
+    clock = Clock()
+    w = World(clock=clock)
+    w.on_alert = notify.from_env()
+    res = heard_motor(w, clock, "b04", [demo_clip(0), demo_clip(1)])
+    import time
+    for _ in range(50):
+        if sent:
+            break
+        time.sleep(0.02)
+    url, payload = sent[0]
+    assert url.endswith("/bot123:abc/sendMessage") and payload["chat_id"] == "-100"
+    assert "мотор" in payload["text"] and "Камышовый-4" in payload["text"] and "https://404.example/" in payload["text"]
+    assert res.alert.id
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN")
+    assert notify.from_env() is None

@@ -37,6 +37,8 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
         {a.status === 'intercept' && a.intercept_by && <span>перехват · {a.intercept_by}</span>}
         {a.status === 'resolved' && a.resolved_by && <span>закрыл · {a.resolved_by}</span>}
         {a.match && <span className="text-primary">катер {a.match.vessel_id}</span>}
+        {a.estimate && <span>где катер ± {km(a.estimate.radius_km)} по {a.estimate.buoys} буям</span>}
+        {a.status === 'resolved' && a.verdict && <span className={a.verdict === 'false' ? '' : 'text-primary'}>{a.verdict === 'false' ? 'ложная тревога' : 'задержан'}</span>}
       </div>
       <div className="mt-3 flex gap-2">
         {canAct && a.status === 'new' && (
@@ -44,7 +46,7 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
             className="ui-btn ui-btn-danger btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-alert/90">Начать перехват</button>
         )}
         {canAct && a.status !== 'resolved' && (
-          <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved')}
+          <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved', a.status === 'new' ? 'false' : 'confirmed')}
             className="ui-btn h-8 flex-1 rounded-[8px] border border-line text-[12px] font-semibold hover:border-grey">{a.status === 'new' ? 'Ложная' : 'Задержан'}</button>
         )}
         <button type="button" onClick={onMap} className="ui-btn ui-btn-quiet h-8 rounded-[8px] border border-line px-3 text-[12px] font-medium text-muted hover:border-grey hover:text-primary">На карте</button>

@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import type { State } from '../types';
-import { km } from '../format';
+import { target, type State } from '../types';
+import { km, plural } from '../format';
 import { loadYmaps } from '../yandex';
-import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
+import { BUOY_STATUS, areaOf, distanceKm, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { reducedMotion } from '../motion';
 import { WARN } from '../design';
 
@@ -181,7 +181,7 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   // полная перерисовка перезапускает анимации буёв. Заряд батареи в подсказке обновляется отдельно.
   const hot = state.forecast.level === 'high' ? state.forecast.hot_sectors : [];
   const active = state.alerts.filter((a) => a.status !== 'resolved');
-  const key = JSON.stringify([state.buoys.map((b) => b.status), hot, active.map((a) => [a.id, a.status])]);
+  const key = JSON.stringify([state.buoys.map((b) => b.status), hot, active.map((a) => [a.id, a.status, a.estimate])]);
   // hintContent у Яндекса — HTML: имя буя экранируем (docs/audit/05-frontend.md, W9)
   const hint = (b: State['buoys'][number]) => `${esc(b.name)} · ${BUOY_STATUS[b.status]} · сектор ${b.sector} · батарея ${b.battery} %`;
 
@@ -217,10 +217,19 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         ...flat, strokeColor: alarm ? C.alert : '#A9B79C', strokeWidth: alarm ? 2 : 1.5, strokeStyle: 'dot',
       }));
     }
+    // где катер: оценка по громкости у нескольких буёв — круг неопределённости и точка в центре
+    const est = active.find((a) => a.estimate)?.estimate;
+    if (est) {
+      g.add(new y.Circle([[est.lat, est.lon], est.radius_km * 1000], { hintContent: `где катер ± ${km(est.radius_km)} · по громкости у ${plural(est.buoys, ['буя', 'буёв', 'буёв'])}` }, {
+        fillColor: C.alert, fillOpacity: 0.1, strokeColor: C.alert, strokeOpacity: 0.9, strokeWidth: 2, strokeStyle: 'dash',
+      }));
+      g.add(new y.Circle([[est.lat, est.lon], 120], {}, { ...flat, fillColor: C.alert, fillOpacity: 0.95, strokeWidth: 0 }));
+    }
     const intercept = active.find((a) => a.status === 'intercept');
     if (intercept) {
       const [ilat, ilon] = state.inspector;
-      const route = new y.Polyline([[ilat, ilon], [intercept.lat, intercept.lon]], {}, {
+      const [tlat, tlon] = target(intercept);
+      const route = new y.Polyline([[ilat, ilon], [tlat, tlon]], {}, {
         ...flat, strokeColor: C.primary, strokeWidth: 3, strokeStyle: 'dash',
       });
       g.add(route);
@@ -241,11 +250,9 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
         raf = requestAnimationFrame(run);
         stop.push(() => cancelAnimationFrame(raf));
       }
-      if (intercept.distance_km != null) {
-        g.add(new y.Placemark([(ilat + intercept.lat) / 2, (ilon + intercept.lon) / 2], { text: km(intercept.distance_km) }, {
-          ...flat, iconLayout: L.label,
-        }));
-      }
+      g.add(new y.Placemark([(ilat + tlat) / 2, (ilon + tlon) / 2], { text: km(distanceKm(state.inspector, [tlat, tlon])) }, {
+        ...flat, iconLayout: L.label,
+      }));
     }
     marks.current = {};
     state.buoys.forEach((b, i) => {

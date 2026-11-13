@@ -28,6 +28,13 @@ export function maskRings(area: Bounds): [number, number][][] {
 
 export const sectorCenter = (s: Sector): [number, number] => [(s.south + s.north) / 2, (s.west + s.east) / 2];
 
+/** Расстояние по поверхности Земли, км. */
+export function distanceKm([la1, lo1]: [number, number], [la2, lo2]: [number, number]): number {
+  const r = Math.PI / 180, dLa = (la2 - la1) * r, dLo = (lo2 - lo1) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 const dm = (x: number) => {
   const d = Math.floor(x + 1e-9), m = Math.round((x - d) * 60);
   return `${d}°${String(m).padStart(2, '0')}′`;

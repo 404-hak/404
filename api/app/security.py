@@ -35,6 +35,17 @@ def buoy_token() -> str:
     return os.getenv("BUOY_TOKEN", "")
 
 
+def buoy_tokens() -> dict[str, str]:
+    """Свой токен у каждого буя: BUOY_TOKENS="b01:токен1,b02:токен2". Украденный токен одного буя
+    не открывает остальные, и его можно отозвать, не трогая другие буи."""
+    out = {}
+    for part in os.getenv("BUOY_TOKENS", "").split(","):
+        bid, _, tok = part.strip().partition(":")
+        if bid and tok:
+            out[bid.strip()] = tok.strip()
+    return out
+
+
 def cookie_value(token: str) -> str:
     """В cookie лежит не сам токен, а его подпись: украденная cookie не раскрывает ссылку доступа."""
     return hmac.new(token.encode(), b"404-access-v1", hashlib.sha256).hexdigest()
@@ -132,7 +143,7 @@ class AccessGate:
             state["user"] = None
             return await self.app(scope, receive, send)
         # у буёв свой токен на свои два адреса (проверяет buoy_auth)
-        if buoy_token() and BUOY_PATH.match(path):
+        if (buoy_token() or buoy_tokens()) and BUOY_PATH.match(path):
             state["user"] = None
             return await self.app(scope, receive, send)
         auth = h.get("authorization", "")
@@ -269,7 +280,7 @@ def origin_allowed(origin: str | None, host: str | None) -> bool:
 def startup_warnings() -> None:
     if not access_token():
         log.warning("404: ACCESS_TOKEN не задан — дашборд, тревоги и кнопки открыты всем, кто знает адрес (режим показа)")
-    elif not buoy_token():
-        log.warning("404: BUOY_TOKEN не задан — буи присылают звук с ACCESS_TOKEN; лучше дать буям свой токен")
+    elif not buoy_token() and not buoy_tokens():
+        log.warning("404: BUOY_TOKEN/BUOY_TOKENS не заданы — буи присылают звук с ACCESS_TOKEN; лучше дать буям свой токен")
     if os.getenv("DEMO", "1") != "0":
         log.warning("404: демо включено (DEMO=1) — «Сбросить» стирает базу и звуковые улики; на настоящих данных задайте DEMO=0")

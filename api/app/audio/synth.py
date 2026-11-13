@@ -631,12 +631,16 @@ def distractor_in(r: np.random.Generator, n: int, medium: str, kind: str | None 
 # ---------- сцена ----------
 def scene(r: np.random.Generator, event: str, v: Vessel | None = None, activity: float | None = None,
           snr_db: float | None = None, n: int = N, segment: tuple[float, float, float] | None = None,
-          medium: str = "water", voices: bool = False, imitation: bool | None = None) -> tuple[np.ndarray, dict]:
+          medium: str = "water", voices: bool = False, imitation: bool | None = None,
+          gain: float | None = None) -> tuple[np.ndarray, dict]:
     """Клип буя: фон + природа (+ событие с заданным отношением сигнал/шум). Возвращает звук и разметку.
     medium — где микрофон: water (гидрофон буя) или air (проверка микрофоном).
     segment — (начало, длина в долях клипа, плавность в секундах): мотор слышно не весь клип,
     а появляется или затихает внутри него (катер завёлся, заглушил мотор, ушёл за мыс).
-    voices — у мотора в лодке ещё и разговаривают (метка остаётся «мотор»)."""
+    voices — у мотора в лодке ещё и разговаривают (метка остаётся «мотор»).
+    gain — постоянное усиление, как у настоящего гидрофона: фон всегда на этом уровне (СКЗ), а событие громче
+    на свои дБ — тогда по громкости клипов у соседних буёв видно, к какому источник ближе. Без gain громкость
+    клипа случайна (так учится сеть: ей не важно, насколько громко записано)."""
     water = medium == "water"
     act = float(r.uniform(0, 1)) if activity is None else activity
     inside = (not water) and r.random() < 0.45                         # в воздухе почти половина — комната
@@ -683,5 +687,8 @@ def scene(r: np.random.Generator, event: str, v: Vessel | None = None, activity:
             x = x + h / _rms(h) * _rms(bg) * 10 ** (r.uniform(-6, 6) / 20)
     if not water and r.random() < 0.3:
         x = room(x, r)
+    if gain is not None:
+        x = np.clip(x / (_rms(bg) + 1e-12) * gain, -1, 1)
+        return x.astype(np.float32), meta
     x = x / (np.abs(x).max() + 1e-9) * r.uniform(0.1, 0.9)
     return x.astype(np.float32), meta

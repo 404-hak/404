@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { Alert, AlertStatus, ChainCheck, JournalEntry, Me, NightForecast, Role, State, Stats, TeamMember } from './types';
+import type { Alert, AlertStatus, ChainCheck, JournalEntry, Me, NightForecast, Role, State, Stats, TeamMember, Verdict } from './types';
 import { introPlaying, onIntroFinished } from './introBus';
 import { toast } from './upkUi';
 
@@ -68,8 +68,9 @@ const fail = (e: unknown) => {
 };
 const get = <T,>(url: string): Promise<T> => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))));
 export const api = {
-  setAlertStatus: (id: string, status: AlertStatus) =>
-    fetch(`/api/alerts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+  /** verdict — при закрытии: задержан (confirmed) или ложная тревога (false) */
+  setAlertStatus: (id: string, status: AlertStatus, verdict?: Verdict) =>
+    fetch(`/api/alerts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, verdict }) })
       .then(sent('Не удалось изменить тревогу')).catch(fail),
   runDemo: () => post('/api/demo/run').then(sent('Демо')).catch(fail),
   resetDemo: () => post('/api/demo/reset').then(sent('Сброс демо')).catch(fail),

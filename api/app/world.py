@@ -11,8 +11,9 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import json
+import logging
+import os
 import math
 import random
 from collections import deque
@@ -26,9 +27,11 @@ from . import geo, voice
 from .audio import dsp, listener
 from .audio import model as acoustic
 from .audio import synth
-from .models import (Alert, AlertIn, Buoy, ChainCheck, ClipResult, Forecast, Heartbeat, Match, NightForecast,
-                     NightStat, Sector, State, Stats)
+from .models import (Alert, AlertIn, Buoy, ChainCheck, ClipResult, Estimate, Forecast, Heard, Heartbeat, Match,
+                     NightForecast, NightStat, Sector, State, Stats)
 from .store import Clips, Store
+
+log = logging.getLogger("404")
 
 TZ = ZoneInfo("Europe/Astrakhan")
 GENESIS = "0" * 64
@@ -36,6 +39,7 @@ FP_DIM = 16                     # размер отпечатка без обу�
 MATCH_THRESHOLD = 0.8
 REGISTER_MIN_CONF = 0.9         # новый катер заносим в архив только по уверенному звуку
 COHORT_Q = 0.995                # порог образа — не ниже 99,5-го перцентиля сходства со случайными чужими катерами
+SPREADING = 15.0          # дБ на декаду расстояния: на мелководье звук слабеет медленнее, чем в открытой воде (20)
 MERGE = {"motor": (timedelta(minutes=3), 12.0), "shot": (timedelta(minutes=1), 8.0)}   # одна тревога на соседние буи
 OFFLINE_AFTER = timedelta(seconds=60)
 HISTORY_NIGHTS = 60
@@ -85,6 +89,29 @@ def sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
+def estimate_source(heard: list[Heard], buoys: dict[str, Buoy]) -> Estimate | None:
+    """Где источник, по громкости у нескольких буёв (взвешенный центр, как в сетях датчиков).
+    На мелководье звук слабеет примерно на 15 дБ за каждое удвоение-удесятерение расстояния (15·log10 r),
+    поэтому разница громкости ΔL между буями даёт отношение расстояний: r ∝ 10^(−ΔL/15). Центр — среднее
+    положений буёв с весами 1/r² (ближе — громче — тяжелее), радиус — средний разброс буёв вокруг центра.
+    Нужны хотя бы два буя. Это подсказка, куда идти, а не улика: громкость зависит и от глубины, и от камыша."""
+    rel = all(h.excess_db is not None for h in heard)      # сверх обычного фона буя, если фон известен
+    got: dict[str, list[float]] = {}
+    for h in heard:
+        if h.buoy_id in buoys:
+            got.setdefault(h.buoy_id, []).append(h.excess_db if rel else h.level_db)  # type: ignore[arg-type]
+    if len(got) < 2:
+        return None
+    level = {k: sum(v) / len(v) for k, v in got.items()}      # средняя громкость буя по его клипам
+    top = max(level.values())
+    w = {k: 10 ** (2 * max(-40.0, v - top) / SPREADING) for k, v in level.items()}
+    tot = sum(w.values())
+    lat = sum(buoys[k].lat * v for k, v in w.items()) / tot
+    lon = sum(buoys[k].lon * v for k, v in w.items()) / tot
+    spread = math.sqrt(sum(v * geo.haversine_km(lat, lon, buoys[k].lat, buoys[k].lon) ** 2 for k, v in w.items()) / tot)
+    return Estimate(lat=round(lat, 5), lon=round(lon, 5), radius_km=round(min(6.0, max(0.5, spread)), 2), buoys=len(got))
+
+
 class ModelMissing(RuntimeError):
     """Нейросеть не обучена: нет api/app/audio/model.npz."""
 
@@ -108,6 +135,7 @@ class World:
         self.thresholds_air = {"motor": float(th.get("motor_air", self.thresholds["motor"])),
                                "shot": float(th.get("shot_air", self.thresholds["shot"]))}
         self.weather = weather
+        self.on_alert = None                  # колбэк на новую тревогу (уведомления: app/notify.py)
         self.reset(fresh=False)
 
     # ---------- время ----------
@@ -273,7 +301,7 @@ class World:
             self.store.save_vessel(vid, self.vessels[vid])
 
     def _make_alert(self, data: AlertIn, *, audio_sha: str | None = None, probs: dict | None = None,
-                    source: str = "manual", persist: bool = True) -> Alert:
+                    source: str = "manual", persist: bool = True, heard: Heard | None = None) -> Alert:
         b = self.buoys[data.buoy_id]
         ts = data.ts or self.now()
         match = (self._match(data.fingerprint, ts, register=data.confidence >= REGISTER_MIN_CONF)
@@ -288,20 +316,38 @@ class World:
                   fingerprint=[round(x, 5) for x in data.fingerprint] if data.fingerprint else None,
                   prev_hash=prev, hash="", audio_sha256=audio_sha, probs=probs, source=source)  # type: ignore[arg-type]
         a.hash = sha256(canonical(a))
+        if heard:
+            a.heard_by = [heard]                       # кто слышал и где катер — вне хэша: это обработка, не улика
         self.alerts.append(a)
         if persist and self.store:
             self.store.save_alert(a, self._seq)
+        if persist and self.on_alert:
+            try:
+                self.on_alert(a)
+            except Exception as e:                     # уведомление не должно ломать приём звука
+                log.warning("уведомление о тревоге не ушло: %s", e)
         return a
+
+    def _heard_too(self, a: Alert, h: Heard) -> None:
+        """Соседний буй слышит тот же источник: запоминаем и уточняем, где катер."""
+        a.heard_by.append(h)
+        a.estimate = estimate_source(a.heard_by, self.buoys)
+        if self.store:
+            i = next((k for k, x in enumerate(self.alerts) if x.id == a.id), None)
+            if i is not None:
+                self.store.save_alert(a, i + 1)
 
     def add_alert(self, data: AlertIn) -> Alert:
         if data.buoy_id not in self.buoys:
             raise KeyError(data.buoy_id)
         return self._make_alert(data)
 
-    def patch_alert(self, alert_id: str, status: str, actor: str | None = None) -> Alert:
+    def patch_alert(self, alert_id: str, status: str, actor: str | None = None, verdict: str | None = None) -> Alert:
         for i, a in enumerate(self.alerts):
             if a.id == alert_id:
                 a.status = status  # type: ignore[assignment]
+                if verdict:
+                    a.verdict = verdict  # type: ignore[assignment]
                 if status == "intercept" and a.intercept_at is None:
                     a.intercept_at = self.now()
                     a.intercept_by = actor
@@ -316,6 +362,7 @@ class World:
     def prune_clips(self) -> int:
         """Удалить звук без тревоги старше срока хранения. Звук тревог не трогаем — он в цепочке улик."""
         keep = {a.audio_sha256 for a in self.alerts if a.audio_sha256}
+        keep |= {h.sha256 for a in self.alerts for h in a.heard_by if h.sha256}      # соседи, подтвердившие тревогу
         return self.clips.prune(keep, max(CLIP_RETENTION_HOURS, 0) * 3600)
 
     def verify_chain(self) -> ChainCheck:
@@ -353,7 +400,9 @@ class World:
             raise ModelMissing("нейросеть не обучена: запустите tools/ml/train.py")
         x = dsp.read_wav(wav)
         an = self.model.analyze(x)
-        ts = ts or self.now()
+        now = self.now()
+        drift = round((ts - now).total_seconds(), 1) if ts else None      # буй прислал своё время (GPS)
+        ts = ts or now
         sha = hashlib.sha256(wav).hexdigest()          # звук сохраняем ниже — только когда он нужен (docs/audit/02-privacy.md)
         b = self.buoys[buoy_id]
         b.last_seen = ts
@@ -361,18 +410,23 @@ class World:
         prev_fp = ear.motor_fp if ear.motor_at else None
         kind, conf, note = listener.hear(ear, an, self.thresholds, ts)
         b.health = round(float(ear.health), 2)
+        # обычная громкость фона у этого буя: от неё считаем, насколько громче слышен источник
+        excess = round(an.level_db - ear.bg_level, 1) if ear.bg_level is not None else None
+        if an.event == "background" and not an.unfamiliar:
+            ear.bg_level = an.level_db if ear.bg_level is None else ear.bg_level + (an.level_db - ear.bg_level) * 0.1
         ear.motor_fp = an.fingerprint if an.event == "motor" else None
         fp = an.fingerprint
         if kind == "motor" and prev_fp and fp:              # мотор подтверждён двумя клипами — отпечаток по обоим
             fp = _unit([a + c for a, c in zip(prev_fp, fp)])
+        merged = None
         if kind in MERGE:
             near = self._open_nearby(kind, b, ts)
             if near:
-                kind, note = None, f"{note} — та же тревога, что у буя {near.buoy_name}"
+                kind, note, merged = None, f"{note} — та же тревога, что у буя {near.buoy_name}", near
 
         # звук тревоги — улика, хранится всегда; без тревоги — до срока CLIP_RETENTION_HOURS;
         # речь людей без тревоги не храним вовсе
-        stored = bool(kind) or (an.event != "voice" and CLIP_RETENTION_HOURS > 0)
+        stored = bool(kind) or merged is not None or (an.event != "voice" and CLIP_RETENTION_HOURS > 0)
         if stored:
             self.clips.put(wav)
         elif an.event == "voice":
@@ -382,10 +436,17 @@ class World:
             alert = self._make_alert(
                 AlertIn(buoy_id=buoy_id, kind=kind, confidence=max(0.01, conf), ts=ts,  # type: ignore[arg-type]
                         fingerprint=fp if kind == "motor" else None),
-                audio_sha=sha, probs=an.probs, source="audio")
+                audio_sha=sha, probs=an.probs, source="audio",
+                heard=Heard(buoy_id=buoy_id, ts=ts, level_db=an.level_db, excess_db=excess, sha256=sha) if kind in MERGE else None)
+        if merged is not None:
+            self._heard_too(merged, Heard(buoy_id=buoy_id, ts=ts, level_db=an.level_db, excess_db=excess, sha256=sha))
+            if merged.estimate:
+                note += f"; где катер — по {merged.estimate.buoys} буям, ± {merged.estimate.radius_km:.1f} км"
+        if drift is not None and abs(drift) > 2:
+            note += f" · часы буя расходятся с сервером на {drift:+.0f} с"
         res = ClipResult(sha256=sha, buoy_id=buoy_id, ts=ts, event=an.event, confidence=an.confidence,  # type: ignore[arg-type]
                          probs=an.probs, activity=an.activity, level_db=an.level_db, f0_hz=an.f0_hz, novelty=an.novelty,
-                         alert=alert, note=note)
+                         clock_drift_s=drift, alert=alert, note=note)
         rec = res.model_dump(mode="json", exclude={"alert"})
         rec["alert_id"] = alert.id if alert else None
         rec["stored"] = stored

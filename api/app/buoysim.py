@@ -78,7 +78,7 @@ def main() -> None:
                 event, snr = "shot", 18 - 3 * km(shot_at, b)
             if talk is b and event == "background":
                 event, snr = "voice", float(r.uniform(6, 16))
-            x, _ = synth.scene(r, event, v=v, activity=min(1, act), snr_db=snr, medium="water")
+            x, _ = synth.scene(r, event, v=v, activity=min(1, act), snr_db=snr, medium="water", gain=0.01)   # усиление как у гидрофона
             try:
                 res = post(a.api, f"/api/buoys/{b.id}/audio", dsp.write_wav(x), "audio/wav", a.token)
                 if res.get("alert"):

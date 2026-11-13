@@ -66,14 +66,26 @@ class Sim:
             await self.publish()
             await asyncio.sleep(2)
             await asyncio.to_thread(w.ingest, "b04", demo_clip(1))
+            await self.publish()
+            # тот же катер тише слышат соседи — по громкости у трёх буёв видно, где он (круг на карте)
+            for k in (0, 1):
+                await asyncio.sleep(1.5)
+                for bid, snr, seed in DEMO_NEIGHBOURS:
+                    await asyncio.to_thread(w.ingest, bid, demo_clip(seed + k, snr))
+                await self.publish()
         else:
             fp = w.fingerprint_like("boat-A", 0.89)
             w.add_alert(AlertIn(buoy_id="b04", kind="motor", confidence=0.94, fingerprint=fp))
         await self.publish()
 
 
-def demo_clip(k: int = 0) -> bytes:
-    """Клип демо: мотор катера boat-A у буя Камышовый-4 на фоне ночной природы (воспроизводимо)."""
+# соседи Камышового-4: Мелководный-9 (7,5 км) и Осетровый-1 (8,6 км); катер ближе к Камышовому-4 — им тише
+DEMO_NEIGHBOURS = (("b09", 8.0, 10), ("b01", 9.0, 22))     # (буй, дБ над фоном, номер клипа)
+
+
+def demo_clip(k: int = 0, snr_db: float = 16.0) -> bytes:
+    """Клип демо: мотор катера boat-A на фоне ночной природы (воспроизводимо). Усиление постоянное, как у
+    настоящего гидрофона: громкость клипа говорит, насколько близко катер."""
     r = np.random.default_rng(DEMO_CLIP_SEED + k)
-    x, _ = synth.scene(r, "motor", v=synth.vessel(ARCHIVE_VESSELS["boat-A"]), activity=0.7, snr_db=16)
+    x, _ = synth.scene(r, "motor", v=synth.vessel(ARCHIVE_VESSELS["boat-A"]), activity=0.7, snr_db=snr_db, gain=0.01)
     return dsp.write_wav(x)
