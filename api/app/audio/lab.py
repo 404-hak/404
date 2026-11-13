@@ -56,6 +56,9 @@ PRESETS = {
     "silence": "Тишина как улика",
     "voices": "Голоса людей: разговор в лодке",
     "imitation": "Выстрел голосом: «пф», «бах», «тыщ»",
+    "mouth-motor": "Мотор голосом: «бррр», «вжжж», «тр-тр-тр»",
+    "room": "Тишина в комнате: микрофон, гул, вентилятор",
+    "claps": "Хлопки в ладоши, щелчки, стук по столу",
     "thunder": "Помеха: гром",
     "wave": "Помеха: волна бьёт о буй",
     "airplane": "Помеха: самолёт вдали",
@@ -95,9 +98,10 @@ def scene(preset: str, *, vessel_seed: int | None = None, duration: float = 12.0
     water = medium == "water"
     n = int(sr * min(30.0, max(4.0, duration)))
     dur = n / sr
-    bg = synth.hydro_ambient(r, n, rain=preset == "rain") if water else synth.ambient(r, n, rain=preset == "rain")
+    inside = (not water) and preset in ("voices", "imitation", "mouth-motor", "room", "claps")   # проверка микрофоном — в комнате
+    bg = synth.hydro_ambient(r, n, rain=preset == "rain") if water else (synth.indoor(r, n) if inside else synth.ambient(r, n, rain=preset == "rain"))
     nat = synth.nature_water if water else synth.nature
-    act = 0.0 if preset == "silence" else activity
+    act = 0.0 if preset == "silence" or inside else activity
     marks: list[dict] = []
     if preset == "silence":                                    # природа живёт, потом стихает
         cut = int(n * 0.42)
@@ -138,8 +142,22 @@ def scene(preset: str, *, vessel_seed: int | None = None, duration: float = 12.0
         a, b = int(n * 0.1), int(n * 0.95)
         h = synth.human(r, b - a, imitation=preset == "imitation")
         h = synth.to_water(h, r, loss_db=0) if water else h
-        put(h, a, _rms(h), "голоса" if preset == "voices" else "«выстрел» ртом", b)
+        put(h, a, _rms(h), "голоса" if preset == "voices" else "звуки ртом", b)
         truth = "голоса"
+    elif preset == "mouth-motor":
+        a = int(n * 0.1)
+        h = np.concatenate([synth.mouth_motor(r) for _ in range(12)])[: n - a]
+        h = synth.to_water(h, r, loss_db=0) if water else h
+        put(h, a, _rms(h[h != 0]) if np.any(h) else 1.0, "«мотор» голосом")
+        truth = "голоса"
+    elif preset == "claps":
+        a = int(n * 0.2)
+        h = synth.handmade(r, n - a)
+        h = synth.multipath(h, r) if water else h
+        put(h, a, _rms(h), "хлопки и стук")
+        truth = "фон (помеха)"
+    elif preset == "room":
+        truth = "фон"
     elif preset in ("thunder", "wave", "airplane", "oar", "fish"):
         a = int(n * 0.35)
         L = min(int(sr * 4), n - a)
@@ -198,9 +216,11 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
     feats = np.array([dsp.event_features(x[s:s + WIN]) for s in starts])
     P = m.events.forward(feats)
     A = np.clip(m.bio.forward(feats)[:, 0], 0, 1)
+    NOV = m.novelty(feats)
     classes = m.classes
     timeline = [{"t": round((s + min(WIN, n) / 2) / sr, 2), "start": round(s / sr, 2),
-                 **{c: round(float(p), 4) for c, p in zip(classes, P[i])}, "activity": round(float(A[i]), 3)}
+                 **{c: round(float(p), 4) for c, p in zip(classes, P[i])}, "activity": round(float(A[i]), 3),
+                 "novelty": round(float(NOV[i]), 2)}
                 for i, s in enumerate(starts)]
 
     # клипы буя: подряд по 4 с — как их присылает буй, и что решило бы ухо
@@ -216,13 +236,14 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
         p = m.events.forward(f)[0]
         k = int(np.argmax(p))
         act = float(np.clip(m.bio.forward(f)[0, 0], 0, 1))
+        nov = float(m.novelty(f)[0])
         an = Analysis(event=classes[k], confidence=round(float(p[k]), 3), probs={c: round(float(v), 4) for c, v in zip(classes, p)},
-                      activity=round(act, 3))
+                      activity=round(act, 3), novelty=round(nov, 2), unfamiliar=nov > 1)
         base_before = ear.baseline
         kind, conf, note = hear(ear, an, thresholds, t0 + timedelta(seconds=4 * i))
         clips.append({"i": i + 1, "start": round(s / sr, 2), "end": round(min(n, s + WIN) / sr, 2), "event": an.event,
                       "confidence": an.confidence, "probs": an.probs, "activity": an.activity, "alert": kind,
-                      "alert_confidence": round(conf, 3) if kind else None, "note": note,
+                      "alert_confidence": round(conf, 3) if kind else None, "note": note, "novelty": round(nov, 2),
                       "baseline": round(base_before, 3) if base_before is not None else None, "quiet": ear.quiet})
 
     # главный клип: где сработала тревога, иначе где сильнее угроза, иначе первый
@@ -303,5 +324,6 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
         "timeline": timeline, "clips": clips, "main_clip": pick["i"], "features": features,
         "motor": motor, "impulse": impulse, "nature": nature,
         "verdict": {"alerts": [{"kind": c["alert"], "clip": c["i"], "confidence": c["alert_confidence"]} for c in alerts],
-                    "event": pick["event"], "confidence": pick["confidence"]},
+                    "event": pick["event"], "confidence": pick["confidence"], "novelty": pick["novelty"],
+                    "unfamiliar": any(c["novelty"] > 1 for c in clips)},
     }

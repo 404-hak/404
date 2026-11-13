@@ -120,6 +120,7 @@ class ClipResult(BaseModel):
     activity: float = Field(description="Живость природы 0–1 (лягушки, птицы, насекомые)")
     level_db: float
     f0_hz: float | None = Field(default=None, description="Частота вращения мотора по гармоникам")
+    novelty: float = Field(default=0.0, description="Непривычность звука для сети: больше 1 — на таком она не училась")
     alert: Alert | None = None
     note: str = Field(description="Почему создан или не создан алерт")
 

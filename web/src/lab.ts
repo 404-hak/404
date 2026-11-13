@@ -7,7 +7,7 @@ export type LabAlert = 'motor' | 'shot' | 'silence' | null;
 
 export interface LabClip {
   i: number; start: number; end: number; event: LabEvent; confidence: number; probs: Record<LabEvent, number>;
-  activity: number; alert: LabAlert; alert_confidence: number | null; note: string; baseline: number | null; quiet: number;
+  activity: number; alert: LabAlert; alert_confidence: number | null; note: string; baseline: number | null; quiet: number; novelty?: number;
 }
 export interface LabFeature { key: string; label: string; unit: string; hint: string; value: number }
 export interface LabMotor {
@@ -23,15 +23,15 @@ export interface LabResult {
   thresholds: { motor: number; shot: number };
   wave: { min: number[]; max: number[] };
   spec: { frames: number; bands: number; hop_s: number; win_s: number; db_lo: number; db_hi: number; data: string; mel_hz: number[] };
-  timeline: ({ t: number; start: number; activity: number } & Record<LabEvent, number>)[];
+  timeline: ({ t: number; start: number; activity: number; novelty?: number } & Record<LabEvent, number>)[];
   clips: LabClip[]; main_clip: number; features: LabFeature[];
   motor: LabMotor | null;
   impulse: { t: number; crest_db: number; rise_ms: number; centroid_khz: number; width_ms: number; low_share: number; shot_probability: number; shot_window_start: number;
     zoom: { t0: number; t1: number; y: number[] } };
   nature: { activity: number; bio_curve: number[]; frame_s: number; band_hz: [number, number] };
-  verdict: { alerts: { kind: Exclude<LabAlert, null>; clip: number; confidence: number }[]; event: LabEvent; confidence: number };
+  verdict: { alerts: { kind: Exclude<LabAlert, null>; clip: number; confidence: number }[]; event: LabEvent; confidence: number; novelty?: number; unfamiliar?: boolean };
 }
-export type Preset = 'motor-archive' | 'motor-new' | 'shot' | 'night' | 'silence' | 'voices' | 'imitation' | 'thunder' | 'wave' | 'airplane' | 'oar' | 'fish' | 'rain';
+export type Preset = 'motor-archive' | 'motor-new' | 'shot' | 'night' | 'silence' | 'voices' | 'imitation' | 'mouth-motor' | 'room' | 'claps' | 'thunder' | 'wave' | 'airplane' | 'oar' | 'fish' | 'rain';
 export interface SceneParams { preset: Preset; vessel: 'boat-A' | 'boat-B' | 'boat-C'; duration_s: number; snr_db: number; activity: number; seed: number; medium: Medium }
 
 export interface ModelMeta {
@@ -45,7 +45,9 @@ export interface ModelMeta {
     vessels_held_out: { auc: number; eer: number; tpr_at_far1: number; identification_rank1: number; vessels: number; same_mean: number; diff_mean: number; tpr_template_far1?: number };
     calibration?: { background_clips: number; false_motor_per_clip: number; false_motor_two_in_row: number; false_shot_per_clip: number;
       motor_recall_per_clip: number; motor_recall_by_snr: Record<string, number>; shot_recall: number;
-      false_shot_on_mouth_imitation?: number; mouth_imitations?: number; voice_recognised?: number; shot_recall_underwater?: number };
+      false_shot_on_mouth_imitation?: number; mouth_imitations?: number; voice_recognised?: number; shot_recall_underwater?: number;
+      false_motor_on_mouth_imitation?: number;
+      by_medium?: Record<Medium, { false_shot_per_clip: number; shot_recall: number; false_motor_per_clip: number; motor_recall_per_clip: number }> };
   };
 }
 export interface ClipRec { sha256: string; buoy_id: string; ts: string; event: LabEvent; confidence: number; activity: number; note: string; alert_id: string | null }

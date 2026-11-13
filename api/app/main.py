@@ -186,7 +186,8 @@ LAB: OrderedDict[str, bytes] = OrderedDict()            # последние р�
 
 
 class LabScene(BaseModel):
-    preset: Literal["motor-archive", "motor-new", "shot", "night", "silence", "voices", "imitation", "thunder", "wave", "airplane", "oar", "fish", "rain"]
+    preset: Literal["motor-archive", "motor-new", "shot", "night", "silence", "voices", "imitation", "mouth-motor", "room", "claps",
+                    "thunder", "wave", "airplane", "oar", "fish", "rain"]
     medium: Literal["water", "air"] = Field(default="water", description="Где микрофон: гидрофон буя под водой или в воздухе")
     vessel: Literal["boat-A", "boat-B", "boat-C"] = "boat-A"
     duration_s: float = Field(default=12, ge=4, le=30)
@@ -209,10 +210,12 @@ def _lab_keep(wav: bytes) -> str:
     return lid
 
 
-def _lab_run(x: np.ndarray, wav: bytes, extra: dict) -> dict:
+def _lab_run(x: np.ndarray, wav: bytes, extra: dict, medium: str = "water") -> dict:
+    """Разбор для лаборатории. Пороги — по среде записи: гидрофон под водой или микрофон в воздухе."""
     m = _need_model()
-    res = lab.analyze(m, x, world.thresholds, world.vessels, world.match_threshold, world.vessel_cut)
-    return {"id": _lab_keep(wav), **extra, **res}
+    th = world.thresholds if medium == "water" else world.thresholds_air
+    res = lab.analyze(m, x, th, world.vessels, world.match_threshold, world.vessel_cut)
+    return {"id": _lab_keep(wav), **extra, "medium": medium, **res}
 
 
 @app.get("/api/lab/presets")
@@ -229,14 +232,15 @@ async def lab_scene(p: LabScene) -> dict:
         sc = lab.scene(p.preset, vessel_seed=ARCHIVE_VESSELS[p.vessel] if p.preset == "motor-archive" else None,
                        duration=p.duration_s, snr_db=p.snr_db, activity=p.activity, seed=p.seed, medium=p.medium)
         return _lab_run(sc.x, dsp.write_wav(sc.x), {"source": "scene", "title": sc.title, "truth": sc.truth, "marks": sc.marks,
-                                                     "vessel": p.vessel if p.preset == "motor-archive" else None,
-                                                     "medium": p.medium})
+                                                     "vessel": p.vessel if p.preset == "motor-archive" else None},
+                       p.medium)
     return await asyncio.to_thread(run)
 
 
 @app.post("/api/lab/analyze", openapi_extra={"requestBody": {"required": True, "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}}}})
-async def lab_analyze(request: Request, name: str | None = None) -> dict:
-    """Разобрать свой звук (WAV до 30 с): всё, что видит и решает нейросеть, без тревог."""
+async def lab_analyze(request: Request, name: str | None = None, medium: Literal["water", "air"] = "air") -> dict:
+    """Разобрать свой звук (WAV до 30 с): всё, что видит и решает нейросеть, без тревог.
+    medium — где записан звук: по умолчанию микрофон в воздухе; water — запись гидрофона."""
     _need_model()
     wav = await request.body()
     if len(wav) > MAX_CLIP_BYTES:
@@ -245,7 +249,8 @@ async def lab_analyze(request: Request, name: str | None = None) -> dict:
         x = dsp.read_wav(wav)
     except AudioError as e:
         raise HTTPException(422, f"Звук не подходит: {e}")
-    return await asyncio.to_thread(_lab_run, x, wav, {"source": "upload", "title": name or "Ваша запись", "truth": None, "marks": []})
+    return await asyncio.to_thread(_lab_run, x, wav, {"source": "upload", "title": name or "Ваша запись", "truth": None, "marks": []},
+                                   medium)
 
 
 @app.post("/api/lab/clip/{sha}")
@@ -259,7 +264,7 @@ async def lab_clip(sha: str) -> dict:
     b = world.buoys.get(rec["buoy_id"]) if rec else None
     title = f"Клип буя {b.name}" if b else "Клип буя"
     return await asyncio.to_thread(_lab_run, dsp.read_wav(wav), wav, {"source": "buoy", "title": title, "truth": None, "marks": [],
-                                                                       "sha256": sha, "ts": rec["ts"] if rec else None})
+                                                                       "sha256": sha, "ts": rec["ts"] if rec else None}, "water")
 
 
 @app.get("/api/lab/audio/{lid}")

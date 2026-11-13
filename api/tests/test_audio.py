@@ -203,10 +203,12 @@ def test_lab_upload_and_buoy_clip():
     with TestClient(main.app) as c:
         r = c.post("/api/lab/analyze?name=test.wav", content=wav("background", 77, activity=0.8), headers={"Content-Type": "audio/wav"})
         assert r.status_code == 200 and r.json()["title"] == "test.wav" and r.json()["source"] == "upload"
+        assert r.json()["medium"] == "air" and r.json()["thresholds"]["shot"] == main.world.thresholds_air["shot"]   # микрофон
         assert c.post("/api/lab/analyze", content=b"nope").status_code == 422
         sha = c.post("/api/buoys/b03/audio", content=wav("background", 78, activity=0.6)).json()["sha256"]
         clip = c.post(f"/api/lab/clip/{sha}").json()
         assert clip["source"] == "buoy" and clip["sha256"] == sha and "Тростниковый-3" in clip["title"]
+        assert clip["medium"] == "water" and clip["thresholds"]["shot"] == main.world.thresholds["shot"]           # гидрофон буя
 
 
 
@@ -245,3 +247,69 @@ def test_underwater_shot_and_thunder():
         assert thunder["verdict"]["alerts"] == []
         voices = c.post("/api/lab/scene", json={"preset": "imitation", "medium": "air", "snr_db": 18}).json()
         assert voices["verdict"]["alerts"] == [] and any(cl["event"] == "voice" for cl in voices["clips"])
+
+
+# ---------- живой микрофон: комната, звуки ртом, руки ----------
+def _ear_alarms(clips, medium="air") -> list[str]:
+    """Что подняло бы ухо по этим клипам подряд (мотору нужно два); пороги — микрофона в воздухе или гидрофона."""
+    from app.audio.listener import Ear, hear
+    t = MODEL.meta["thresholds"]
+    sfx = "_air" if medium == "air" and "shot_air" in t else ""
+    th = {"motor": t["motor" + sfx], "shot": t["shot" + sfx]}
+    ear, out = Ear(), []
+    for i, x in enumerate(clips):
+        kind = hear(ear, MODEL.analyze(x), th, NIGHT + timedelta(seconds=4 * i))[0]
+        if kind:
+            out.append(kind)
+    return out
+
+
+def test_quiet_room_is_not_people_talking():
+    """Открытый микрофон в тихой комнате — не «голоса» и не тревога (раньше сеть слышала там разговор)."""
+    events = []
+    for s in range(12):
+        r = np.random.default_rng(900 + s)
+        x = synth.indoor(r, synth.N)
+        x = x / (np.abs(x).max() + 1e-9) * float(r.uniform(0.02, 0.3))
+        events.append(MODEL.analyze(x).event)
+        assert _ear_alarms([x, x]) == [], s
+    assert events.count("voice") <= 1 and "shot" not in events, events
+    t = np.arange(synth.N) / synth.SR
+    hum = sum(np.sin(2 * np.pi * 50 * k * t) / k for k in range(1, 9)) * 0.02
+    for x in (np.random.default_rng(1).normal(0, 1e-4, synth.N), hum):
+        assert _ear_alarms([x, x]) == [] and MODEL.analyze(x).event != "voice"
+
+
+def test_mouth_motor_is_not_a_boat():
+    """«Бррр» губами в микрофон — не катер: два таких клипа подряд тревоги не дают."""
+    from app.audio.synth import MOUTH_MOTOR, mouth_motor
+    for k, kind in enumerate(MOUTH_MOTOR):
+        clips = []
+        for j in range(2):
+            r = np.random.default_rng(500 + 10 * k + j)
+            x = r.normal(0, 0.002, synth.N)
+            at = int(r.uniform(0.2, 1.0) * synth.SR)
+            while at < synth.N - 2000:
+                s = mouth_motor(r, kind)[: synth.N - at]
+                x[at:at + len(s)] += s / (np.abs(s).max() + 1e-9) * 0.5
+                at += len(s) + int(r.uniform(0.1, 0.5) * synth.SR)
+            clips.append(x)
+        assert "motor" not in _ear_alarms(clips), kind
+
+
+def test_claps_and_knocks_are_not_shots():
+    from app.audio.synth import HANDMADE, handmade
+    for k, kind in enumerate(HANDMADE):
+        r = np.random.default_rng(700 + k)
+        x = r.normal(0, 0.002, synth.N) + handmade(r, synth.N, kind)
+        assert "shot" not in _ear_alarms([x / np.abs(x).max() * 0.8]), kind
+
+
+def test_unfamiliar_sound_gives_no_alarm():
+    """Звук, которому сеть не училась (чистый тон 1 кГц, как у генератора), помечается непривычным и тревоги
+    не даёт — даже если softmax уверенно называет его мотором."""
+    t = np.arange(synth.N) / synth.SR
+    x = 0.3 * np.sin(2 * np.pi * 1000 * t)
+    a = MODEL.analyze(x)
+    assert a.novelty > 1 and a.unfamiliar
+    assert _ear_alarms([x, x]) == [] and _ear_alarms([x, x], "water") == []

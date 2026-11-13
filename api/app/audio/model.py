@@ -83,6 +83,8 @@ class Analysis:
     fingerprint: list[float] | None = None
     f0_hz: float | None = None
     level_db: float = 0.0
+    novelty: float = 0.0          # насколько звук непривычен для сети: больше 1 — такому она не училась
+    unfamiliar: bool = False
 
 
 @dataclass
@@ -92,6 +94,20 @@ class Acoustic:
     vessel: MLP
     meta: dict = field(default_factory=dict)
     cohort: np.ndarray | None = None      # отпечатки случайных чужих катеров — для порога каждого образа (Z-норма)
+    novelty_comp: np.ndarray | None = None   # главные компоненты обучающих признаков — датчик непривычного звука
+    novelty_sd: np.ndarray | None = None
+
+    def novelty(self, e: np.ndarray) -> np.ndarray:
+        """Непривычность клипа: расстояние до обучающих звуков (в главных компонентах и вне их) в долях порога;
+        больше 1 — дальше, чем 99,5 % проверочных клипов: ответ сети на таком звуке ненадёжен."""
+        if self.novelty_comp is None:
+            return np.zeros(len(np.atleast_2d(e)))
+        z = (np.atleast_2d(e) - self.events.mean) / self.events.scale
+        p = z @ self.novelty_comp.T
+        d2 = ((p / self.novelty_sd) ** 2).sum(1)
+        res = ((z - p @ self.novelty_comp) ** 2).sum(1)
+        th = self.meta["thresholds"]
+        return np.maximum(d2 / th["novelty_d2"], res / th["novelty_res"])
 
     def znorm(self, vec) -> tuple[float, float]:
         """Насколько на этот образ похожи случайные чужие катера: (среднее, разброс) сходства."""
@@ -110,9 +126,10 @@ class Acoustic:
         p = self.events.forward(e)[0]
         k = int(np.argmax(p))
         act = float(np.clip(self.bio.forward(e)[0, 0], 0, 1))
+        nov = float(self.novelty(e)[0])
         a = Analysis(event=self.classes[k], confidence=round(float(p[k]), 3),
                      probs={c: round(float(v), 3) for c, v in zip(self.classes, p)}, activity=round(act, 3),
-                     level_db=round(dsp.rms_db(x), 1))
+                     level_db=round(dsp.rms_db(x), 1), novelty=round(nov, 2), unfamiliar=nov > 1)
         if a.event == "motor":
             v = dsp.vessel_features(x)
             a.fingerprint = [round(float(t), 5) for t in self.vessel.embed(v)[0]]
@@ -135,4 +152,6 @@ def load(path: str | None = None) -> Acoustic | None:
         # отпечаток сети отпечатков: если веса сменились, старые векторы архива несравнимы с новыми
         meta["vessel_model"] = hashlib.sha1(b"".join(w.tobytes() for w in v.weights[:2])).hexdigest()[:12]
         cohort = z["vessel_cohort"] if "vessel_cohort" in z.files else None
-        return Acoustic(unpack(z, "events"), unpack(z, "bio"), v, meta, cohort)
+        nc = z["novelty_comp"] if "novelty_comp" in z.files else None
+        ns = z["novelty_sd"] if "novelty_sd" in z.files else None
+        return Acoustic(unpack(z, "events"), unpack(z, "bio"), v, meta, cohort, nc, ns)

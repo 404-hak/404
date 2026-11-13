@@ -99,7 +99,10 @@ class World:
         # у каждого катера архива свой порог: насколько на него похожи случайные чужие (Z-норма)
         self.match_z = float(th["match_z"]) if self.model and self.model.cohort is not None and "match_z" in th else None
         base = float(th.get("event", 0.6))
-        self.thresholds = {"motor": float(th.get("motor", base)), "shot": float(th.get("shot", base))}
+        self.thresholds = {"motor": float(th.get("motor", base)), "shot": float(th.get("shot", base))}   # гидрофон буя
+        # микрофон в воздухе (проверка на сайте): свои пороги — хлопки и звуки ртом в комнате не путают буй
+        self.thresholds_air = {"motor": float(th.get("motor_air", self.thresholds["motor"])),
+                               "shot": float(th.get("shot_air", self.thresholds["shot"]))}
         self.weather = weather
         self.reset(fresh=False)
 
@@ -363,7 +366,8 @@ class World:
                         fingerprint=fp if kind == "motor" else None),
                 audio_sha=sha, probs=an.probs, source="audio")
         res = ClipResult(sha256=sha, buoy_id=buoy_id, ts=ts, event=an.event, confidence=an.confidence,  # type: ignore[arg-type]
-                         probs=an.probs, activity=an.activity, level_db=an.level_db, f0_hz=an.f0_hz, alert=alert, note=note)
+                         probs=an.probs, activity=an.activity, level_db=an.level_db, f0_hz=an.f0_hz, novelty=an.novelty,
+                         alert=alert, note=note)
         rec = res.model_dump(mode="json", exclude={"alert"})
         rec["alert_id"] = alert.id if alert else None
         self.recent.append(rec)

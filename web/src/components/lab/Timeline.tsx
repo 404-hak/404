@@ -12,6 +12,7 @@ const W = 1000, H = 190;
 function chip(c: LabClip) {
   if (c.alert) return { text: `Тревога: ${ALERT_RU[c.alert]}`, cls: 'border-alert bg-alert text-bg font-semibold' };
   if (c.event === 'voice') return { text: 'голоса · не тревога', cls: 'border-[#7FB2E5]/70 text-[#7FB2E5]' };
+  if (c.note.includes('непривычный')) return { text: 'непривычный звук', cls: 'border-dashed border-warn/70 text-warn' };
   if (c.note.includes('подтверждения')) return { text: 'мотор? ждём 2-й клип', cls: 'border-warn text-warn' };
   if (c.note.includes('продолжение')) return { text: `${c.event === 'shot' ? 'выстрел' : 'мотор'} · та же тревога`, cls: 'border-warn/60 text-warn' };
   if (c.note.includes('ниже порога')) return { text: 'похоже, но ниже порога', cls: 'border-line text-muted' };
@@ -95,7 +96,7 @@ export default function Timeline({ r }: { r: LabResult }) {
             <thead className="text-muted">
               <tr className="border-b border-line">
                 <th className="py-1.5 pr-3 font-medium">№</th><th className="pr-3 font-medium">время</th><th className="pr-3 font-medium">сеть слышит</th>
-                <th className="pr-3 font-medium">фон · мотор · выстрел · голоса</th><th className="pr-3 font-medium">живость</th><th className="pr-3 font-medium">обычная</th>
+                <th className="pr-3 font-medium">фон · мотор · выстрел · голоса</th><th className="pr-3 font-medium">живость</th><th className="pr-3 font-medium">обычная</th><th className="pr-3 font-medium">непривычность</th>
                 <th className="font-medium">решение уха буя</th>
               </tr>
             </thead>
@@ -108,6 +109,7 @@ export default function Timeline({ r }: { r: LabResult }) {
                   <td className="pr-3 font-mono text-muted">{pct0(c.probs.background)} · <span className="text-warn">{pct0(c.probs.motor)}</span> · <span className="text-alert">{pct0(c.probs.shot)}</span>{c.probs.voice != null && <> · <span style={{ color: VOICE }}>{pct0(c.probs.voice)}</span></>}</td>
                   <td className="pr-3 font-mono">{num(c.activity, 2)}</td>
                   <td className="pr-3 font-mono text-muted">{c.baseline != null ? num(c.baseline, 2) : '—'}</td>
+                  <td className={`pr-3 font-mono ${(c.novelty ?? 0) > 1 ? 'text-warn' : 'text-muted'}`}>{c.novelty != null ? num(c.novelty, 2) : '—'}</td>
                   <td className={c.alert ? 'font-semibold text-alert' : 'text-muted'}>{c.note}</td>
                 </tr>
               ))}

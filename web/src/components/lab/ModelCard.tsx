@@ -23,7 +23,8 @@ export default function ModelCard({ meta }: { meta: ModelMeta }) {
         <Big label="верных ответов" value={pct0(e.accuracy)} note={`фон / мотор / выстрел, ${Math.round(t.synthetic_event_clips / 4)} новых клипов`} />
         <Big label="мотор: ложных тревог" value={c ? `${num(c.false_motor_two_in_row * 100, 3)} %` : '—'}
           note={c ? `${num(c.false_motor_per_clip * 100, 1)} % на клип, но нужно два подряд` : ''} tone="text-warn" />
-        <Big label="выстрел: ловим" value={c ? pct0(c.shot_recall) : pct0(e.recall_shot)} note={c ? `при ${num(c.false_shot_per_clip * 100, 2)} % ложных на клип фона` : ''} tone="text-alert" />
+        <Big label={c?.by_medium ? 'выстрел под водой: ловим' : 'выстрел: ловим'} value={c ? pct0(c.shot_recall) : pct0(e.recall_shot)}
+          note={c ? `при ${num(c.false_shot_per_clip * 100, 2)} % ложных на клип фона${c.by_medium ? ' — порог гидрофона буя' : ''}` : ''} tone="text-alert" />
         {v.tpr_template_far1 != null
           ? <Big label="узнаём катер из архива" value={pct0(v.tpr_template_far1)} note={`по одному клипу под водой; чужой за архивный — не чаще 1 % сверок. Первым в списке — ${pct0(v.identification_rank1)}`} />
           : <Big label="узнаём катер" value={pct0(v.identification_rank1)} note={`среди ${v.vessels} новых катеров по 3 проходам; AUC ${num(v.auc, 3)}`} />}
@@ -31,7 +32,13 @@ export default function ModelCard({ meta }: { meta: ModelMeta }) {
           <Big label="«выстрел» ртом за выстрел" value={`${num(c.false_shot_on_mouth_imitation * 100, 1)} %`} note={`из ${c.mouth_imitations} имитаций: «пф», «бах», «тыщ», щелчок`} tone="text-[#7FB2E5]" />
         )}
         {c?.voice_recognised != null && <Big label="голоса людей узнаны" value={pct0(c.voice_recognised)} note="разговор, крик, смех, звуки ртом — тревогу не поднимают" tone="text-[#7FB2E5]" />}
-        {c?.shot_recall_underwater != null && <Big label="выстрел под водой: ловим" value={pct0(c.shot_recall_underwater)} note="через поверхность, с отражениями мелководья" tone="text-alert" />}
+        {c?.by_medium
+          ? <Big label="микрофон в воздухе: выстрел" value={pct0(c.by_medium.air.shot_recall)}
+              note={`при ${num(c.by_medium.air.false_shot_per_clip * 100, 2)} % ложных; свой порог — хлопки, стук и звуки ртом в комнате`} tone="text-alert" />
+          : c?.shot_recall_underwater != null && <Big label="выстрел под водой: ловим" value={pct0(c.shot_recall_underwater)} note="через поверхность, с отражениями мелководья" tone="text-alert" />}
+        {c?.false_motor_on_mouth_imitation != null && (
+          <Big label="«бррр» ртом за мотор" value={`${num(c.false_motor_on_mouth_imitation * 100, 1)} %`} note="на клип в воздухе; тревоге мотора нужно два клипа подряд" tone="text-[#7FB2E5]" />
+        )}
         {e.accuracy_by_medium && <Big label="по средам" value={`${pct0(e.accuracy_by_medium.water)} · ${pct0(e.accuracy_by_medium.air)}`} note="верных ответов: под водой · в воздухе" />}
       </div>
 

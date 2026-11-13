@@ -124,7 +124,9 @@ def motor(v: Vessel, r: np.random.Generator, n: int = N, water: bool = False) ->
 
 
 # ---------- выстрел ----------
-def shot(r: np.random.Generator, n: int = N) -> np.ndarray:
+def shot(r: np.random.Generator, n: int = N, boom: bool = True) -> np.ndarray:
+    """Выстрел в воздухе: резкая дульная волна, у ружья — мощный низ (boom), хвост и эхо от берега.
+    Хлопок ладонями и щелчок такого низа не дают."""
     out = np.zeros(n)
     count = int(r.choice([1, 1, 1, 2, 2, 3]))
     dur = n / SR
@@ -135,6 +137,10 @@ def shot(r: np.random.Generator, n: int = N) -> np.ndarray:
         tt = np.arange(L) / SR
         blast = r.normal(0, 1, L) * np.exp(-tt / r.uniform(0.003, 0.015)) * np.minimum(1, tt / 0.0003)
         blast = _shape(blast, lambda f, fc=r.uniform(1500, 6000): 1 / (1 + (f / fc) ** 2))
+        low = r.normal(0, 1, L) * np.exp(-tt / r.uniform(0.01, 0.035)) * np.minimum(1, tt / 0.0008)
+        low = _shape(low, lambda f, fc=r.uniform(120, 500): 1 / (1 + (f / fc) ** 4))     # дульная волна: мощный низ
+        if boom:
+            blast = blast / (np.abs(blast).max() + 1e-9) + low / (np.abs(low).max() + 1e-9) * r.uniform(0.5, 1.4)
         tail = r.normal(0, 1, L) * np.exp(-tt / r.uniform(0.12, 0.6)) * 10 ** (r.uniform(-24, -14) / 20)
         tail = _shape(tail, lambda f: np.exp(-f / 2500))
         s = blast / (np.abs(blast).max() + 1e-9) + tail
@@ -344,7 +350,7 @@ def thunder(r: np.random.Generator, n: int = N) -> np.ndarray:
 def shot_water(r: np.random.Generator, n: int = N) -> np.ndarray:
     """Выстрел, как его слышит гидрофон: дульная волна через поверхность (глухо, смазано отражениями);
     иногда пуля входит в воду рядом с буем — резкий удар и схлопывание каверны уже в самой воде."""
-    air = shot(r, n)
+    air = shot(r, n, boom=False)      # низ дульной волны под водой тонет в гуле и плеске: важны резкость и пуля
     y = to_water(air, r, loss_db=0, fc=r.uniform(800, 3000))
     if r.random() < 0.5:
         i = int(np.argmax(np.abs(air))) + int(r.uniform(0.0, 0.08) * SR)
@@ -487,11 +493,115 @@ def human(r: np.random.Generator, n: int = N, imitation: bool | None = None) -> 
     if imitation:
         base = _rms(out) if talk else 0.0
         for _ in range(int(r.integers(1, 4))):
-            s = mouth_shot(r)
+            s = mouth_shot(r) if r.random() < 0.5 else mouth_motor(r)
             i = int(r.uniform(0, max(0.01, dur - len(s) / SR)) * SR)
             m = min(len(s), n - i)
             out[i:i + m] += s[:m] * (max(base * r.uniform(2, 5), 1.0) if talk else 1.0)
     return _distance(out, r.uniform(0.5, 40))
+
+
+# ---------- комната: проверка микрофоном ноутбука ----------
+def indoor(r: np.random.Generator, n: int = N) -> np.ndarray:
+    """Тихая комната: шум микрофона, гул электросети (50/60 Гц и кратные — у гула ровный «основной тон»,
+    но это не голос и не мотор), вентилятор, клавиатура, дыхание, машины за окном."""
+    t = _t(n)
+    tilt = r.uniform(0, 1)
+    out = _shape(r.normal(0, 1, n), lambda f: (f + 30) ** (-tilt / 2))
+    out = out / _rms(out)
+    if r.random() < 0.55:                                                # гул сети
+        f0 = 50.0 if r.random() < 0.7 else 60.0
+        hum = sum(r.uniform(0.05, 1) / k * np.sin(2 * np.pi * f0 * k * t + r.uniform(0, 6.3)) for k in range(1, int(r.integers(3, 20))))
+        out += hum / _rms(hum) * 10 ** (r.uniform(-12, 8) / 20)
+    if r.random() < 0.45:                                                # вентилятор
+        fb = r.uniform(80, 320)
+        fan = _shape(r.normal(0, 1, n), lambda f, fc=r.uniform(300, 1500): 1 / (1 + (f / fc) ** 2))
+        fan = fan / _rms(fan) + sum(r.uniform(0.1, 0.6) * np.sin(2 * np.pi * fb * k * t) for k in range(1, 4))
+        out += fan / _rms(fan) * (1 + 0.1 * np.sin(2 * np.pi * r.uniform(0.1, 1) * t)) * 10 ** (r.uniform(-10, 6) / 20)
+    if r.random() < 0.3:                                                 # машины за окном
+        car = _shape(r.normal(0, 1, n), lambda f: 1 / (1 + (f / 150) ** 3)) * (0.5 + 0.5 * np.sin(np.pi * t / (n / SR)) ** 2)
+        out += car / _rms(car) * 10 ** (r.uniform(-12, 2) / 20)
+    if r.random() < 0.35:                                                # клавиатура
+        keys = np.zeros(n)
+        for i in r.integers(0, n - 200, int(r.uniform(5, 40))):
+            L = int(r.uniform(0.002, 0.008) * SR)
+            keys[i:i + L] += r.normal(0, 1, L) * np.exp(-np.arange(L) / (L / 3))
+        keys = _shape(keys, lambda f, fc=r.uniform(2000, 5000): np.exp(-0.5 * (np.log2((f + 1) / fc) / 1.0) ** 2))
+        out += keys / (np.abs(keys).max() + 1e-9) * r.uniform(1, 6)
+    if r.random() < 0.2:                                                 # дыхание
+        br = _shape(r.normal(0, 1, n), lambda f: np.exp(-0.5 * (np.log2((f + 1) / 1100) / 1.0) ** 2))
+        out += br / _rms(br) * np.clip(np.sin(2 * np.pi * r.uniform(0.2, 0.35) * t), 0, None) ** 2 * 10 ** (r.uniform(-8, 4) / 20)
+    return room(out, r) if r.random() < 0.6 else out
+
+
+HANDMADE = ("clap", "snap", "knock", "steps")
+
+
+def handmade(r: np.random.Generator, n: int = N, kind: str | None = None) -> np.ndarray:
+    """Руками и ногами: хлопки в ладоши, щелчки пальцами, стук по столу, шаги — резко, но не выстрел:
+    у хлопка нет мощного низа дульной волны и долгого эха."""
+    kind = kind or str(r.choice(HANDMADE))
+    out = np.zeros(n)
+    dur = n / SR
+    pos = r.uniform(0.1, max(0.2, dur * 0.4))
+    for _ in range(int(r.integers(1, 7)) if kind != "steps" else int(dur * 1.8)):
+        i = int(pos * SR)
+        L = int(0.12 * SR)
+        if i + L >= n:
+            break
+        tt = np.arange(L) / SR
+        if kind == "clap":
+            s = r.normal(0, 1, L) * np.minimum(1, tt / r.uniform(0.0004, 0.0015)) * np.exp(-tt / r.uniform(0.004, 0.015))
+            s = _shape(s, lambda f, fc=r.uniform(900, 2800): np.exp(-0.5 * (np.log2((f + 1) / fc) / 1.1) ** 2))
+            step = r.uniform(0.25, 0.7)
+        elif kind == "snap":
+            s = r.normal(0, 1, L) * np.minimum(1, tt / 0.0003) * np.exp(-tt / r.uniform(0.001, 0.004))
+            s = _shape(s, lambda f, fc=r.uniform(2000, 5000): np.exp(-0.5 * (np.log2((f + 1) / fc) / 0.8) ** 2))
+            step = r.uniform(0.3, 0.9)
+        elif kind == "knock":
+            s = np.sin(2 * np.pi * r.uniform(150, 600) * tt) * np.exp(-tt / r.uniform(0.01, 0.05)) * np.minimum(1, tt / 0.001)
+            s += r.normal(0, 1, L) * np.exp(-tt / 0.002) * 0.3
+            step = r.uniform(0.12, 0.35)
+        else:
+            s = _shape(r.normal(0, 1, L), lambda f: 1 / (1 + (f / 300) ** 2)) * np.exp(-tt / 0.03) * np.minimum(1, tt / 0.004)
+            step = r.uniform(0.45, 0.7)
+        out[i:i + L] += s / (np.abs(s).max() + 1e-9) * r.uniform(0.6, 1.0)
+        pos += step
+    return out
+
+
+MOUTH_MOTOR = ("бррр", "ррр", "вжжж", "ммм", "тр-тр", "бр-бр")
+
+
+def mouth_motor(r: np.random.Generator, kind: str | None = None) -> np.ndarray:
+    """Человек изображает мотор: губная или язычковая трель («бррр», «ррр»), «вжжж», гудение «ммм»,
+    короткие «бр-бр-бр», «тр-тр-тр». Пульсация 20–35 Гц похожа на вспышки мотора, но под ней голос:
+    тон 90–260 Гц гуляет, есть форманты гласной, а сам звук обрывается, когда кончается дыхание."""
+    kind = kind or str(r.choice(MOUTH_MOTOR))
+    f0, scale, tilt = r.uniform(90, 260), r.uniform(0.97, 1.18), r.uniform(0.7, 1.2)
+    vowel = VOWELS[str(r.choice(["у", "ы", "а", "о", "э"]))]
+    parts = []
+    reps = int(r.integers(2, 6)) if kind in ("тр-тр", "бр-бр") else 1
+    for _ in range(reps):
+        d = r.uniform(0.12, 0.45) if reps > 1 else r.uniform(0.6, 3.0)
+        L = int(d * SR)
+        t = np.arange(L) / SR
+        v = _vowel(r, f0 * r.uniform(0.9, 1.15), d, vowel if kind != "ммм" else (250, 1200, 2300), scale, tilt + (0.8 if kind == "ммм" else 0))
+        if kind in ("бррр", "ррр", "тр-тр", "бр-бр"):
+            fm = r.uniform(20, 35) * (1 + r.uniform(-0.15, 0.15) * t / d)
+            am = (0.5 + 0.5 * np.sin(2 * np.pi * np.cumsum(fm) / SR)) ** r.uniform(1.5, 3.5)
+            v = v * (0.15 + am)
+            flutter = _shape(r.normal(0, 1, L), lambda f, fc=r.uniform(800, 2500): np.exp(-0.5 * (np.log2((f + 1) / fc) / 1.2) ** 2))
+            v = v + flutter / _rms(flutter) * am * r.uniform(0.1, 0.5)
+        elif kind == "вжжж":
+            z = _shape(r.normal(0, 1, L), lambda f: np.exp(-0.5 * (np.log2((f + 1) / 3000) / 0.5) ** 2))
+            v = v * 0.6 + z / _rms(z) * (0.5 + 0.5 * np.sin(2 * np.pi * np.cumsum(np.full(L, f0)) / SR)) * r.uniform(0.3, 0.8)
+        v = v * _env(L, r.uniform(0.01, 0.08), r.uniform(0.03, 0.2))
+        if kind in ("бррр", "бр-бр", "тр-тр"):                          # смычка губ или языка в начале
+            b = _burst(r, 900 if kind != "тр-тр" else 3800, r.uniform(0.004, 0.012), r.uniform(0.0008, 0.004), r.uniform(0.6, 1.4))
+            v = np.concatenate([b * np.abs(v).max(), v])
+        parts += [v, np.zeros(int(r.uniform(0.04, 0.25) * SR))]
+    return np.concatenate(parts)
+
 
 
 def room(x: np.ndarray, r: np.random.Generator) -> np.ndarray:
@@ -529,14 +639,17 @@ def scene(r: np.random.Generator, event: str, v: Vessel | None = None, activity:
     voices — у мотора в лодке ещё и разговаривают (метка остаётся «мотор»)."""
     water = medium == "water"
     act = float(r.uniform(0, 1)) if activity is None else activity
-    bg = hydro_ambient(r, n) if water else ambient(r, n)
+    inside = (not water) and r.random() < 0.45                         # в воздухе почти половина — комната
+    if inside:
+        act = 0.0 if activity is None else act
+    bg = hydro_ambient(r, n) if water else (indoor(r, n) if inside else ambient(r, n))
     bio = nature_water(r, act, n) if water else nature(r, act, n)
     if act > 0.02:                                     # чем живее природа, тем больше голосов и тем они громче
         bg = bg + bio / (_rms(bio) + 1e-9) * _rms(bg) * 10 ** ((-16 + 22 * act + r.uniform(-2.5, 2.5)) / 20)
-    meta = {"event": event, "activity": act, "vessel": v.seed if v else None, "medium": medium}
+    meta = {"event": event, "activity": act, "vessel": v.seed if v else None, "medium": medium, "indoor": inside}
     if event == "background" and r.random() < 0.4:
-        d = distractor_in(r, n, medium)
-        bg = bg + d / (_rms(d) + 1e-9) * _rms(bg) * 10 ** (r.uniform(-4, 10) / 20)
+        d = handmade(r, n) if (not water and r.random() < 0.5) else distractor_in(r, n, medium)
+        bg = bg + d / (_rms(d) + 1e-9) * _rms(bg) * 10 ** (r.uniform(-4, 12) / 20)
     x = bg
     if event in ("motor", "shot", "voice"):
         if event == "motor":

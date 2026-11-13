@@ -47,6 +47,11 @@ def hear(ear: Ear, an: Analysis, thresholds: dict[str, float], ts: datetime) -> 
     if an.event == "voice":
         ear.quiet = 0
         return None, an.confidence, "голоса людей — не тревога: это могут быть инспекторы или прохожие"
+    if an.event in ("motor", "shot") and an.unfamiliar:
+        ear.quiet = 0
+        name = "мотор" if an.event == "motor" else "выстрел"
+        return None, an.confidence, (f"похоже на {name} ({an.confidence:.2f}), но звук непривычный для сети "
+                                     f"(непривычность {an.novelty:.1f}) — на таком она не училась, тревогу не поднимаю")
     if an.event in ("motor", "shot"):
         ear.quiet = 0
         name = "мотор" if an.event == "motor" else "выстрел"

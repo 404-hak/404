@@ -43,12 +43,12 @@ OUT = ROOT / "api" / "app" / "audio" / "model.npz"
 
 # ---------- данные ----------
 def event_item(args):
-    """Клип для обучения событий. Среда: 70 % — гидрофон под водой (буй), 30 % — воздух (проверка микрофоном).
+    """Клип для обучения событий. Среда: 60 % — гидрофон под водой (буй), 40 % — воздух (проверка микрофоном).
     Треть моторов звучит не весь клип; у части моторов в лодке разговаривают; треть голосов — «выстрел ртом»."""
     seed, event = args
     r = np.random.default_rng(seed)
     rp = np.random.default_rng(seed ^ 0x5EED)
-    medium = "water" if rp.random() < 0.7 else "air"
+    medium = "water" if rp.random() < 0.6 else "air"
     seg, voices, imitation = None, False, None
     if event == "motor":
         if rp.random() < 0.35:
@@ -56,7 +56,7 @@ def event_item(args):
             seg = (float(rp.uniform(0, 1 - L)), L, float(rp.uniform(0.15, 1.2)))
         voices = bool(rp.random() < 0.15)
     if event == "voice":
-        imitation = bool(rp.random() < 0.4)
+        imitation = bool(rp.random() < 0.45)
     x, m = synth.scene(r, event, segment=seg, medium=medium, voices=voices, imitation=imitation)
     kind = f"{medium}:" + ("imitation" if imitation else event)
     return dsp.event_features(x), EVENTS.index(event), m["activity"], m.get("snr_db", np.nan), kind
@@ -173,32 +173,48 @@ def calibrate(path: Path, n_bg: int, n_ev: int, jobs: int, seed: int) -> dict:
     bg = (y == 0) | (y == 3)                     # не угроза: фон и голоса людей
     imit = np.char.endswith(kinds.astype(str), "imitation")
     water = np.char.startswith(kinds.astype(str), "water")
-    t_motor = float(max(0.5, np.quantile(P[bg, 1], 0.99)))
-    t_shot = float(max(0.5, np.quantile(P[bg, 2], 0.999)))
-    fa_motor_clip = float((P[bg, 1] >= t_motor).mean())
-    fa_shot_clip = float((P[bg, 2] >= t_shot).mean())
-    fa_imit = float((P[imit, 2] >= t_shot).mean()) if imit.any() else 0.0
-    voice_seen = float((P[y == 3].argmax(1) == 3).mean())
     mot, sh = y == 1, y == 2
-    rec_m = float(((P[:, 1] >= t_motor) & (P.argmax(1) == 1))[mot].mean())
-    rec_s = float(((P[:, 2] >= t_shot) & (P.argmax(1) == 2))[sh].mean())
-    by_snr = {}
-    for name, lo, hi in (("< 3 дБ", -99, 3), ("3–10 дБ", 3, 10), ("> 10 дБ", 10, 99)):
-        k = mot & (snr >= lo) & (snr < hi)
-        if k.any():
-            by_snr[name] = round(float((P[k, 1] >= t_motor).mean()), 4)
-    rec_sw = float((P[sh & water, 2] >= t_shot).mean()) if (sh & water).any() else 0.0
-    res = {"thresholds": {"motor": round(t_motor, 4), "shot": round(t_shot, 4)},
+    # пороги — отдельно для гидрофона буя (под водой) и для микрофона в воздухе (проверка на сайте):
+    # хлопки, стук и звуки ртом в комнате не должны задирать порог выстрела под водой, и наоборот
+    th, cal = {}, {}
+    for med, k, suffix in (("water", water, ""), ("air", ~water, "_air")):
+        b = bg & k
+        tm = float(max(0.5, np.quantile(P[b, 1], 0.99)))
+        ts = float(max(0.5, np.quantile(P[b, 2], 0.999)))
+        th["motor" + suffix], th["shot" + suffix] = round(tm, 4), round(ts, 4)
+        fa_m, fa_s = float((P[b, 1] >= tm).mean()), float((P[b, 2] >= ts).mean())
+        rm = float(((P[:, 1] >= tm) & (P.argmax(1) == 1))[mot & k].mean())
+        rsh = float(((P[:, 2] >= ts) & (P.argmax(1) == 2))[sh & k].mean())
+        by_snr = {}
+        for name, lo, hi in (("< 3 дБ", -99, 3), ("3–10 дБ", 3, 10), ("> 10 дБ", 10, 99)):
+            kk = mot & k & (snr >= lo) & (snr < hi)
+            if kk.any():
+                by_snr[name] = round(float((P[kk, 1] >= tm).mean()), 4)
+        fa_imit = float((P[imit & k, 2] >= ts).mean()) if (imit & k).any() else 0.0
+        fa_imit_m = float((P[imit & k, 1] >= tm).mean()) if (imit & k).any() else 0.0
+        cal[med] = {"background_clips": int(b.sum()), "false_motor_per_clip": round(fa_m, 5),
+                    "false_motor_two_in_row": round(fa_m ** 2, 6), "false_shot_per_clip": round(fa_s, 5),
+                    "motor_recall_per_clip": round(rm, 4), "motor_recall_by_snr": by_snr, "shot_recall": round(rsh, 4),
+                    "false_shot_on_mouth_imitation": round(fa_imit, 4), "false_motor_on_mouth_imitation": round(fa_imit_m, 4),
+                    "mouth_imitations": int((imit & k).sum())}
+        print(f"калибровка, {'под водой (буй)' if med == 'water' else 'в воздухе (микрофон)'}: {int(b.sum())} клипов фона и голосов; "
+              f"мотор — порог {tm:.3f} (ложных {fa_m:.3%} на клип, два подряд ≈ {fa_m ** 2:.4%}), ловим {rm:.1%} {by_snr}; "
+              f"выстрел — порог {ts:.3f} (ложных {fa_s:.3%}), ловим {rsh:.1%}; звуки ртом: за выстрел {fa_imit:.2%}, "
+              f"за мотор {fa_imit_m:.2%} из {int((imit & k).sum())}")
+    voice_seen = float((P[y == 3].argmax(1) == 3).mean())
+    w, a_ = cal["water"], cal["air"]
+    res = {"thresholds": th,
            "calibration": {"background_clips": int(bg.sum()), "event_clips": int((~bg).sum()),
-                           "false_shot_on_mouth_imitation": round(fa_imit, 4), "mouth_imitations": int(imit.sum()),
-                           "voice_recognised": round(voice_seen, 4), "shot_recall_underwater": round(rec_sw, 4),
-                           "false_motor_per_clip": round(fa_motor_clip, 5), "false_motor_two_in_row": round(fa_motor_clip ** 2, 6),
-                           "false_shot_per_clip": round(fa_shot_clip, 5), "motor_recall_per_clip": round(rec_m, 4),
-                           "motor_recall_by_snr": by_snr, "shot_recall": round(rec_s, 4)}}
-    print(f"калибровка на {int(bg.sum())} клипах фона: мотор — порог {t_motor:.3f} (ложных {fa_motor_clip:.3%} на клип, "
-          f"два подряд ≈ {fa_motor_clip ** 2:.4%}), ловим {rec_m:.1%} клипов с мотором {by_snr}; "
-          f"выстрел — порог {t_shot:.3f} (ложных {fa_shot_clip:.3%}), ловим {rec_s:.1%}, под водой {rec_sw:.1%}; "
-          f"«выстрел ртом» за выстрел — {fa_imit:.2%} из {int(imit.sum())}; голоса узнаны в {voice_seen:.1%}")
+                           # под водой — то, что решает буй; «в воздухе» — проверка микрофоном на сайте
+                           "false_motor_per_clip": w["false_motor_per_clip"], "false_motor_two_in_row": w["false_motor_two_in_row"],
+                           "false_shot_per_clip": w["false_shot_per_clip"], "motor_recall_per_clip": w["motor_recall_per_clip"],
+                           "motor_recall_by_snr": w["motor_recall_by_snr"], "shot_recall": w["shot_recall"],
+                           "shot_recall_underwater": w["shot_recall"], "shot_recall_air": a_["shot_recall"],
+                           "false_shot_on_mouth_imitation": round(max(w["false_shot_on_mouth_imitation"], a_["false_shot_on_mouth_imitation"]), 4),
+                           "false_motor_on_mouth_imitation": a_["false_motor_on_mouth_imitation"],
+                           "mouth_imitations": w["mouth_imitations"] + a_["mouth_imitations"],
+                           "voice_recognised": round(voice_seen, 4), "by_medium": cal}}
+    print(f"голоса узнаны в {voice_seen:.1%}")
     return res
 
 
@@ -320,6 +336,17 @@ def main() -> None:
     sc_e = StandardScaler().fit(X)
     ev_net = MLPClassifier(hidden_layer_sizes=(192, 96), alpha=1e-3, max_iter=400, early_stopping=True,
                            n_iter_no_change=20, random_state=a.seed).fit(sc_e.transform(X), y)
+    # датчик непривычного звука: главные компоненты обучающих признаков; далеко от них — сеть такому не училась
+    Xs = sc_e.transform(X)
+    _, sv, Vt = np.linalg.svd(Xs - Xs.mean(0), full_matrices=False)
+    K = 48
+    comp, nsd = Vt[:K], sv[:K] / np.sqrt(len(Xs) - 1)
+    def novelty_parts(Z):
+        P_ = Z @ comp.T
+        return ((P_ / nsd) ** 2).sum(1), ((Z - P_ @ comp) ** 2).sum(1)
+    d2t, rt = novelty_parts(sc_e.transform(Xt))
+    nov_t1, nov_t2 = float(np.quantile(d2t, 0.995)), float(np.quantile(rt, 0.995))
+    print(f"датчик непривычного: {K} компонент, пороги {nov_t1:.0f} / {nov_t2:.0f} (99,5 % проверочных клипов — привычные)")
     pt = ev_net.predict_proba(sc_e.transform(Xt))
     pred = pt.argmax(1)
     cm = confusion_matrix(yt, pred, labels=range(len(EVENTS)))
@@ -360,7 +387,8 @@ def main() -> None:
         "sr": dsp.SR, "clip_s": synth.CLIP_S,
         "trained_on": {"synthetic_event_clips": len(tr), "synthetic_vessel_clips": len(vtr), "real_event_clips": len(real_ev),
                        "real_vessel_clips": len(real_ves), "train_vessels": len(set(vid))},
-        "thresholds": {"event": round(thr_event, 3), "match": round(ver["thr_far1"], 3), "match_z": ver["match_z"]},
+        "thresholds": {"event": round(thr_event, 3), "match": round(ver["thr_far1"], 3), "match_z": ver["match_z"],
+                       "novelty_d2": round(nov_t1, 2), "novelty_res": round(nov_t2, 2)},
         "metrics": {
             "events": {"accuracy": round(acc, 4), "recall_motor": rec["motor"], "recall_shot": rec["shot"],
                        "accuracy_by_medium": {med: round(float((pred[np.char.startswith(kt, med)] == yt[np.char.startswith(kt, med)]).mean()), 4)
@@ -374,6 +402,7 @@ def main() -> None:
     a.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(a.out, meta=np.array(json.dumps(meta, ensure_ascii=False)),
                         **pack("events", sc_e, ev_net, "softmax"), **pack("bio", sc_e, bio_net, "identity"),
+                        novelty_comp=comp.astype(np.float32), novelty_sd=nsd.astype(np.float32),
                         **pack("vessel", sc_v, v_net, "softmax"), vessel_center=center.astype(np.float32),
                         vessel_cohort=cohort.astype(np.float32))
     save_calibration(a.out, calibrate(a.out, a.cal_background, a.per_class // 2, a.jobs, a.seed))

@@ -14,12 +14,15 @@ import { Card, Page } from './common';
  * Здесь ничего не меняется в системе: тревоги не поднимаются, архив катеров не трогается.
  */
 
-const PRESETS: { id: Preset; title: string; text: string; expect: string; glyph: string; water?: boolean }[] = [
+const PRESETS: { id: Preset; title: string; text: string; expect: string; glyph: string; water?: boolean; air?: boolean }[] = [
   { id: 'motor-archive', title: 'Катер из архива', text: 'Мотор знакомого катера: под водой слышнее всего винт и выхлоп', expect: 'тревога со 2-го клипа, катер узнан', glyph: '⛵' },
   { id: 'motor-new', title: 'Новый катер', text: 'Мотор, которого сеть никогда не слышала', expect: 'тревога, в архиве его нет', glyph: '🚤' },
   { id: 'shot', title: 'Выстрел', text: 'Под водой — глухой и смазанный, иногда с ударом пули о воду', expect: 'тревога «выстрел»', glyph: '✳' },
   { id: 'voices', title: 'Голоса людей', text: 'Разговор в лодке: инспекторы или прохожие', expect: 'сеть узнаёт голоса, тревоги нет', glyph: '🗣' },
   { id: 'imitation', title: 'Выстрел голосом', text: '«Пф», «бах», «тыщ», щелчок языком', expect: 'голоса, а не выстрел — тревоги нет', glyph: '💬' },
+  { id: 'mouth-motor', title: 'Мотор голосом', text: '«Бррр», «вжжж», «тр-тр-тр» — человек изображает лодку', expect: 'голоса, а не мотор — тревоги нет', glyph: '〜' },
+  { id: 'room', title: 'Тишина в комнате', text: 'Шум микрофона, гул сети, вентилятор, клавиатура', expect: 'фон — не голоса и не мотор', glyph: '▫', air: true },
+  { id: 'claps', title: 'Хлопки и стук', text: 'Ладоши, щелчки пальцами, стук по столу', expect: 'не выстрел — тревоги нет', glyph: '✋', air: true },
   { id: 'night', title: 'Тихая ночь', text: 'Водные насекомые, рыбы, лягушки сверху', expect: 'тревоги нет', glyph: '☾' },
   { id: 'silence', title: 'Тишина как улика', text: 'Природа живёт — и вдруг стихает', expect: 'тревога «тишина»', glyph: '◌' },
   { id: 'thunder', title: 'Гром', text: 'Медленный низкий раскат — не выстрел', expect: 'помеха — тревоги нет', glyph: '⚡' },
@@ -126,8 +129,9 @@ export default function LabPage({ state }: { state: State }) {
   useEffect(() => { if (tab === 'buoy') labApi.clips(14).then(setClips).catch(() => setClips([])); }, [tab, state.alerts.length]);
 
   const pick = (preset: Preset) => {
+    const pr = PRESETS.find((x) => x.id === preset);
     const q: SceneParams = { ...p, preset, duration_s: preset === 'silence' ? Math.max(24, p.duration_s) : p.duration_s,
-      medium: PRESETS.find((x) => x.id === preset)?.water ? 'water' : p.medium };
+      medium: pr?.water ? 'water' : pr?.air ? 'air' : p.medium };
     setP(q);
     void runScene(q);
   };
@@ -178,7 +182,7 @@ export default function LabPage({ state }: { state: State }) {
   };
 
   const cur = PRESETS.find((x) => x.id === p.preset)!;
-  const event = !['night', 'silence', 'rain'].includes(p.preset);
+  const event = !['night', 'silence', 'rain', 'room'].includes(p.preset);
 
   return (
     <Page cap="Сеть" title="Нейросеть"
@@ -189,14 +193,18 @@ export default function LabPage({ state }: { state: State }) {
         {tab === 'scene' && (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-3">
-              <Seg value={p.medium} set={(m) => { const q = { ...p, medium: m, preset: m === 'air' && p.preset === 'wave' ? 'oar' as Preset : p.preset }; setP(q); void runScene(q); }}
+              <Seg value={p.medium} set={(m) => {
+                const bad = PRESETS.find((x) => x.id === p.preset && ((x.water && m === 'air') || (x.air && m === 'water')));
+                const q = { ...p, medium: m, preset: bad ? (m === 'air' ? 'room' : 'night') as Preset : p.preset };
+                setP(q); void runScene(q);
+              }}
                 items={[['water', 'Гидрофон под водой'], ['air', 'Микрофон в воздухе']]} />
               <span className="text-[12px] leading-4 text-muted">
                 {p.medium === 'water' ? 'Как на буе: звук из воздуха доходит глухо, мелководье даёт отражения от поверхности и дна.' : 'Как при проверке микрофоном ноутбука или телефона.'}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-              {PRESETS.filter((x) => !(x.water && p.medium === 'air')).map((x) => (
+              {PRESETS.filter((x) => !(x.water && p.medium === 'air') && !(x.air && p.medium === 'water')).map((x) => (
                 <button key={x.id} type="button" onClick={() => pick(x.id)} disabled={!!busy}
                   className={`group rounded-[12px] border p-3 text-left transition-colors ${p.preset === x.id ? 'border-primary/60 bg-white/[.06]' : 'border-line hover:border-primary/30 hover:bg-white/[.03]'} disabled:opacity-60`}>
                   <div className="flex items-center gap-2"><span className="grid h-6 w-6 place-items-center rounded-full bg-white/[.06] text-[13px]">{x.glyph}</span><span className="text-[13px] font-semibold">{x.title}</span></div>
@@ -323,6 +331,12 @@ function Result({ r, player }: { r: LabResult; player: ReturnType<typeof usePlay
             {EVENT_RU[main.event]} <span className="font-light">· {pct0(main.confidence)}</span>
           </div>
           <p className="mt-2 text-[14px] leading-[21px]">{alertLine}</p>
+          {r.verdict.unfamiliar && (
+            <div className="mt-3 rounded-[10px] border border-dashed border-warn/60 bg-warn/[.07] px-3 py-2 text-[13px] leading-[19px]">
+              <b className="text-warn">Непривычный звук.</b> В записи есть то, на чём сеть не училась (непривычность до {num(Math.max(...r.clips.map((c) => c.novelty ?? 0)), 1)} при пороге 1).
+              Её ответ здесь ненадёжен — поэтому по непривычному звуку буй тревогу «мотор» или «выстрел» не поднимает.
+            </div>
+          )}
           {right != null && (
             <p className={`mt-2 text-[13px] font-medium ${right ? 'text-accent' : 'text-alert'}`}>
               {right ? (want ? '✓ Совпадает с тем, что на самом деле в звуке.'
