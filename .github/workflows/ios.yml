@@ -52,7 +52,7 @@ jobs:
           zip -qry 404.ipa Payload
           ls -lh 404.ipa
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: 404-ios-ipa
           path: 404.ipa
