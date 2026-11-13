@@ -129,3 +129,9 @@ def test_old_clips_without_alert_are_pruned_but_evidence_stays(tmp_path):
     assert clips.prune({evidence}, 24 * 3600) == 1
     assert clips.get(noise) is None
     assert clips.get(evidence) == b"RIFF-evidence"
+
+
+def test_public_about_page_stays_open(client, private):
+    r = client.get("/about/")
+    assert r.status_code in (200, 404)            # 404 — если сайт не собран (web/dist) в этом окружении
+    assert "x-robots-tag" not in r.headers

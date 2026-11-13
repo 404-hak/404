@@ -23,7 +23,8 @@ log = logging.getLogger("404")
 COOKIE = "access404"
 COOKIE_DAYS = 30
 # без доступа открыты только проверка живости (мониторинг) и robots.txt
-PUBLIC = re.compile(r"^/(api/health|robots\.txt)$")
+# публичная страница проекта (/about/) и знак открыты всегда: их видят поисковики и превью ссылок
+PUBLIC = re.compile(r"^/(api/health|robots\.txt|about/?|about/index\.html|brand/[\w.-]+)$")
 BUOY_PATH = re.compile(r"^/api/buoys/[^/]+/(audio|heartbeat)$")
 
 
@@ -76,7 +77,7 @@ OPEN_USER = {"login": None, "name": "без входа", "role": "senior"}
 LINK_USER = {"login": None, "name": "по ссылке доступа", "role": "senior"}
 SERVICE_USER = {"login": None, "name": "служебный доступ", "role": "senior"}
 # без входа открыты: проверка живости, robots, сам вход и значок для страницы входа
-OPEN_WITH_ACCOUNTS = re.compile(r"^/(api/health|robots\.txt|api/auth/(login|logout)|brand/favicon\.(svg|ico))$")
+OPEN_WITH_ACCOUNTS = re.compile(r"^/(api/health|robots\.txt|api/auth/(login|logout)|about/?|about/index\.html|brand/[\w.-]+)$")
 
 
 def _cookie(h: dict[str, str], name: str) -> str | None:
@@ -236,7 +237,7 @@ class Hardening:
                 add("cross-origin-opener-policy", "same-origin")
                 if https:
                     add("strict-transport-security", "max-age=15552000")
-                if private:
+                if private and not path.startswith("/about"):
                     add("x-robots-tag", "noindex, nofollow")
                 # кэш: файлы сборки с хэшем в имени — навсегда, страница и API — всегда свежие
                 if path.startswith("/assets/"):

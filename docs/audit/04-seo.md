@@ -10,10 +10,10 @@
 | O1 | P1 | Не было `meta description`, Open Graph и Twitter-карточки — ссылка в Telegram/VK выглядела голым заголовком. | ✅ `web/index.html` |
 | O2 | P1 | Не было `robots.txt` (отвечал 404 JSON). | ✅ `web/public/robots.txt` (закрыты `/api/` и `/ws`); при `ACCESS_TOKEN` — заголовок `X-Robots-Tag: noindex, nofollow` на всё |
 | O3 | P2 | Не было манифеста (установка на экран «Домой», имя, иконки). | ✅ `web/public/manifest.webmanifest` |
-| O4 | P2 | Пустой `<div id="root">` без JS. | ✅ `<noscript>` с описанием; ⏳ для публичной страницы — статическая сборка (SSG/prerender) |
-| O5 | P2 | Разделы на `#/hash`-адресах — поисковики их не видят как страницы. | ⏳ для дашборда так и надо; для публичной страницы — обычные адреса |
+| O4 | P2 | Пустой `<div id="root">` без JS. | ✅ `<noscript>` с описанием; ✅ публичная страница `/about/` — статический HTML (7 КБ), открыт и при закрытом дашборде |
+| O5 | P2 | Разделы на `#/hash`-адресах — поисковики их не видят как страницы. | ✅ публичная страница — обычный адрес `/about/` |
 | O6 | P2 | `og:image` сейчас — значок 512×512. | ⏳ отдельная картинка 1200×630 с картой дельты и знаком |
-| O7 | P3 | Нет `canonical`, `sitemap.xml`, микроразметки JSON-LD (`Organization`, `SoftwareApplication`). | ⏳ после выбора домена публичной страницы |
+| O7 | P3 | Нет `canonical`, `sitemap.xml`, микроразметки JSON-LD (`Organization`, `SoftwareApplication`). | 🟡 микроразметка JSON-LD (`SoftwareApplication`) на `/about/` ✅; ⏳ `canonical` и `sitemap.xml` — после выбора домена |
 | O8 | — | `lang="ru"`, `<title>`, `theme-color`, favicon (svg + ico), `apple-touch-icon` — есть ✓ | — |
 
 ## Публичная страница — что на ней должно быть
