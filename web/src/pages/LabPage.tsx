@@ -45,7 +45,7 @@ type Tab = 'scene' | 'own' | 'buoy';
 type Detail = 'time' | 'motor' | 'impulse' | 'nature' | 'features' | 'model';
 const DETAILS: [Detail, string][] = [['time', 'Ход по времени'], ['motor', 'Мотор'], ['impulse', 'Удар'], ['nature', 'Природа'], ['features', 'Признаки'], ['model', 'Как училась сеть']];
 
-function Seg<T extends string>({ value, set, items, label }: { value: T; set: (v: T) => void; items: [T, string][]; label?: string }) {
+function Seg<T extends string>({ value, set, items, label }: { value: T; set: (v: T) => void; items: [T, ReactNode][]; label?: string }) {
   return (
     <div className="flex w-fit max-w-full overflow-x-auto rounded-[10px] border border-line bg-bg/70 p-[3px]" role="tablist" aria-label={label}>
       {items.map(([v, text]) => (
@@ -194,7 +194,7 @@ export default function LabPage({ state }: { state: State }) {
                 const bad = PRESETS.find((x) => x.id === p.preset && ((x.water && m === 'air') || (x.air && m === 'water')));
                 const q = { ...p, medium: m, preset: bad ? (m === 'air' ? 'room' : 'night') as Preset : p.preset };
                 setP(q); void runScene(q);
-              }} items={[['water', 'Гидрофон под водой'], ['air', 'Микрофон в воздухе']]} />
+              }} items={[['water', <><span className="sm:hidden">Под водой</span><span className="hidden sm:inline">Гидрофон под водой</span></>], ['air', <><span className="sm:hidden">В воздухе</span><span className="hidden sm:inline">Микрофон в воздухе</span></>]]} />
               <span className="hidden text-[12px] leading-4 text-muted md:inline">
                 {p.medium === 'water' ? 'как на буе: из воздуха звук доходит глухо, мелководье даёт отражения' : 'как при проверке микрофоном ноутбука или телефона'}
               </span>

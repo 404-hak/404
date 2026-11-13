@@ -10,6 +10,7 @@ import './design';
 import './index.css';
 import './design-upk.css';
 import './delta.css';
+import './responsive.css';   // поправки для узких, низких и очень широких экранов — последними
 import App from './App';
 import { initTheme } from './theme';
 import { initUpkMotion } from './upkMotion';
