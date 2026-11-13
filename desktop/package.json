@@ -1,0 +1,57 @@
+{
+  "name": "app404-desktop",
+  "productName": "404",
+  "version": "1.0.0",
+  "description": "404 · Браконьер не найден — дашборд инспектора для Windows и macOS",
+  "author": "404",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "serverUrl": "",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "test": "node --test test/lib.test.js",
+    "check": "node --check main.js && node --check preload.js && node --check lib.js && node --check pages/setup.js && node --check pages/offline.js && node --check build/afterPack.js"
+  },
+  "devDependencies": {
+    "electron": "45.3.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "dev.hak404.dashboard",
+    "productName": "404",
+    "copyright": "404 · Браконьер не найден",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "lib.js", "pages/**", "package.json"],
+    "afterPack": "build/afterPack.js",
+    "win": {
+      "icon": "build/icon.png",
+      "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "portable", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "404",
+      "uninstallDisplayName": "404 · дашборд инспектора",
+      "artifactName": "404-Setup-${version}.${ext}"
+    },
+    "portable": { "artifactName": "404-portable-${version}.${ext}" },
+    "mac": {
+      "icon": "build/icon-mac.png",
+      "category": "public.app-category.productivity",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "identity": null,
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Микрофон нужен разделу «Слух»: проверить нейросеть своим голосом. Звук разбирается на вашем сервере 404.",
+        "LSApplicationCategoryType": "public.app-category.productivity"
+      }
+    },
+    "dmg": { "artifactName": "404-${version}-mac-${arch}.${ext}" },
+    "linux": { "icon": "build/icon.png", "target": ["AppImage"], "category": "Utility", "artifactName": "404-${version}.${ext}" }
+  }
+}

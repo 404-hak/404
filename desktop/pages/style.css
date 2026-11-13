@@ -1,0 +1,35 @@
+/* Свои экраны приложения (адрес сервера, «нет связи») — в цветах бренда 404: Ночной, Глубинный, Пенный, Сланцевый */
+:root { color-scheme: dark; --bg: #0B1628; --card: #142236; --line: rgba(226, 232, 240, .12); --text: #E2E8F0; --muted: #8A97A9; --accent: #2DD4BF; --warn: #F59E0B; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: radial-gradient(120% 80% at 50% 0%, #142a44 0%, var(--bg) 60%) fixed, var(--bg);
+  color: var(--text); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  display: grid; place-items: center; padding: 24px; -webkit-font-smoothing: antialiased; user-select: none;
+}
+main { width: 100%; max-width: 460px; }
+.mark { width: 64px; height: 64px; display: block; margin-bottom: 20px; }
+h1 { font-size: 26px; line-height: 32px; margin: 0 0 6px; font-weight: 650; letter-spacing: -.01em; }
+p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+input {
+  width: 100%; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text);
+  padding: 0 14px; font: inherit; outline: none; user-select: text;
+}
+input:focus { border-color: rgba(45, 212, 191, .7); box-shadow: 0 0 0 3px rgba(45, 212, 191, .15); }
+.row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+button {
+  height: 44px; border-radius: 11px; padding: 0 18px; font: inherit; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--text);
+}
+button:hover { background: rgba(226, 232, 240, .06); }
+button.primary { background: var(--text); color: var(--bg); border-color: var(--text); flex: 1; }
+button.primary:hover { background: #fff; }
+button:disabled { opacity: .55; cursor: default; }
+.hint { margin-top: 18px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.err { margin-top: 12px; min-height: 18px; font-size: 13px; color: var(--warn); }
+code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); background: var(--card); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+.pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 8px; vertical-align: 2px; animation: p 1.6s ease-in-out infinite; }
+@keyframes p { 50% { opacity: .25; } }
+.ver { position: fixed; right: 16px; bottom: 12px; font-size: 11px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }

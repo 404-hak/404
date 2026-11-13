@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <title>404 · адрес сервера</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <img class="mark" src="mark.svg" alt="">
+    <h1>Адрес сервера 404</h1>
+    <p>Приложение открывает дашборд с вашего сервера. Например, адрес порта 8000 из Codespaces (…app.github.dev) или компьютер в вашей сети, как 192.168.1.5:8000.</p>
+    <form id="f" autocomplete="off">
+      <label for="u">Адрес</label>
+      <input id="u" type="text" inputmode="url" spellcheck="false" placeholder="https://…" autofocus>
+      <div class="err" id="err" role="alert"></div>
+      <div class="row">
+        <button class="primary" id="go" type="submit">Подключиться</button>
+        <button id="cancel" type="button" hidden>Отмена</button>
+      </div>
+    </form>
+    <div class="hint">Если дежурным раздали ссылку доступа вида <code>…/?access=…</code> — вставьте её целиком: сервер запомнит вход.<br>Сменить адрес потом: меню «Файл» (на Mac — «404») → «Сменить сервер…».</div>
+  </main>
+  <div class="ver" id="ver"></div>
+  <script src="setup.js"></script>
+</body>
+</html>

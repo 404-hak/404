@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <title>404 · нет связи</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <img class="mark" src="mark.svg" alt="">
+    <h1><span class="pulse" aria-hidden="true"></span>Нет связи с сервером</h1>
+    <p id="why">Сервер не отвечает. Приложение пробует подключиться само каждые несколько секунд.</p>
+    <p><code id="addr"></code></p>
+    <div class="row">
+      <button class="primary" id="retry" type="button">Повторить сейчас</button>
+      <button id="change" type="button">Изменить адрес</button>
+    </div>
+    <div class="hint" id="hint">Codespace засыпает, когда им не пользуются: откройте его на GitHub, и связь вернётся. Свой компьютер: проверьте, что запущен <code>bash scripts/start.sh</code> и что вы в той же сети.</div>
+  </main>
+  <div class="ver" id="ver"></div>
+  <script src="offline.js"></script>
+</body>
+</html>

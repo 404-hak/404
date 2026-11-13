@@ -1,15 +1,68 @@
+import Network
 import SwiftUI
 import WebKit
 
 /// Состояние загрузки страницы: ошибка, готовность и перезагрузка.
+/// Нет связи — пробует сам: через 5 с, потом реже (до 30 с); вернулась сеть или приложение снова открыли — сразу.
 final class WebModel: ObservableObject {
     @Published var error: String?
     @Published var loaded = false
+    @Published var retrying = false
     weak var webView: WKWebView?
+    var url: URL?
+    private var attempt = 0
+    private var retry: DispatchWorkItem?
+    private let monitor = NWPathMonitor()
+    private var active: NSObjectProtocol?
 
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            DispatchQueue.main.async { self?.retryNowIfFailed() }
+        }
+        monitor.start(queue: DispatchQueue(label: "app404.network"))
+        active = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.retryNowIfFailed()
+        }
+    }
+
+    deinit {
+        monitor.cancel()
+        retry?.cancel()
+        if let active { NotificationCenter.default.removeObserver(active) }
+    }
+
+    /// Экран «нет связи» не прячем, пока не подключились: без мигания при автоповторах
     func reload(_ url: URL) {
+        retry?.cancel()
+        retrying = error != nil
+        if let webView, webView.url != nil, error == nil { webView.reload() } else { webView?.load(URLRequest(url: url)) }
+    }
+
+    func succeeded() {
+        retry?.cancel()
+        attempt = 0
+        retrying = false
         error = nil
-        if let webView, webView.url != nil { webView.reload() } else { webView?.load(URLRequest(url: url)) }
+        loaded = true
+    }
+
+    func failed(_ message: String) {
+        retrying = false
+        error = message
+        guard let url else { return }
+        retry?.cancel()
+        let delay = min(30.0, 5.0 * pow(1.5, Double(attempt)))
+        attempt += 1
+        let work = DispatchWorkItem { [weak self] in self?.reload(url) }
+        retry = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func retryNowIfFailed() {
+        guard error != nil, let url else { return }
+        attempt = 0
+        reload(url)
     }
 }
 
@@ -44,8 +97,12 @@ struct WebScreen: View {
                     Text(url.absoluteString)
                         .font(.caption.monospaced())
                         .foregroundColor(.secondary)
-                    Button("Повторить") { model.reload(url) }
+                    Text("Пробую подключиться сам — и сразу, как только вернётся сеть.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button(model.retrying ? "Подключаюсь…" : "Повторить") { model.reload(url) }
                         .buttonStyle(.borderedProminent)
+                        .disabled(model.retrying)
                     Button("Изменить адрес", action: onChangeServer)
                 }
                 .padding(24)
@@ -147,6 +204,7 @@ struct WebView: UIViewRepresentable {
         view.addGestureRecognizer(tap)
 
         model.webView = view
+        model.url = url
         view.load(URLRequest(url: url))
         return view
     }
@@ -211,10 +269,20 @@ struct WebView: UIViewRepresentable {
 
         // MARK: загрузка
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            DispatchQueue.main.async {
-                self.parent.model.error = nil
-                self.parent.model.loaded = true
-            }
+            DispatchQueue.main.async { self.parent.model.succeeded() }
+        }
+
+        /// iOS выгрузила страницу из памяти, пока приложение было в фоне, — иначе остался бы пустой экран
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            if webView.url != nil { webView.reload() } else { webView.load(URLRequest(url: parent.url)) }
+        }
+
+        /// Микрофон — только своему серверу и только звук (раздел «Слух»: проверить сеть своим голосом).
+        /// Системный вопрос «Разрешить микрофон?» iOS задаст сама один раз (Info.plist → NSMicrophoneUsageDescription).
+        func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+            decisionHandler(origin.host == parent.url.host && type == .microphone ? .grant : .deny)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fail(error) }
@@ -223,13 +291,14 @@ struct WebView: UIViewRepresentable {
         private func fail(_ error: Error) {
             let e = error as NSError
             if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
-            DispatchQueue.main.async { self.parent.model.error = e.localizedDescription }
+            DispatchQueue.main.async { self.parent.model.failed(e.localizedDescription) }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
                      decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-            if navigationResponse.isForMainFrame, let http = navigationResponse.response as? HTTPURLResponse, http.statusCode >= 400 {
-                DispatchQueue.main.async { self.parent.model.error = "Сервер ответил кодом \(http.statusCode)" }
+            // 401 — страница «нужна ссылка доступа» или вход: её показывает сам сайт; ошибкой считаем только сбои сервера
+            if navigationResponse.isForMainFrame, let http = navigationResponse.response as? HTTPURLResponse, http.statusCode >= 500 {
+                DispatchQueue.main.async { self.parent.model.failed("Сервер ответил кодом \(http.statusCode)") }
             }
             decisionHandler(.allow)
         }
