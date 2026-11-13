@@ -19,6 +19,22 @@ function normalize(raw) {
   }
 }
 
+/**
+ * Вход GitHub, без которого не открывается приватный порт Codespaces (…app.github.dev): переходы на
+ * github.com и *.github.dev остаются в окне приложения. Если увести их в браузер, окно зависает
+ * на «Connecting to the forwarded port…», а дашборд открывается в браузере.
+ */
+function isSignIn(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return false;
+    const h = u.hostname;
+    return h === 'github.com' || h.endsWith('.github.com') || h === 'github.dev' || h.endsWith('.github.dev');
+  } catch {
+    return false;
+  }
+}
+
 const KIND = { motor: 'мотор', shot: 'выстрел', silence: 'тишина как улика', offline: 'буй не на связи' };
 
 /** Текст системного уведомления о тревоге из записи тревоги сайта. */
@@ -29,4 +45,4 @@ function alertText(a) {
   return { title, body: `${a.message || ''}${sure}`.trim() };
 }
 
-module.exports = { normalize, alertText };
+module.exports = { normalize, alertText, isSignIn };

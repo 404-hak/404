@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PKG = require('./package.json');
-const { alertText, normalize } = require('./lib');
+const { alertText, isSignIn, normalize } = require('./lib');
 const APP_ID = 'dev.hak404.dashboard';
 const BG = '#0B1628';
 const IS_MAC = process.platform === 'darwin';
@@ -68,15 +68,28 @@ function createWindow() {
   win.on('close', remember);
   win.on('focus', () => win.flashFrame(false));
 
-  // ссылки на чужие сайты — в браузере, свой сервер — в окне
+  // ссылки на чужие сайты — в браузере; свой сервер и вход GitHub (приватный порт Codespaces) — в окне
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSignIn(url)) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          parent: win, width: 520, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff',
+          webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+        },
+      };
+    }
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
-    if (url.startsWith('file:') || isOwn(url)) return;
+    if (url.startsWith('file:') || isOwn(url) || isSignIn(url)) return;
     e.preventDefault();
     if (/^https?:/.test(url)) void shell.openExternal(url);
+  });
+  // страницы входа GitHub прозрачные: под ними белый фон (иначе тёмный текст на тёмном), под своим сайтом — тёмный
+  win.webContents.on('did-navigate', (_e, url) => {
+    win.setBackgroundColor(url.startsWith('file:') || isOwn(url) ? BG : '#ffffff');
   });
 
   // сервер не ответил — свой экран «нет связи» (а не пустое окно)

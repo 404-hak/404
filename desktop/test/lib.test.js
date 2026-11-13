@@ -23,3 +23,16 @@ test('уведомление о тревоге: что, где, наскольк
   assert.equal(s.title, 'Тревога: буй не на связи — Чаячий-6');
   assert.equal(s.body, 'Буй не на связи.');                 // у «нет связи» уверенность не пишем
 });
+
+test('вход GitHub для приватного порта Codespaces остаётся в окне', () => {
+  const { isSignIn } = require('../lib');
+  assert.equal(isSignIn('https://github.com/login?return_to=%2Fcodespaces%2Fauth'), true);
+  assert.equal(isSignIn('https://github.com/codespaces/auth/name?port=8000'), true);
+  assert.equal(isSignIn('https://name-8000.app.github.dev/auth/postback/tunnel'), true);
+  assert.equal(isSignIn('https://api.github.com/'), true);
+  assert.equal(isSignIn('http://github.com/login'), false);          // только https
+  assert.equal(isSignIn('https://evilgithub.com/login'), false);
+  assert.equal(isSignIn('https://github.com.evil.ru/login'), false);
+  assert.equal(isSignIn('https://ru.wikipedia.org/'), false);
+  assert.equal(isSignIn('не адрес'), false);
+});
