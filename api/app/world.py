@@ -298,14 +298,16 @@ class World:
             raise KeyError(data.buoy_id)
         return self._make_alert(data)
 
-    def patch_alert(self, alert_id: str, status: str) -> Alert:
+    def patch_alert(self, alert_id: str, status: str, actor: str | None = None) -> Alert:
         for i, a in enumerate(self.alerts):
             if a.id == alert_id:
                 a.status = status  # type: ignore[assignment]
                 if status == "intercept" and a.intercept_at is None:
                     a.intercept_at = self.now()
+                    a.intercept_by = actor
                 if status == "resolved" and a.resolved_at is None:
                     a.resolved_at = self.now()
+                    a.resolved_by = actor
                 if self.store:
                     self.store.save_alert(a, i + 1)
                 return a

@@ -14,6 +14,7 @@ export interface Alert {
   lat: number; lon: number; confidence: number; status: AlertStatus; message: string;
   distance_km: number | null; match: Match | null; prev_hash: string; hash: string;
   intercept_at: string | null; resolved_at: string | null; synthetic: boolean;
+  intercept_by?: string | null; resolved_by?: string | null;
   /** SHA-256 звукового клипа-улики (есть, если тревогу подняла нейросеть по звуку буя) */
   audio_sha256?: string | null; probs?: Record<string, number> | null; source?: 'audio' | 'manual' | 'system';
 }
@@ -37,4 +38,9 @@ export interface NightForecast {
   date: string; weekday: string; moon_phase: string; moon_illumination: number; water_temp: number;
   risk: number; level: 'low' | 'elevated' | 'high'; wind_ms?: number; weather?: 'open-meteo' | 'seasonal';
 }
-export interface ChainCheck { ok: boolean; checked: number; broken_at: string | null; audio_checked?: number; reason?: string | null }
+export interface ChainCheck { ok: boolean; checked: number; broken_at: string | null; audio_checked?: number; reason?: string | null; journal_checked?: number; journal_head?: string | null }
+
+export type Role = 'observer' | 'duty' | 'senior';
+export interface Me { login: string | null; name: string; role: Role; role_title: string; accounts: boolean }
+export interface TeamMember { login: string; name: string; role: Role; created: string; disabled: boolean }
+export interface JournalEntry { seq: number; ts: string; actor: string; action: string; target: string | null; data: Record<string, unknown>; prev: string; hash: string }

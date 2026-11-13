@@ -4,7 +4,7 @@ import type { MapHandle } from '../geo';
 import type { Route } from '../route';
 import { KIND_TITLE, coord } from '../format';
 import { BUOY_STATUS } from '../geo';
-import { api } from '../live';
+import { api, can, currentMe } from '../live';
 import { contextActions, copyText, pageActions, type MenuItem } from '../upkUi';
 import { NAV } from './Nav';
 import { currentTheme, setThemePref } from '../theme';
@@ -35,8 +35,8 @@ export function useContextActions({ state, route, go, map, select }: {
         const items: MenuItem[] = [
           { label: 'Показать на карте', ic: 'pin', action: () => fly(a.lat, a.lon, 12) },
         ];
-        if (a.status === 'new') items.push({ label: 'Начать перехват', ic: 'boat', danger: true, action: () => api.setAlertStatus(a.id, 'intercept') });
-        if (a.status !== 'resolved') items.push({ label: a.status === 'new' ? 'Ложная тревога' : 'Задержан — закрыть', ic: 'check', action: () => api.setAlertStatus(a.id, 'resolved') });
+        if (a.status === 'new' && can('duty')) items.push({ label: 'Начать перехват', ic: 'boat', danger: true, action: () => api.setAlertStatus(a.id, 'intercept') });
+        if (a.status !== 'resolved' && can('duty')) items.push({ label: a.status === 'new' ? 'Ложная тревога' : 'Задержан — закрыть', ic: 'check', action: () => api.setAlertStatus(a.id, 'resolved') });
         items.push({ label: 'Скопировать координаты', ic: 'copy', action: () => copyText(coord(a.lat, a.lon), 'Координаты скопированы') });
         return { title: `${KIND_TITLE[a.kind]} · ${a.buoy_name}`, items };
       }),
@@ -107,6 +107,7 @@ export function useContextActions({ state, route, go, map, select }: {
         { label: on ? 'Выключить звук' : 'Включить звук', ic: on ? 'mute' : 'volume', action: () => setSound(!on) },
         { label: floatCursorOn() ? 'Обычный указатель' : 'Указатель-поплавок', ic: 'select', action: () => setFloatCursor(!floatCursorOn()) },
         { label: 'Показать заставку', ic: 'intro', action: () => showIntro() },
+        ...(currentMe().accounts ? [{ label: `Выйти · ${currentMe().name}`, ic: 'back', action: () => api.logout() }] : []),
       ];
     });
     return () => { off.forEach((f) => f()); pageActions(null); };

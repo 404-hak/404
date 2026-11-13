@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import type { Alert, AlertStatus, ChainCheck, NightForecast, State, Stats } from './types';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { Alert, AlertStatus, ChainCheck, JournalEntry, Me, NightForecast, Role, State, Stats, TeamMember } from './types';
 import { introPlaying, onIntroFinished } from './introBus';
 import { toast } from './upkUi';
 
@@ -77,4 +77,25 @@ export const api = {
   nights: (days = 14) => get<NightForecast[]>(`/api/forecast/nights?days=${days}`),
   alerts: (limit = 200) => get<Alert[]>(`/api/alerts?limit=${limit}`),
   verify: () => get<ChainCheck>('/api/evidence/verify'),
+  journal: (limit = 60) => get<JournalEntry[]>(`/api/journal?limit=${limit}`),
+  team: () => get<TeamMember[]>('/api/users'),
+  addMember: (m: { login: string; name: string; role: Role }) =>
+    fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m) })
+      .then(async (r) => (r.ok ? (r.json() as Promise<{ login: string; password: string }>) : Promise.reject(new Error((await r.json().catch(() => ({}))).detail ?? `${r.status}`)))),
+  patchMember: (login: string, patch: { role?: Role; disabled?: boolean; reset_password?: boolean }) =>
+    fetch(`/api/users/${encodeURIComponent(login)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      .then(async (r) => (r.ok ? (r.json() as Promise<{ login: string; password: string | null }>) : Promise.reject(new Error((await r.json().catch(() => ({}))).detail ?? `${r.status}`)))),
+  logout: () => post('/api/auth/logout').then(() => location.reload()),
 };
+
+// ---------- кто вошёл: роль решает, какие кнопки видны ----------
+const RANK: Record<Role, number> = { observer: 0, duty: 1, senior: 2 };
+let me: Me = { login: null, name: 'без входа', role: 'senior', role_title: 'старший', accounts: false };
+const meSubs = new Set<() => void>();
+export function loadMe() {
+  return get<Me>('/api/auth/me').then((m) => { me = m; meSubs.forEach((f) => f()); }).catch(() => {});
+}
+export const currentMe = () => me;
+/** Можно ли с этой ролью: наблюдатель < дежурный < старший */
+export const can = (role: Role) => RANK[me.role] >= RANK[role];
+export const useMe = () => useSyncExternalStore((f) => { meSubs.add(f); return () => { meSubs.delete(f); }; }, () => me);

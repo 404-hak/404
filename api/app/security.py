@@ -59,52 +59,115 @@ code{color:#E2E8F0;background:#13243A;padding:2px 6px;border-radius:6px}</style>
 </section></main></body></html>"""
 
 
+ACCOUNTS = None          # app.accounts.Accounts — ставит main.py
+SESSION = "s404"
+OPEN_USER = {"login": None, "name": "без входа", "role": "senior"}
+LINK_USER = {"login": None, "name": "по ссылке доступа", "role": "senior"}
+SERVICE_USER = {"login": None, "name": "служебный доступ", "role": "senior"}
+# без входа открыты: проверка живости, robots, сам вход и значок для страницы входа
+OPEN_WITH_ACCOUNTS = re.compile(r"^/(api/health|robots\.txt|api/auth/(login|logout)|brand/favicon\.(svg|ico))$")
+
+
+def _cookie(h: dict[str, str], name: str) -> str | None:
+    jar = SimpleCookie()
+    try:
+        jar.load(h.get("cookie", ""))
+    except Exception:  # noqa: BLE001 — битая cookie = нет cookie
+        return None
+    return jar[name].value if name in jar else None
+
+
+def session_cookie(sid: str, https: bool, days: int) -> str:
+    secure = "; Secure" if https else ""
+    return f"{SESSION}={sid}; Path=/; Max-Age={days * 86400}; HttpOnly; SameSite=Strict{secure}"
+
+
+LOGIN_HTML = """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><meta name="theme-color" content="#0B1628"><link rel="icon" href="/brand/favicon.svg" type="image/svg+xml">
+<title>404 · вход</title><style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#0B1628;color:#E2E8F0;font:16px/1.5 Inter,system-ui,sans-serif}
+main{min-height:100%;display:grid;place-items:center;padding:24px}
+form{width:min(360px,100%);padding:28px 24px 24px;border-radius:22px;background:#13243A;box-shadow:inset 0 0 0 1px rgb(226 232 240/.08),0 30px 60px -20px rgb(0 0 0/.6)}
+h1{margin:0 0 4px;font-size:22px;letter-spacing:-.01em}p{margin:0 0 20px;color:#A2A9B4;font-size:14px}
+label{display:block;margin:0 0 6px;font-size:13px;color:#A2A9B4}
+input{width:100%;height:44px;margin:0 0 14px;padding:0 14px;border:0;border-radius:12px;background:#0B1628;color:#E2E8F0;font:inherit;outline:none;box-shadow:inset 0 0 0 1px rgb(226 232 240/.14)}
+input:focus{box-shadow:inset 0 0 0 1.5px #7A866F}
+button{position:relative;overflow:hidden;width:100%;height:46px;margin-top:6px;border:0;border-radius:12px;background:#E2E8F0;color:#0B1628;font:600 15px/1 inherit;cursor:pointer}
+button:disabled{opacity:.6}.err{min-height:20px;margin:10px 0 0;color:#F87171;font-size:13.5px}
+.mark{display:block;width:34px;height:34px;margin:0 0 14px}
+</style></head><body><main><form id="f" autocomplete="on">
+<img class="mark" src="/brand/favicon.svg" alt="404">
+<h1>Вход для дежурных</h1><p>Дельта Волги · сеть акустических буёв</p>
+<label for="l">Логин</label><input id="l" name="username" autocomplete="username" required autofocus>
+<label for="p">Пароль</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+<button id="b" type="submit">Войти</button><div class="err" id="e" role="alert"></div>
+</form></main><script>
+const f=document.getElementById('f'),e=document.getElementById('e'),b=document.getElementById('b');
+f.addEventListener('submit',async(ev)=>{ev.preventDefault();b.disabled=true;e.textContent='';
+try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:f.username.value,password:f.password.value})});
+if(r.ok){location.reload();return}const j=await r.json().catch(()=>({}));e.textContent=j.detail||'Не получилось войти';}
+catch{e.textContent='Нет связи с сервером'}b.disabled=false;});
+</script></body></html>"""
+
+
 class AccessGate:
-    """Пускает только со ссылкой доступа, cookie или Bearer-токеном (когда задан ACCESS_TOKEN)."""
+    """Кто пришёл: учётная запись (сессия), ссылка доступа (ACCESS_TOKEN), служебный Bearer-токен или режим показа.
+    Кладёт пользователя в scope["state"]["user"] — его роль проверяют обработчики (main.need)."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] not in ("http", "websocket"):
+            return await self.app(scope, receive, send)
+        state = scope.setdefault("state", {})
         token = access_token()
-        if scope["type"] not in ("http", "websocket") or not token:
+        accounts_on = ACCOUNTS is not None and ACCOUNTS.enabled()
+        if not accounts_on and not token:
+            state["user"] = OPEN_USER
             return await self.app(scope, receive, send)
         path = scope.get("path", "")
-        if PUBLIC.match(path):
+        h = _headers(scope)
+        if (OPEN_WITH_ACCOUNTS if accounts_on else PUBLIC).match(path):
+            state["user"] = None
             return await self.app(scope, receive, send)
         # у буёв свой токен на свои два адреса (проверяет buoy_auth)
         if buoy_token() and BUOY_PATH.match(path):
+            state["user"] = None
             return await self.app(scope, receive, send)
-        h = _headers(scope)
         auth = h.get("authorization", "")
-        if auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), token):
-            return await self.app(scope, receive, send)
-        jar = SimpleCookie()
-        try:
-            jar.load(h.get("cookie", ""))
-        except Exception:  # noqa: BLE001 — битая cookie = нет cookie
-            jar = SimpleCookie()
-        if COOKIE in jar and hmac.compare_digest(jar[COOKIE].value, cookie_value(token)):
+        if token and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), token):
+            state["user"] = SERVICE_USER
             return await self.app(scope, receive, send)
 
-        # ссылка доступа: ставим cookie и убираем токен из адреса (он не останется в истории и в Referer)
-        query = parse_qsl(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
-        given = next((v for k, v in query if k == "access"), None)
-        if scope["type"] == "http" and given is not None and hmac.compare_digest(given, token):
-            rest = urlencode([(k, v) for k, v in query if k != "access"])
-            location = path + (f"?{rest}" if rest else "")
-            secure = "; Secure" if _https(scope, h) else ""
-            cookie = f"{COOKIE}={cookie_value(token)}; Path=/; Max-Age={COOKIE_DAYS * 86400}; HttpOnly; SameSite=Strict{secure}"
-            await send({"type": "http.response.start", "status": 303,
-                        "headers": [(b"location", location.encode()), (b"set-cookie", cookie.encode()), (b"cache-control", b"no-store")]})
-            await send({"type": "http.response.body", "body": b""})
-            return
+        if accounts_on:
+            user = ACCOUNTS.session_user(_cookie(h, SESSION))
+            if user:
+                state["user"] = user
+                return await self.app(scope, receive, send)
+        else:
+            if (c := _cookie(h, COOKIE)) and hmac.compare_digest(c, cookie_value(token)):
+                state["user"] = LINK_USER
+                return await self.app(scope, receive, send)
+            # ссылка доступа: ставим cookie и убираем токен из адреса (он не останется в истории и в Referer)
+            query = parse_qsl(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
+            given = next((v for k, v in query if k == "access"), None)
+            if scope["type"] == "http" and given is not None and hmac.compare_digest(given, token):
+                rest = urlencode([(k, v) for k, v in query if k != "access"])
+                location = path + (f"?{rest}" if rest else "")
+                secure = "; Secure" if _https(scope, h) else ""
+                cookie = f"{COOKIE}={cookie_value(token)}; Path=/; Max-Age={COOKIE_DAYS * 86400}; HttpOnly; SameSite=Strict{secure}"
+                await send({"type": "http.response.start", "status": 303,
+                            "headers": [(b"location", location.encode()), (b"set-cookie", cookie.encode()), (b"cache-control", b"no-store")]})
+                await send({"type": "http.response.body", "body": b""})
+                return
 
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 1008})
             return
         wants_html = "text/html" in h.get("accept", "") and not path.startswith("/api/")
-        body = DENIED_HTML.encode() if wants_html else b'{"detail":"\\u041d\\u0443\\u0436\\u0435\\u043d \\u0434\\u043e\\u0441\\u0442\\u0443\\u043f"}'
+        page = LOGIN_HTML if accounts_on else DENIED_HTML
+        body = page.encode() if wants_html else '{"detail":"Нужен вход"}'.encode()
         ctype = b"text/html; charset=utf-8" if wants_html else b"application/json"
         await send({"type": "http.response.start", "status": 401,
                     "headers": [(b"content-type", ctype), (b"cache-control", b"no-store"), (b"x-robots-tag", b"noindex, nofollow")]})
@@ -142,7 +205,7 @@ class Hardening:
         path = scope.get("path", "")
         h = _headers(scope)
         https = _https(scope, h)
-        private = bool(access_token())
+        private = bool(access_token()) or (ACCOUNTS is not None and ACCOUNTS.enabled())
 
         async def send_wrapped(message):
             if message["type"] == "http.response.start":

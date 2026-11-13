@@ -41,6 +41,8 @@ class Alert(BaseModel):
     confidence: float
     status: AlertStatus = "new"
     message: str
+    intercept_by: str | None = None     # кто начал перехват (из журнала действий)
+    resolved_by: str | None = None      # кто закрыл
     distance_km: float | None = None
     match: Match | None = None
     fingerprint: list[float] | None = None
@@ -107,6 +109,8 @@ class ChainCheck(BaseModel):
     broken_at: str | None = None
     audio_checked: int = Field(default=0, description="Сколько звуковых улик сверено с их SHA-256")
     reason: str | None = None
+    journal_checked: int = Field(default=0, description="Сколько записей журнала действий проверено")
+    journal_head: str | None = Field(default=None, description="Хэш последней записи журнала — его можно сохранить вне сервера")
 
 
 class ClipResult(BaseModel):

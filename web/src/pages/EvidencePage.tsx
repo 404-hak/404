@@ -1,5 +1,6 @@
 import { scrambleRef } from '../upkMotion';
 import Clip from '../components/Clip';
+import { JournalCard, TeamCard } from '../components/Team';
 import { useEffect, useRef, useState } from 'react';
 import type { Alert, ChainCheck, State } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM } from '../format';
@@ -56,7 +57,7 @@ export default function EvidencePage({ state }: { state: State }) {
         <div className={`enter mb-4 flex items-center gap-3 rounded-[14px] border px-4 py-3 text-[14px] ${check.ok ? 'border-accent/50 bg-accent/10' : 'border-alert/60 bg-alert/10'}`} role="status">
           <span className={`grid h-7 w-7 place-items-center rounded-full text-[14px] font-bold text-bg ${check.ok ? 'bg-accent' : 'bg-alert'}`}>{check.ok ? '✓' : '!'}</span>
           {check.ok
-            ? <>Цепочка цела: проверено {check.checked} записей{check.audio_checked ? <> и {check.audio_checked} звуковых улик</> : null}, ни одна не изменена.</>
+            ? <>Цепочка цела: проверено {check.checked} записей{check.audio_checked ? <> и {check.audio_checked} звуковых улик</> : null}{check.journal_checked ? <>, журнал действий — {check.journal_checked}</> : null}, ни одна не изменена.</>
             : <>Цепочка нарушена на записи {check.broken_at}: {check.reason ?? 'она или запись перед ней была изменена'}.</>}
         </div>
       )}
@@ -93,6 +94,8 @@ export default function EvidencePage({ state }: { state: State }) {
           {chain.length > shown.length && <p className="mt-3 text-[12px] text-muted">…и ещё {chain.length - shown.length} записей. Проверка идёт по всей цепочке.</p>}
         </Card>
       )}
+      <JournalCard refresh={state.alerts.length} />
+      <TeamCard />
     </Page>
   );
 }

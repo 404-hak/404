@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Alert, AlertStatus, State, Stats } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM, isToday, km, pct } from '../format';
-import { api } from '../live';
+import { api, useMe } from '../live';
 import { Kpi, Page } from './common';
 import { scrambleRef } from '../upkMotion';
 import SatSnap from '../components/SatSnap';
@@ -14,6 +14,7 @@ const COLS: { id: AlertStatus; title: string; hint: string; dot: string }[] = [
 const KIND_DOT = { motor: 'bg-alert', shot: 'bg-alert', silence: 'bg-warn', offline: 'bg-grey' } as const;
 
 function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => void; i: number }) {
+  const canAct = useMe().role !== 'observer';
   const minutes = a.intercept_at ? Math.round((new Date(a.intercept_at).getTime() - new Date(a.ts).getTime()) / 60000) : null;
   return (
     <article data-alert-id={a.id} className={`ui-tile enter group rounded-[14px] border bg-bg/60 p-4 transition-[border-color,transform] duration-500 ease-[cubic-bezier(.16,1,.3,1)] hover:-translate-y-0.5 ${a.status === 'new' ? 'border-alert/60' : 'border-line hover:border-white/25'}`}
@@ -33,14 +34,16 @@ function AlertTile({ a, now, onMap, i }: { a: Alert; now: string; onMap: () => v
         <span>уверенность {pct(a.confidence)}</span>
         {a.distance_km != null && <span>{km(a.distance_km)} от катера</span>}
         {minutes != null && a.status === 'resolved' && <span>реакция {minutes} мин</span>}
+        {a.status === 'intercept' && a.intercept_by && <span>перехват · {a.intercept_by}</span>}
+        {a.status === 'resolved' && a.resolved_by && <span>закрыл · {a.resolved_by}</span>}
         {a.match && <span className="text-primary">катер {a.match.vessel_id}</span>}
       </div>
       <div className="mt-3 flex gap-2">
-        {a.status === 'new' && (
+        {canAct && a.status === 'new' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
             className="ui-btn ui-btn-danger btn-shine ink-host h-8 flex-1 rounded-[8px] bg-alert text-[12px] font-semibold text-bg hover:bg-alert/90">Начать перехват</button>
         )}
-        {a.status !== 'resolved' && (
+        {canAct && a.status !== 'resolved' && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'resolved')}
             className="ui-btn h-8 flex-1 rounded-[8px] border border-line text-[12px] font-semibold hover:border-grey">{a.status === 'new' ? 'Ложная' : 'Задержан'}</button>
         )}

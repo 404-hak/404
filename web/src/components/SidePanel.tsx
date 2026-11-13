@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, ty
 import type { Alert, Buoy, Forecast, State } from '../types';
 import { KIND_TITLE, coord, fmtDM, fmtHM, fmtTime, isToday, km, pct, plural, shortHash } from '../format';
 import { BUOY_STATUS, sectorCenter, type MapHandle, type Selection } from '../geo';
-import { api } from '../live';
+import { api, useMe } from '../live';
 import { useTween } from '../motion';
 import Moon from './Moon';
 import SatSnap from './SatSnap';
@@ -93,6 +93,8 @@ function ForecastCard({ f, state, handle }: { f: Forecast; state: State; handle:
 
 function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
   const intercept = a.status === 'intercept';
+  const me = useMe();
+  const canAct = me.role !== 'observer';
   return (
     <section className="alert-flash border-b border-alert/30 p-5" data-alert-id={a.id}>
       <div className="enter flex items-center justify-between gap-2">
@@ -127,7 +129,11 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
         </div>
       )}
 
-      <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
+      {intercept && a.intercept_by && (
+        <p className="enter mt-3 text-[12px] text-muted" style={{ animationDelay: '250ms' }}>Перехват начал: <span className="text-primary">{a.intercept_by}</span></p>
+      )}
+      {!canAct && <p className="enter mt-4 text-[12.5px] text-muted">Вы наблюдатель: решение по тревоге принимает дежурный.</p>}
+      {canAct && <div className="enter mt-5 flex gap-2" style={{ animationDelay: '260ms' }}>
         {!intercept && (
           <button type="button" onClick={() => api.setAlertStatus(a.id, 'intercept')}
             className="ui-btn ui-btn-danger btn-shine ink-host h-10 flex-1 rounded-[9px] bg-alert text-[13px] font-semibold text-bg hover:bg-alert/90">
@@ -138,7 +144,7 @@ function AlertCard({ a, handle }: { a: Alert; handle: Handle }) {
           onClick={() => api.setAlertStatus(a.id, 'resolved')}>
           {intercept ? 'Задержан — закрыть' : 'Ложная тревога'}
         </button>
-      </div>
+      </div>}
       <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[10px] text-muted">
         <button type="button" className="hover:text-primary" onClick={() => handle.current?.flyTo(a.lat, a.lon)}>{coord(a.lat, a.lon)}</button>
         <span title={`Запись в цепочке SHA-256: ${a.hash}`}>запись {shortHash(a.hash)}</span>

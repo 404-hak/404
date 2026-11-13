@@ -4,7 +4,7 @@ import MapShell from './components/MapShell';
 import SidePanel from './components/SidePanel';
 import Ambient from './components/Ambient';
 import { BottomNav, Sidebar } from './components/Nav';
-import { api, useLiveState } from './live';
+import { api, loadMe, useLiveState } from './live';
 import { plural } from './format';
 import type { MapHandle } from './geo';
 import { useRoute, type Route } from './route';
@@ -45,6 +45,7 @@ function introWanted() {
 
 export default function App() {
   const { state, online } = useLiveState();
+  useEffect(() => { void loadMe(); }, []);
   const [route, go] = useRoute();
   const lastAlert = useRef<string | null>(null);
   const map = useRef<MapHandle | null>(null);

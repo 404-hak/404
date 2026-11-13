@@ -31,7 +31,9 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import security
+from .accounts import ROLE_TITLE, ROLES, SESSION_DAYS, Accounts
 from .audio import dsp, lab
+from .ratelimit import Limiter
 from .audio.dsp import AudioError
 from .models import Alert, AlertIn, AlertPatch, Buoy, ChainCheck, ClipResult, Forecast, Heartbeat, ModelInfo, NightForecast, State, Stats, Weather
 from .sim import Sim
@@ -51,6 +53,35 @@ LAB_MAX_BYTES = 60_000_000                     # разобранные в ла�
 weather = OpenMeteo() if os.getenv("WEATHER", "1") != "0" else None
 world = World(store=Store(DATA_DIR / "404.db"), clips=Clips(DATA_DIR / "clips"), weather=weather)
 clients: set[WebSocket] = set()
+accounts = Accounts(world.store)
+security.ACCOUNTS = accounts
+login_ip = Limiter(20, 600)          # попыток входа с одного адреса за 10 минут
+login_fail = Limiter(6, 900)         # неудачных паролей на один логин за 15 минут
+lab_ip = Limiter(30, 60)             # разборов нейросетью с одного адреса в минуту
+
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+def user_of(request: Request) -> dict:
+    """Кто делает запрос (кладёт security.AccessGate); без входа и ссылки — режим показа с полными правами."""
+    return getattr(request.state, "user", None) or security.OPEN_USER
+
+
+def need(role: str):
+    """Зависимость: у пользователя роль не ниже role (наблюдатель < дежурный < старший)."""
+    def check(request: Request) -> dict:
+        u = user_of(request)
+        if ROLES.get(u["role"], -1) < ROLES[role]:
+            raise HTTPException(403, f"Нужна роль «{ROLE_TITLE[role]}»")
+        return u
+    return check
+
+
+def lab_limit(request: Request) -> None:
+    if not lab_ip.allow(client_ip(request)):
+        raise HTTPException(429, "Слишком много разборов подряд — подождите минуту")
 
 
 async def publish() -> None:
@@ -258,7 +289,7 @@ def lab_presets() -> dict:
     return {"presets": [{"id": k, "title": v} for k, v in lab.PRESETS.items()], "archive": list(ARCHIVE_VESSELS)}
 
 
-@app.post("/api/lab/scene")
+@app.post("/api/lab/scene", dependencies=[Depends(need("duty")), Depends(lab_limit)])
 async def lab_scene(p: LabScene) -> dict:
     """Синтезировать сцену (мотор, выстрел, тишина, помехи) и разобрать её нейросетью. Ничего не меняет в системе."""
     _need_model()
@@ -272,7 +303,7 @@ async def lab_scene(p: LabScene) -> dict:
     return await asyncio.to_thread(run)
 
 
-@app.post("/api/lab/analyze", openapi_extra={"requestBody": {"required": True, "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}}}})
+@app.post("/api/lab/analyze", openapi_extra={"requestBody": {"required": True, "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}}}}, dependencies=[Depends(need("duty")), Depends(lab_limit)])
 async def lab_analyze(request: Request, name: str | None = None, medium: Literal["water", "air"] = "air") -> dict:
     """Разобрать свой звук (WAV до 30 с): всё, что видит и решает нейросеть, без тревог.
     medium — где записан звук: по умолчанию микрофон в воздухе; water — запись гидрофона."""
@@ -286,7 +317,7 @@ async def lab_analyze(request: Request, name: str | None = None, medium: Literal
                                    medium)
 
 
-@app.post("/api/lab/clip/{sha}")
+@app.post("/api/lab/clip/{sha}", dependencies=[Depends(need("duty")), Depends(lab_limit)])
 async def lab_clip(sha: str) -> dict:
     """Разобрать клип, который прислал буй (из журнала клипов)."""
     _need_model()
@@ -321,22 +352,26 @@ def get_alerts(limit: int = 30) -> list[Alert]:
 
 
 @app.post("/api/alerts", response_model=Alert, status_code=201)
-async def post_alert(data: AlertIn) -> Alert:
+async def post_alert(data: AlertIn, u: dict = Depends(need("duty"))) -> Alert:
     """Событие напрямую (без звука): от внешнего детектора или для проверки."""
     try:
         a = world.add_alert(data)
     except KeyError:
         raise HTTPException(404, f"Неизвестный буй: {data.buoy_id}")
+    accounts.record(u["name"], "alert.add", a.id, kind=a.kind, buoy=a.buoy_name)
     await publish()
     return a
 
 
 @app.patch("/api/alerts/{alert_id}", response_model=Alert)
-async def patch_alert(alert_id: str, body: AlertPatch) -> Alert:
+async def patch_alert(alert_id: str, body: AlertPatch, u: dict = Depends(need("duty"))) -> Alert:
+    before = next((x.status for x in world.alerts if x.id == alert_id), None)
     try:
-        a = world.patch_alert(alert_id, body.status)
+        a = world.patch_alert(alert_id, body.status, u["name"])
     except KeyError:
         raise HTTPException(404, f"Нет алерта {alert_id}")
+    # кто и когда решил — в журнал действий (хэш-цепочка): «закрыл как ложную» потом не оспорить
+    accounts.record(u["name"], "alert.status", alert_id, before=before, after=body.status, kind=a.kind, buoy=a.buoy_name)
     await publish()
     return a
 
@@ -372,26 +407,121 @@ def get_stats(days: int = 30) -> Stats:
 
 @app.get("/api/evidence/verify", response_model=ChainCheck)
 def verify() -> ChainCheck:
-    """Проверка цепочки SHA-256 и звуковых улик: цела ли доказательная база."""
-    return world.verify_chain()
+    """Проверка цепочки SHA-256 и звуковых улик, а также журнала действий: цела ли доказательная база."""
+    c = world.verify_chain()
+    n, broken = accounts.verify()
+    c.journal_checked, c.journal_head = n, accounts.head()
+    if broken and c.ok:
+        c.ok, c.broken_at, c.reason = False, f"журнал #{broken}", "запись журнала действий изменена"
+    return c
+
+
+# ---------- вход, люди, журнал действий ----------
+class LoginIn(BaseModel):
+    login: str = Field(max_length=40)
+    password: str = Field(max_length=200)
+
+
+class UserIn(BaseModel):
+    login: str = Field(max_length=40)
+    name: str = Field(default="", max_length=80)
+    role: Literal["observer", "duty", "senior"] = "duty"
+
+
+class UserPatch(BaseModel):
+    role: Literal["observer", "duty", "senior"] | None = None
+    disabled: bool | None = None
+    reset_password: bool = False
+
+
+@app.post("/api/auth/login")
+def auth_login(body: LoginIn, request: Request, response: Response) -> dict:
+    ip, login = client_ip(request), body.login.strip().lower()
+    if not login_ip.allow(ip) or login_fail.blocked(login):
+        raise HTTPException(429, "Слишком много попыток — подождите несколько минут")
+    sid = accounts.login(login, body.password)
+    if not sid:
+        login_fail.allow(login)
+        accounts.record(login or "?", "auth.fail", login, ip=ip)
+        raise HTTPException(401, "Неверный логин или пароль")
+    login_fail.reset(login)
+    u = accounts.session_user(sid)
+    accounts.record(u["name"], "auth.login", login, ip=ip)
+    https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").startswith("https")
+    response.headers["set-cookie"] = security.session_cookie(sid, https, SESSION_DAYS)
+    return {"login": u["login"], "name": u["name"], "role": u["role"]}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request, response: Response) -> dict:
+    sid = request.cookies.get(security.SESSION)
+    u = accounts.session_user(sid)
+    accounts.logout(sid)
+    if u:
+        accounts.record(u["name"], "auth.logout", u["login"])
+    response.headers["set-cookie"] = f"{security.SESSION}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict"
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request) -> dict:
+    u = user_of(request)
+    return {**u, "role_title": ROLE_TITLE[u["role"]], "accounts": accounts.enabled()}
+
+
+@app.get("/api/users")
+def users_list(_: dict = Depends(need("senior"))) -> list[dict]:
+    return accounts.users()
+
+
+@app.post("/api/users", status_code=201)
+def users_add(body: UserIn, u: dict = Depends(need("senior"))) -> dict:
+    try:
+        pw = accounts.add(body.login, body.role, body.name)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    accounts.record(u["name"], "user.add", body.login.strip().lower(), role=body.role)
+    return {"login": body.login.strip().lower(), "password": pw}
+
+
+@app.patch("/api/users/{login}")
+def users_patch(login: str, body: UserPatch, u: dict = Depends(need("senior"))) -> dict:
+    if u.get("login") == login and (body.disabled or (body.role and body.role != "senior")):
+        raise HTTPException(422, "Себя отключить или понизить нельзя — попросите другого старшего")
+    try:
+        pw = accounts.update(login, role=body.role, disabled=body.disabled, reset=body.reset_password)
+    except KeyError:
+        raise HTTPException(404, "Нет такого человека")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    accounts.record(u["name"], "user.update", login, role=body.role, disabled=body.disabled, reset=body.reset_password)
+    return {"login": login, "password": pw}
+
+
+@app.get("/api/journal")
+def journal(limit: int = 100, _: dict = Depends(need("duty"))) -> list[dict]:
+    """Журнал действий: кто и что сделал, новые сверху. Каждая запись сцеплена с предыдущей SHA-256."""
+    return accounts.journal(limit)
 
 
 # ---------- демо ----------
 @app.post("/api/demo/run")
-async def demo_run(calm_s: float = 4, warn_s: float = 8) -> dict:
+async def demo_run(calm_s: float = 4, warn_s: float = 8, u: dict = Depends(need("duty"))) -> dict:
     if not DEMO:
         raise HTTPException(403, "Демо выключено на этом сервере (DEMO=0)")
     sim.start_demo(max(0.5, min(calm_s, 60)), max(0.5, min(warn_s, 120)))
+    accounts.record(u["name"], "demo.run")
     return {"started": True}
 
 
 @app.post("/api/demo/reset")
-async def demo_reset() -> dict:
+async def demo_reset(u: dict = Depends(need("duty"))) -> dict:
     # сброс стирает базу и звуковые улики — на настоящих данных недоступен
     if not DEMO:
         raise HTTPException(403, "Демо выключено на этом сервере (DEMO=0)")
     sim.stop_demo()
     world.reset()
+    accounts.record(u["name"], "demo.reset")
     await publish()
     return {"reset": True}
 

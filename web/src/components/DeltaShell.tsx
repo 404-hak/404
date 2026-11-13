@@ -10,6 +10,7 @@ import { showIntro } from '../introBus';
 import { useTween } from '../motion';
 import { HAZES, hazePicker, setHaze, useHaze } from './MapHaze';
 import SatSnap from './SatSnap';
+import { api, useMe } from '../live';
 import { KIND_TITLE } from '../format';
 
 const TZ = 'Europe/Astrakhan';
@@ -77,6 +78,8 @@ interface Props {
  * На телефоне лист выезжает снизу, ручка разворачивает его на весь экран.
  */
 export default function DeltaShell({ state, online, route, go, badges, page, handle, selected, onSelect, onDemo, onReset }: Props) {
+  const me = useMe();
+  const canAct = me.role !== 'observer';
   const vp = useViewport();
   const phone = vp.w < 768;
   const [now, setNow] = useState(new Date());
@@ -175,13 +178,19 @@ export default function DeltaShell({ state, online, route, go, badges, page, han
           <span className={`truncate font-semibold ${state.mode === 'alarm' || state.mode === 'intercept' ? 'text-alert' : ''}`}>{m ? m.label : 'Нет связи'}</span>
           {m && <span className="hidden truncate text-muted xl:inline">{m.hint}</span>}
         </div>
-        <span className="hidden items-center gap-1 lg:flex">
+        {canAct && <span className="hidden items-center gap-1 lg:flex">
           <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm text-muted hover:text-primary" onClick={onDemo} title="Для показа: прогон сценария тревоги"><Play />Демо</button>
           <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm text-muted hover:text-primary" onClick={onReset} title="Вернуть демо в начало"><Reset />Сбросить</button>
-        </span>
-        <span className="lg:hidden">
+        </span>}
+        {canAct && <span className="lg:hidden">
           <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm !w-8 !px-0 text-muted hover:text-primary" onClick={onDemo} title="Запустить демо" aria-label="Запустить демо"><Play /></button>
-        </span>
+        </span>}
+        {me.accounts && (
+          <button type="button" className="delta-me" onClick={() => api.logout()} title={`${me.name} · ${me.role_title}. Нажмите, чтобы выйти`}>
+            <span className="delta-me-dot" aria-hidden>{me.name.slice(0, 1).toUpperCase()}</span>
+            <span className="hidden min-w-0 truncate md:inline">{me.name}</span>
+          </button>
+        )}
         <ThemeSwitch compact always />
         <SoundToggle always />
       </header>
