@@ -15,4 +15,4 @@ fi
 # Codespaces уже мог запустить дашборд при открытии — останавливаем старый, чтобы не было «address already in use»
 if pkill -f "uvicorn app.main:app" 2>/dev/null; then echo "Остановлен предыдущий запуск дашборда"; sleep 1; fi
 echo "Дашборд: порт ${PORT:-8000} (в Codespaces — вкладка «Порты»). Обновите страницу в браузере: Ctrl+Shift+R"
-cd api && exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+cd api && exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --ws-max-size 65536 --proxy-headers

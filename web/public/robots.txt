@@ -1,0 +1,4 @@
+# Дашборд дежурного — не для поисковиков. Публичная страница проекта — отдельно (docs/audit/04-seo.md).
+User-agent: *
+Disallow: /api/
+Disallow: /ws

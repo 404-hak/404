@@ -59,7 +59,7 @@ class AlertIn(BaseModel):
     kind: AlertKind
     confidence: float = Field(ge=0, le=1)
     ts: datetime | None = None
-    fingerprint: list[float] | None = Field(default=None, description="Акустический отпечаток мотора (эмбеддинг)")
+    fingerprint: list[float] | None = Field(default=None, max_length=1024, description="Акустический отпечаток мотора (эмбеддинг)")
 
 
 class AlertPatch(BaseModel):

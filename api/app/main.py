@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import secrets
 import uuid
 from collections import OrderedDict
@@ -29,6 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import security
 from .audio import dsp, lab
 from .audio.dsp import AudioError
 from .models import Alert, AlertIn, AlertPatch, Buoy, ChainCheck, ClipResult, Forecast, Heartbeat, ModelInfo, NightForecast, State, Stats, Weather
@@ -42,6 +44,9 @@ API_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.getenv("DATA_DIR") or API_DIR / "data")
 BUOY_TOKEN = os.getenv("BUOY_TOKEN", "")
 MAX_CLIP_BYTES = 10_000_000
+DEMO = os.getenv("DEMO", "1") != "0"          # DEMO=0 на настоящих данных: демо-сброс стирает базу и улики
+MAX_WS_CLIENTS = int(os.getenv("MAX_WS_CLIENTS", "200"))
+LAB_MAX_BYTES = 60_000_000                     # разобранные в лаборатории записи держим в памяти не больше этого
 
 weather = OpenMeteo() if os.getenv("WEATHER", "1") != "0" else None
 world = World(store=Store(DATA_DIR / "404.db"), clips=Clips(DATA_DIR / "clips"), weather=weather)
@@ -75,6 +80,7 @@ async def weather_loop() -> None:
 
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
+    security.startup_warnings()
     tasks = [asyncio.create_task(sim.run())]
     if weather:
         tasks.append(asyncio.create_task(weather_loop()))
@@ -84,9 +90,30 @@ async def lifespan(_: FastAPI):
         t.cancel()
 
 
-app = FastAPI(title="404 API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="404 API", version="0.3.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
                    allow_methods=["*"], allow_headers=["*"])
+# снаружи внутрь: заголовки безопасности → доступ по ссылке → сжатие → приложение
+app.add_middleware(security.Compress)
+app.add_middleware(security.AccessGate)
+app.add_middleware(security.Hardening)
+
+
+async def read_body(request: Request, limit: int = MAX_CLIP_BYTES) -> bytes:
+    """Тело запроса с пределом: по Content-Length отказываем сразу, иначе читаем потоком и обрываем на пределе."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(413, f"Файл больше {limit // 1_000_000} МБ")
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise HTTPException(413, f"Файл больше {limit // 1_000_000} МБ")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def buoy_auth(authorization: str | None = Header(default=None)) -> None:
@@ -99,7 +126,7 @@ def buoy_auth(authorization: str | None = Header(default=None)) -> None:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "model": world.model is not None, "db": str(world.store.path) if world.store else None}
+    return {"ok": True, "model": world.model is not None, "db": world.store is not None}
 
 
 @app.get("/api/state", response_model=State)
@@ -120,9 +147,7 @@ async def post_audio(buoy_id: str, request: Request, ts: datetime | None = None)
 
     Пример: curl -X POST --data-binary @clip.wav -H 'Content-Type: audio/wav' localhost:8000/api/buoys/b04/audio
     """
-    wav = await request.body()
-    if len(wav) > MAX_CLIP_BYTES:
-        raise HTTPException(413, "Клип больше 10 МБ")
+    wav = await read_body(request)
     try:
         res = await asyncio.to_thread(world.ingest, buoy_id, wav, ts)
     except KeyError:
@@ -155,7 +180,7 @@ def get_clips(limit: int = 50, buoy_id: str | None = None) -> list[dict]:
 
 @app.get("/api/clips/{sha}/audio")
 def clip_audio(sha: str) -> Response:
-    if len(sha) != 64 or not all(c in "0123456789abcdef" for c in sha):
+    if not SHA_RE.match(sha):
         raise HTTPException(400, "Нужен SHA-256 клипа")
     p = world.clips.path(sha)
     if p:
@@ -205,7 +230,7 @@ def _need_model():
 def _lab_keep(wav: bytes) -> str:
     lid = uuid.uuid4().hex[:12]
     LAB[lid] = wav
-    while len(LAB) > 24:
+    while len(LAB) > 24 or (len(LAB) > 1 and sum(map(len, LAB.values())) > LAB_MAX_BYTES):
         LAB.popitem(last=False)
     return lid
 
@@ -242,9 +267,7 @@ async def lab_analyze(request: Request, name: str | None = None, medium: Literal
     """Разобрать свой звук (WAV до 30 с): всё, что видит и решает нейросеть, без тревог.
     medium — где записан звук: по умолчанию микрофон в воздухе; water — запись гидрофона."""
     _need_model()
-    wav = await request.body()
-    if len(wav) > MAX_CLIP_BYTES:
-        raise HTTPException(413, "Файл больше 10 МБ")
+    wav = await read_body(request)
     try:
         x = dsp.read_wav(wav)
     except AudioError as e:
@@ -257,14 +280,20 @@ async def lab_analyze(request: Request, name: str | None = None, medium: Literal
 async def lab_clip(sha: str) -> dict:
     """Разобрать клип, который прислал буй (из журнала клипов)."""
     _need_model()
+    if not SHA_RE.match(sha):
+        raise HTTPException(400, "Нужен SHA-256 клипа")
     wav = world.clips.get(sha)
     if wav is None:
         raise HTTPException(404, "Клипа нет")
     rec = next((r for r in world.recent if r["sha256"] == sha), None)
     b = world.buoys.get(rec["buoy_id"]) if rec else None
     title = f"Клип буя {b.name}" if b else "Клип буя"
-    return await asyncio.to_thread(_lab_run, dsp.read_wav(wav), wav, {"source": "buoy", "title": title, "truth": None, "marks": [],
-                                                                       "sha256": sha, "ts": rec["ts"] if rec else None}, "water")
+    try:
+        x = dsp.read_wav(wav)
+    except AudioError as e:
+        raise HTTPException(422, f"Клип не подходит: {e}")
+    return await asyncio.to_thread(_lab_run, x, wav, {"source": "buoy", "title": title, "truth": None, "marks": [],
+                                                       "sha256": sha, "ts": rec["ts"] if rec else None}, "water")
 
 
 @app.get("/api/lab/audio/{lid}")
@@ -278,7 +307,7 @@ def lab_audio(lid: str) -> Response:
 # ---------- алерты ----------
 @app.get("/api/alerts", response_model=list[Alert])
 def get_alerts(limit: int = 30) -> list[Alert]:
-    return sorted(world.alerts, key=lambda a: a.ts, reverse=True)[:limit]
+    return sorted(world.alerts, key=lambda a: a.ts, reverse=True)[: max(1, min(limit, 500))]
 
 
 @app.post("/api/alerts", response_model=Alert, status_code=201)
@@ -340,12 +369,17 @@ def verify() -> ChainCheck:
 # ---------- демо ----------
 @app.post("/api/demo/run")
 async def demo_run(calm_s: float = 4, warn_s: float = 8) -> dict:
-    sim.start_demo(calm_s, warn_s)
+    if not DEMO:
+        raise HTTPException(403, "Демо выключено на этом сервере (DEMO=0)")
+    sim.start_demo(max(0.5, min(calm_s, 60)), max(0.5, min(warn_s, 120)))
     return {"started": True}
 
 
 @app.post("/api/demo/reset")
 async def demo_reset() -> dict:
+    # сброс стирает базу и звуковые улики — на настоящих данных недоступен
+    if not DEMO:
+        raise HTTPException(403, "Демо выключено на этом сервере (DEMO=0)")
     sim.stop_demo()
     world.reset()
     await publish()
@@ -354,12 +388,18 @@ async def demo_reset() -> dict:
 
 @app.websocket("/ws")
 async def ws(socket: WebSocket) -> None:
+    # только со своего сайта (чужая страница не откроет соединение с cookie дежурного) и не больше MAX_WS_CLIENTS
+    if not security.origin_allowed(socket.headers.get("origin"), socket.headers.get("host")) or len(clients) >= MAX_WS_CLIENTS:
+        await socket.close(code=1008)
+        return
     await socket.accept()
     clients.add(socket)
     try:
         await socket.send_text(world.state().model_dump_json())
         while True:
-            await socket.receive_text()  # клиент молчит; держим соединение
+            msg = await socket.receive_text()  # клиент молчит; держим соединение
+            if len(msg) > 1024:
+                break
     except WebSocketDisconnect:
         pass
     finally:

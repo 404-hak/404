@@ -34,9 +34,21 @@ def read_wav(data: bytes) -> np.ndarray:
     try:
         with wave.open(io.BytesIO(data)) as w:
             ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+            # длину и частоту проверяем по заголовку ДО чтения и пересчёта частоты: иначе WAV с частотой 1 Гц
+            # раздувается в 16 000 раз и съедает память сервера (docs/audit/01-security.md, S4)
+            if not 1 <= ch <= 8:
+                raise AudioError(f"каналов {ch}, нужно 1–8")
+            if not 4000 <= rate <= 192_000:
+                raise AudioError(f"частота {rate} Гц, нужно 4–192 кГц")
+            if not MIN_S <= n / rate <= MAX_S:
+                raise AudioError(f"длина клипа {n / rate:.1f} с, нужно {MIN_S:.0f}–{MAX_S:.0f} с")
             raw = w.readframes(n)
     except (wave.Error, EOFError) as e:
         raise AudioError(f"не WAV PCM: {e}") from e
+    usable = len(raw) - len(raw) % (width * ch) if width and ch else 0
+    if usable <= 0:
+        raise AudioError("в файле нет звука")
+    raw = raw[:usable]               # обрезанный на середине кадра файл — без последнего неполного кадра
     if width == 1:
         x = (np.frombuffer(raw, np.uint8).astype(np.float32) - 128) / 128
     elif width == 2:
