@@ -1,0 +1,8 @@
+# HTTPS с автоматическим сертификатом, сжатие, предел тела (клип буя до 10 МБ)
+{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 12MB
+	}
+	reverse_proxy app:8000
+}

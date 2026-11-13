@@ -1,15 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import TopBar from './components/TopBar';
 import MapShell from './components/MapShell';
 import SidePanel from './components/SidePanel';
 import Ambient from './components/Ambient';
 import { BottomNav, Sidebar } from './components/Nav';
-import AlertsPage from './pages/AlertsPage';
-import StatsPage from './pages/StatsPage';
-import ForecastPage from './pages/ForecastPage';
-import BuoysPage from './pages/BuoysPage';
-import EvidencePage from './pages/EvidencePage';
-import LabPage from './pages/LabPage';
 import { api, useLiveState } from './live';
 import { plural } from './format';
 import type { MapHandle } from './geo';
@@ -18,6 +12,20 @@ import { sound } from './sound';
 import { haptic } from './native';
 import { useSurfaces } from './motion';
 import Intro from './components/Intro';
+
+// разделы грузятся по требованию (основной файл сайта легче на треть), а в тишине после запуска — заранее,
+// чтобы переход не ждал сети (docs/audit/03-performance.md, F3)
+const PAGES = {
+  alerts: () => import('./pages/AlertsPage'), stats: () => import('./pages/StatsPage'), forecast: () => import('./pages/ForecastPage'),
+  buoys: () => import('./pages/BuoysPage'), evidence: () => import('./pages/EvidencePage'), lab: () => import('./pages/LabPage'),
+};
+const AlertsPage = lazy(PAGES.alerts);
+const StatsPage = lazy(PAGES.stats);
+const ForecastPage = lazy(PAGES.forecast);
+const BuoysPage = lazy(PAGES.buoys);
+const EvidencePage = lazy(PAGES.evidence);
+const LabPage = lazy(PAGES.lab);
+const pageWait = <div className="grid h-40 place-items-center text-[13px] text-muted"><span className="animate-pulse">Загружаю раздел…</span></div>;
 import DeltaShell from './components/DeltaShell';
 import { useContextActions } from './components/ContextActions';
 import { layout } from './design';
@@ -53,6 +61,12 @@ export default function App() {
   // новая тревога важнее выбранного буя; Esc снимает выделение
   const freshId = state?.alerts.find((a) => a.status === 'new')?.id;
   useEffect(() => { if (freshId) setSelected(null); }, [freshId]);
+  // разделы подгружаются заранее, когда браузер свободен
+  useEffect(() => {
+    if (!state) return;
+    const idle = (window as unknown as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 2500));
+    idle(() => Object.values(PAGES).forEach((load) => { void load().catch(() => {}); }));
+  }, [state != null]); // eslint-disable-line react-hooks/exhaustive-deps
   // первый снимок отрисован — заставка может стартовать, не споря с тяжёлой первой отрисовкой карты
   useEffect(() => { if (state) requestAnimationFrame(() => requestAnimationFrame(appSettled)); }, [state != null]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -113,6 +127,7 @@ export default function App() {
       evidence: <EvidencePage state={state} />,
       lab: <LabPage state={state} />,
     }[route];
+    if (route !== 'map') page = <Suspense fallback={pageWait}>{page}</Suspense>;
   }
 
   const introEl = intro && (

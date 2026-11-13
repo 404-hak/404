@@ -137,6 +137,19 @@ const FLOAT = '<svg viewBox="0 0 20 40" aria-hidden="true"><path class="f-needle
 const BEAM = '<svg viewBox="0 0 14 26" aria-hidden="true"><path class="b-line" d="M7 1.5v23M4 1.5h6M4 24.5h6"/><circle class="b-ring" cx="7" cy="13" r="2.6"/></svg>';
 
 let floatEl: HTMLElement | null = null;
+// «Обычный указатель» из меню правой кнопки: поплавок мешает не всем, но кому-то мешает (docs/audit/05-frontend.md, W4)
+const CURSOR_KEY = '404-cursor';
+let cursorOff = (() => { try { return localStorage.getItem(CURSOR_KEY) === 'system'; } catch { return false; } })();
+export const floatCursorOn = () => !cursorOff;
+export function setFloatCursor(on: boolean) {
+  cursorOff = !on;
+  try { localStorage.setItem(CURSOR_KEY, on ? 'float' : 'system'); } catch { /* только до перезагрузки */ }
+  if (!on) {
+    floatEl?.classList.remove('is-on');
+    floatEl?.remove();
+    document.documentElement.classList.remove('has-cursor');
+  }
+}
 const floatHeld = new Set<string>();
 /** Состояние поплавка снаружи: is-grabbing (несут картинку), is-link (над ссылкой) */
 export function floatState(name: string, on: boolean) {
@@ -193,7 +206,7 @@ function startCursor() {
   };
   const schedule = () => { if (!frame) frame = requestAnimationFrame(tick); };
   const show = () => {
-    if (shown) return;
+    if (cursorOff || (shown && float.isConnected)) return;
     shown = true;
     if (!float.isConnected) {
       document.body.append(float);

@@ -112,3 +112,20 @@ def test_security_headers_and_gzip(client):
     assert "frame-ancestors 'self'" in r.headers["content-security-policy"]
     assert r.headers["cache-control"] == "no-store"
     assert r.headers.get("content-encoding") == "gzip"
+
+
+def test_old_clips_without_alert_are_pruned_but_evidence_stays(tmp_path):
+    import os
+    import time
+
+    from app.store import Clips
+
+    clips = Clips(tmp_path)
+    noise = clips.put(b"RIFF-noise")
+    evidence = clips.put(b"RIFF-evidence")
+    old = time.time() - 48 * 3600
+    for sha in (noise, evidence):
+        os.utime(tmp_path / f"{sha}.wav", (old, old))
+    assert clips.prune({evidence}, 24 * 3600) == 1
+    assert clips.get(noise) is None
+    assert clips.get(evidence) == b"RIFF-evidence"

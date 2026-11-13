@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'rea
 import type { State } from '../types';
 import { km } from '../format';
 import { loadYmaps } from '../yandex';
-import { BUOY_STATUS, areaOf, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
+import { BUOY_STATUS, areaOf, esc, gridTicks, isCompact, maskRings, pad, type Bounds, type MapHandle, type Selection } from '../geo';
 import { reducedMotion } from '../motion';
 import { WARN } from '../design';
 
@@ -182,7 +182,8 @@ export default function YandexMapView({ state, handle, onFail, selected, onSelec
   const hot = state.forecast.level === 'high' ? state.forecast.hot_sectors : [];
   const active = state.alerts.filter((a) => a.status !== 'resolved');
   const key = JSON.stringify([state.buoys.map((b) => b.status), hot, active.map((a) => [a.id, a.status])]);
-  const hint = (b: State['buoys'][number]) => `${b.name} · ${BUOY_STATUS[b.status]} · сектор ${b.sector} · батарея ${b.battery} %`;
+  // hintContent у Яндекса — HTML: имя буя экранируем (docs/audit/05-frontend.md, W9)
+  const hint = (b: State['buoys'][number]) => `${esc(b.name)} · ${BUOY_STATUS[b.status]} · сектор ${b.sector} · батарея ${b.battery} %`;
 
   useEffect(() => {
     if (!ready) return;

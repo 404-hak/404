@@ -1,0 +1,27 @@
+# Боевой запуск пилота:  cd deploy && cp .env.example .env && (заполнить) && docker compose up -d --build
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VITE_YANDEX_MAPS_KEY: ${VITE_YANDEX_MAPS_KEY:-}
+    env_file: .env
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    logging:
+      options: { max-size: "10m", max-file: "5" }
+  caddy:
+    image: caddy:2.8
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [app]
+    restart: unless-stopped
+volumes:
+  data: {}
+  caddy_data: {}

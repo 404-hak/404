@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import math
 import random
@@ -87,6 +88,9 @@ def sha256(s: str) -> str:
 class ModelMissing(RuntimeError):
     """Нейросеть не обучена: нет api/app/audio/model.npz."""
 
+
+# сколько хранить звук без тревоги (часы); 0 — не хранить. Звук тревог (улики) хранится всегда.
+CLIP_RETENTION_HOURS = float(os.getenv("CLIP_RETENTION_HOURS", "24"))
 
 class World:
     def __init__(self, clock=None, store: Store | None = None, clips: Clips | None = None, model=_DEFAULT, weather=None):
@@ -307,6 +311,11 @@ class World:
                 return a
         raise KeyError(alert_id)
 
+    def prune_clips(self) -> int:
+        """Удалить звук без тревоги старше срока хранения. Звук тревог не трогаем — он в цепочке улик."""
+        keep = {a.audio_sha256 for a in self.alerts if a.audio_sha256}
+        return self.clips.prune(keep, max(CLIP_RETENTION_HOURS, 0) * 3600)
+
     def verify_chain(self) -> ChainCheck:
         """Цепочка хэшей и звук: каждый клип-улика сверяется со своим SHA-256."""
         prev, audio = GENESIS, 0
@@ -343,7 +352,7 @@ class World:
         x = dsp.read_wav(wav)
         an = self.model.analyze(x)
         ts = ts or self.now()
-        sha = self.clips.put(wav)
+        sha = hashlib.sha256(wav).hexdigest()          # звук сохраняем ниже — только когда он нужен (docs/audit/02-privacy.md)
         b = self.buoys[buoy_id]
         b.last_seen = ts
         ear = self.ears.setdefault(buoy_id, listener.Ear())
@@ -359,6 +368,13 @@ class World:
             if near:
                 kind, note = None, f"{note} — та же тревога, что у буя {near.buoy_name}"
 
+        # звук тревоги — улика, хранится всегда; без тревоги — до срока CLIP_RETENTION_HOURS;
+        # речь людей без тревоги не храним вовсе
+        stored = bool(kind) or (an.event != "voice" and CLIP_RETENTION_HOURS > 0)
+        if stored:
+            self.clips.put(wav)
+        elif an.event == "voice":
+            note = f"{note} · речь — звук не хранится" if note else "речь — звук не хранится"
         alert = None
         if kind:
             alert = self._make_alert(
@@ -370,6 +386,7 @@ class World:
                          alert=alert, note=note)
         rec = res.model_dump(mode="json", exclude={"alert"})
         rec["alert_id"] = alert.id if alert else None
+        rec["stored"] = stored
         self.recent.append(rec)
         if self.store:
             self.store.save_clip(rec)

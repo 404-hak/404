@@ -78,10 +78,20 @@ async def weather_loop() -> None:
         await asyncio.sleep(1800)
 
 
+async def clip_janitor() -> None:
+    """Раз в час — удалить звук без тревоги старше CLIP_RETENTION_HOURS (речь и шум у воды не копятся)."""
+    while True:
+        with contextlib.suppress(Exception):
+            gone = await asyncio.to_thread(world.prune_clips)
+            if gone:
+                log.info("404: удалено старых клипов без тревоги: %d", gone)
+        await asyncio.sleep(3600)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI):
     security.startup_warnings()
-    tasks = [asyncio.create_task(sim.run())]
+    tasks = [asyncio.create_task(sim.run()), asyncio.create_task(clip_janitor())]
     if weather:
         tasks.append(asyncio.create_task(weather_loop()))
     yield

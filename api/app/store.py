@@ -10,6 +10,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from .models import Alert, Buoy
@@ -109,6 +110,7 @@ class Clips:
     def __init__(self, folder: Path | None = None):
         self.folder = folder
         self.mem: dict[str, bytes] = {}
+        self.mem_at: dict[str, float] = {}
         if folder:
             folder.mkdir(parents=True, exist_ok=True)
 
@@ -120,6 +122,7 @@ class Clips:
                 p.write_bytes(wav)
         else:
             self.mem[sha] = wav
+            self.mem_at[sha] = time.time()
         return sha
 
     def get(self, sha: str) -> bytes | None:
@@ -133,6 +136,22 @@ class Clips:
             p = self.folder / f"{sha}.wav"
             return p if p.exists() else None
         return None
+
+    def prune(self, keep: set[str], older_than_s: float) -> int:
+        """Удалить звук старше срока, кроме улик (keep — SHA звука тревог). Возвращает, сколько удалено."""
+        cutoff = time.time() - older_than_s
+        gone = 0
+        if self.folder:
+            for p in self.folder.glob("*.wav"):
+                if p.stem not in keep and p.stat().st_mtime < cutoff:
+                    p.unlink(missing_ok=True)
+                    gone += 1
+        else:
+            for sha in [s for s, t in self.mem_at.items() if s not in keep and t < cutoff]:
+                self.mem.pop(sha, None)
+                self.mem_at.pop(sha, None)
+                gone += 1
+        return gone
 
     def clear(self) -> None:
         if self.folder:
