@@ -84,3 +84,19 @@ def test_senior_manages_team(acc):
     assert r.status_code == 201 and len(r.json()["password"]) == 14
     assert c.patch("/api/users/boss", json={"disabled": True}).status_code == 422   # себя не отключить
     assert {u["login"] for u in c.get("/api/users").json()} == {"boss", "new.one"}
+
+
+def test_seal_detects_rewritten_history(acc):
+    c = TestClient(main.app)
+    seal = c.post("/api/evidence/seal").json()
+    assert len(seal["seal"]) == 64
+    assert c.get("/api/evidence/verify").json()["anchors_checked"] >= 1
+    acc.mem_anchors[-1]["alerts_head"] = "f" * 64            # «прошлое переписали»: печать не находится в цепочке
+    check = c.get("/api/evidence/verify").json()
+    assert check["ok"] is False and "печать" in check["broken_at"]
+
+
+def test_real_data_mode_has_no_generated_history():
+    from app.world import World
+    assert World(demo=False).alerts == []
+    assert len(World(demo=True).alerts) > 0

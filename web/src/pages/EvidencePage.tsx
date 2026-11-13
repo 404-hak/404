@@ -1,6 +1,6 @@
 import { scrambleRef } from '../upkMotion';
 import Clip from '../components/Clip';
-import { JournalCard, TeamCard } from '../components/Team';
+import { JournalCard, SealCard, TeamCard } from '../components/Team';
 import { useEffect, useRef, useState } from 'react';
 import type { Alert, ChainCheck, State } from '../types';
 import { KIND_TITLE, fmtDM, fmtHM } from '../format';
@@ -94,6 +94,7 @@ export default function EvidencePage({ state }: { state: State }) {
           {chain.length > shown.length && <p className="mt-3 text-[12px] text-muted">…и ещё {chain.length - shown.length} записей. Проверка идёт по всей цепочке.</p>}
         </Card>
       )}
+      <SealCard refresh={state.alerts.length} />
       <JournalCard refresh={state.alerts.length} />
       <TeamCard />
     </Page>

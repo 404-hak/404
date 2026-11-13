@@ -134,6 +134,7 @@ class ChainCheck(BaseModel):
     reason: str | None = None
     journal_checked: int = Field(default=0, description="Сколько записей журнала действий проверено")
     journal_head: str | None = Field(default=None, description="Хэш последней записи журнала — его можно сохранить вне сервера")
+    anchors_checked: int = Field(default=0, description="Сколько прежних печатей цепочки сверено")
 
 
 class ClipResult(BaseModel):

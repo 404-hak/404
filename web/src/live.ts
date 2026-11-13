@@ -87,6 +87,8 @@ export const api = {
     fetch(`/api/users/${encodeURIComponent(login)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
       .then(async (r) => (r.ok ? (r.json() as Promise<{ login: string; password: string | null }>) : Promise.reject(new Error((await r.json().catch(() => ({}))).detail ?? `${r.status}`)))),
   logout: () => post('/api/auth/logout').then(() => location.reload()),
+  seals: () => get<{ anchors: { ts: string; seal: string; alerts_head: string; journal_head: string }[]; webhook: boolean }>('/api/evidence/seal'),
+  sealNow: () => post('/api/evidence/seal').then(sent('Печать')).then((r) => r.json() as Promise<{ ts: string; seal: string }>),
 };
 
 // ---------- кто вошёл: роль решает, какие кнопки видны ----------

@@ -106,3 +106,30 @@ export function TeamCard() {
     </Card>
   );
 }
+
+/** Печать цепочки: хэш вершин тревог и журнала. Сохранённая вне сервера, она доказывает, что прошлое не переписали */
+export function SealCard({ refresh = 0 }: { refresh?: number }) {
+  const me = useMe();
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.seals>> | null>(null);
+  const load = () => api.seals().then(setData).catch(() => setData(null));
+  useEffect(() => { if (me.role !== 'observer') void load(); }, [refresh, me.role]);
+  if (me.role === 'observer') return null;
+  const last = data?.anchors[0];
+  const seal = async () => { try { await api.sealNow(); toast('Печать поставлена'); void load(); } catch (e) { toast((e as Error).message, 'error'); } };
+  return (
+    <Card title="Печать цепочки" note={data?.webhook ? 'ставится раз в сутки и уходит во внешний журнал' : 'ставится раз в сутки · сохраните её вне сервера'} className="mt-4" delay={100}>
+      <p className="mb-3 text-[13.5px] leading-[20px] text-muted">
+        Один хэш на всю историю: тревоги, улики и журнал действий. Запишите его в бумажный журнал смены или отправьте себе —
+        если кто-то перепишет прошлое на сервере, проверка цепочки покажет, что печать не сходится.
+      </p>
+      {last ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <code className="min-w-0 flex-1 break-all rounded-[10px] bg-bg/60 px-3 py-2 font-mono text-[12.5px]">{last.seal}</code>
+          <span className="font-mono text-[11px] text-muted">{when.format(new Date(last.ts))}</span>
+          <button type="button" className="ui-btn ui-btn-soft ui-btn-sm" onClick={() => copyText(last.seal, 'Печать скопирована')}>Копировать</button>
+        </div>
+      ) : <p className="text-[13px] text-muted">Печатей ещё не было.</p>}
+      <button type="button" className="ui-btn ui-btn-ghost ui-btn-sm mt-3" onClick={seal}>Поставить печать сейчас</button>
+    </Card>
+  );
+}

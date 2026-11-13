@@ -53,9 +53,38 @@ MAX_WS_CLIENTS = int(os.getenv("MAX_WS_CLIENTS", "200"))
 LAB_MAX_BYTES = 60_000_000                     # разобранные в лаборатории записи держим в памяти не больше этого
 
 weather = OpenMeteo() if os.getenv("WEATHER", "1") != "0" else None
-world = World(store=Store(DATA_DIR / "404.db"), clips=Clips(DATA_DIR / "clips"), weather=weather)
+ANCHOR_EVERY_H = float(os.getenv("ANCHOR_EVERY_H", "24"))   # как часто ставить печать цепочки
+ANCHOR_WEBHOOK = os.getenv("ANCHOR_WEBHOOK", "")             # куда отправлять печать вне сервера (POST JSON)
+
+
+def _move_old_demo_data() -> None:
+    """Раньше демо жило в 404.db. Если там только сгенерированные тревоги — это демо: переносим в 404-demo.db,
+    чтобы рабочая база (DEMO=0) начиналась чистой (docs/audit/06-backend.md, B4)."""
+    old, new = DATA_DIR / "404.db", DATA_DIR / "404-demo.db"
+    if not DEMO or new.exists() or not old.exists():
+        return
+    import json
+    import sqlite3
+    try:
+        with contextlib.closing(sqlite3.connect(old)) as db:
+            rows = db.execute("SELECT data FROM alerts").fetchall()
+        if rows and all(json.loads(d).get("synthetic") for (d,) in rows):
+            for suffix in ("", "-wal", "-shm"):
+                p = DATA_DIR / f"404.db{suffix}"
+                if p.exists():
+                    p.rename(DATA_DIR / f"404-demo.db{suffix}")
+            if (DATA_DIR / "clips").is_dir() and not (DATA_DIR / "clips-demo").exists():
+                (DATA_DIR / "clips").rename(DATA_DIR / "clips-demo")
+    except Exception as e:  # noqa: BLE001 — не мешаем запуску
+        log.warning("404: не удалось перенести старые демо-данные: %s", e)
+
+
+_move_old_demo_data()
+# демо и настоящие данные — в разных базах: сброс демо не может задеть рабочие тревоги и улики
+world = World(store=Store(DATA_DIR / ("404-demo.db" if DEMO else "404.db")),
+              clips=Clips(DATA_DIR / ("clips-demo" if DEMO else "clips")), weather=weather, demo=DEMO)
 clients: set[WebSocket] = set()
-accounts = Accounts(world.store)
+accounts = Accounts(Store(DATA_DIR / "404-team.db"))   # команда и журнал действий — общие для демо и работы
 security.ACCOUNTS = accounts
 login_ip = Limiter(20, 600)          # попыток входа с одного адреса за 10 минут
 login_fail = Limiter(6, 900)         # неудачных паролей на один логин за 15 минут
@@ -111,6 +140,35 @@ async def weather_loop() -> None:
         await asyncio.sleep(1800)
 
 
+def alerts_head() -> str:
+    return world.alerts[-1].hash if world.alerts else "0" * 64
+
+
+def seal_now(actor: str) -> dict:
+    """Поставить печать и (если задан ANCHOR_WEBHOOK) отправить её вне сервера."""
+    a = accounts.anchor(alerts_head(), len(world.alerts))
+    accounts.record(actor, "evidence.seal", a["seal"][:16], alerts=len(world.alerts))
+    if ANCHOR_WEBHOOK:
+        import json
+        import urllib.request
+        with contextlib.suppress(Exception):
+            req = urllib.request.Request(ANCHOR_WEBHOOK, data=json.dumps({"project": "404", **a}).encode(),
+                                         headers={"Content-Type": "application/json"}, method="POST")
+            urllib.request.urlopen(req, timeout=10).close()
+    return a
+
+
+async def anchor_loop() -> None:
+    """Печать цепочки раз в ANCHOR_EVERY_H часов (если с прошлой печати что-то изменилось)."""
+    await asyncio.sleep(60)
+    while True:
+        last = accounts.anchors()[-1:] or [{}]
+        if last[0].get("alerts_head") != alerts_head() or last[0].get("journal_head") != accounts.head():
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(seal_now, "сервер")
+        await asyncio.sleep(max(1.0, ANCHOR_EVERY_H) * 3600)
+
+
 async def clip_janitor() -> None:
     """Раз в час — удалить звук без тревоги старше CLIP_RETENTION_HOURS (речь и шум у воды не копятся)."""
     while True:
@@ -125,7 +183,7 @@ async def clip_janitor() -> None:
 async def lifespan(_: FastAPI):
     security.startup_warnings()
     world.on_alert = notify.from_env()
-    tasks = [asyncio.create_task(sim.run()), asyncio.create_task(clip_janitor())]
+    tasks = [asyncio.create_task(sim.run()), asyncio.create_task(clip_janitor()), asyncio.create_task(anchor_loop())]
     if weather:
         tasks.append(asyncio.create_task(weather_loop()))
     yield
@@ -421,7 +479,25 @@ def verify() -> ChainCheck:
     c.journal_checked, c.journal_head = n, accounts.head()
     if broken and c.ok:
         c.ok, c.broken_at, c.reason = False, f"журнал #{broken}", "запись журнала действий изменена"
+    # каждая прежняя печать должна найтись в нынешних цепочках: иначе прошлое переписали
+    hashes = {a.hash for a in world.alerts} | {"0" * 64}
+    jhashes = {e["hash"] for e in accounts.journal(1000)} | {"0" * 64}
+    for a in accounts.anchors():
+        c.anchors_checked += 1
+        if c.ok and (a["alerts_head"] not in hashes or a["journal_head"] not in jhashes):
+            c.ok, c.broken_at, c.reason = False, f"печать {a['ts'][:16]}", "цепочка не совпадает с поставленной ранее печатью — прошлое переписано"
     return c
+
+
+@app.get("/api/evidence/seal")
+def get_seal(_: dict = Depends(need("duty"))) -> dict:
+    """Последние печати цепочки (новые сверху) — их сохраняют вне сервера."""
+    return {"anchors": list(reversed(accounts.anchors()))[:30], "webhook": bool(ANCHOR_WEBHOOK)}
+
+
+@app.post("/api/evidence/seal")
+def post_seal(u: dict = Depends(need("duty"))) -> dict:
+    return seal_now(u["name"])
 
 
 # ---------- вход, люди, журнал действий ----------
@@ -529,6 +605,7 @@ async def demo_reset(u: dict = Depends(need("duty"))) -> dict:
         raise HTTPException(403, "Демо выключено на этом сервере (DEMO=0)")
     sim.stop_demo()
     world.reset()
+    accounts.clear_anchors()
     accounts.record(u["name"], "demo.reset")
     await publish()
     return {"reset": True}

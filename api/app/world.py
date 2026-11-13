@@ -120,8 +120,9 @@ class ModelMissing(RuntimeError):
 CLIP_RETENTION_HOURS = float(os.getenv("CLIP_RETENTION_HOURS", "24"))
 
 class World:
-    def __init__(self, clock=None, store: Store | None = None, clips: Clips | None = None, model=_DEFAULT, weather=None):
+    def __init__(self, clock=None, store: Store | None = None, clips: Clips | None = None, model=_DEFAULT, weather=None, demo: bool = True):
         self._clock = clock or (lambda: datetime.now(TZ))
+        self.demo = demo          # на настоящих данных (DEMO=0) сгенерированная история не подмешивается
         self.store = store
         self.clips = clips or Clips()
         self.model: acoustic.Acoustic | None = acoustic.load() if model is _DEFAULT else model
@@ -165,7 +166,8 @@ class World:
             self.vessels[vid] = {"vector": vec, "last_seen": None, "seen": 0}
         self.alerts: list[Alert] = []
         self._seq = 0
-        self._seed_history(now)
+        if self.demo:
+            self._seed_history(now)
         if self.store:
             self.store.clear()
             self.clips.clear()

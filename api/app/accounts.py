@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS users    (login TEXT PRIMARY KEY, name TEXT NOT NULL,
 CREATE TABLE IF NOT EXISTS sessions (sid TEXT PRIMARY KEY, login TEXT NOT NULL, expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS journal  (seq INTEGER PRIMARY KEY, ts TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL,
                                      target TEXT, data TEXT NOT NULL, prev TEXT NOT NULL, hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS anchors  (ts TEXT NOT NULL, seal TEXT NOT NULL, alerts_head TEXT NOT NULL, journal_head TEXT NOT NULL);
 """
 
 
@@ -221,6 +222,32 @@ class Accounts:
         rows = self._journal_rows()
         return rows[-1]["hash"] if rows else "0" * 64
 
+    # ---------- печать цепочки: хэш вершин, который хранят вне сервера ----------
+    def anchor(self, alerts_head: str, alerts: int) -> dict:
+        """Записать печать: SHA-256 от вершины цепочки тревог и вершины журнала. Скопированная вне сервера
+        (бумажный журнал смены, почта, внешний журнал по ANCHOR_WEBHOOK), она доказывает, что прошлое не переписали."""
+        jh = self.head()
+        seal = hashlib.sha256(f"404-seal-v1|{alerts_head}|{jh}".encode()).hexdigest()
+        a = {"ts": _now(), "seal": seal, "alerts_head": alerts_head, "journal_head": jh, "alerts": alerts}
+        if self.store:
+            self.store._w("INSERT INTO anchors (ts, seal, alerts_head, journal_head) VALUES (?, ?, ?, ?)", (a["ts"], seal, alerts_head, jh))
+        else:
+            self.mem_anchors = [*getattr(self, "mem_anchors", []), a]
+        return a
+
+    def anchors(self) -> list[dict]:
+        if self.store:
+            return [{"ts": t, "seal": s, "alerts_head": ah, "journal_head": jh}
+                    for t, s, ah, jh in self._rows("SELECT ts, seal, alerts_head, journal_head FROM anchors ORDER BY ts")]
+        return list(getattr(self, "mem_anchors", []))
+
+    def clear_anchors(self) -> None:
+        """Только для сброса демо: вместе с демо-тревогами уходят и их печати."""
+        if self.store:
+            self.store._w("DELETE FROM anchors")
+        else:
+            self.mem_anchors = []
+
     def verify(self) -> tuple[int, str | None]:
         """(сколько проверено, номер первой испорченной записи или None)."""
         prev = "0" * 64
@@ -238,7 +265,7 @@ def _cli(argv: list[str]) -> None:
 
     from .store import Store
     data = Path(os.getenv("DATA_DIR") or Path(__file__).resolve().parents[1] / "data")
-    acc = Accounts(Store(data / "404.db"))
+    acc = Accounts(Store(data / "404-team.db"))
     if len(argv) >= 3 and argv[0] == "add":
         pw = acc.add(argv[1], argv[2], " ".join(argv[3:]))
         acc.record("командная строка", "user.add", argv[1], role=argv[2])
