@@ -1,5 +1,6 @@
 import type { LabClip, LabResult } from '../../lab';
-import type { PlayerApi } from './player';
+import { memo } from 'react';
+import { usePlayerSelect, type PlayerApi } from './player';
 import { ALERT_RU, EVENT_RU, VOICE, fmtS, num, pct0 } from '../../lab';
 
 /**
@@ -25,7 +26,8 @@ export function earChip(c: LabClip): { text: string; short: string; cls: string 
 /** Решения уха буя клип за клипом — на той же оси времени, что звук; клик — слушать этот клип. */
 export function EarChips({ r, player }: { r: LabResult; player: PlayerApi }) {
   const dur = r.duration_s;
-  const now = r.clips.find((c) => player.t >= c.start && player.t < c.end)?.i;
+  // перерисовка — только когда звук перешёл в другой клип, а не 10 раз в секунду
+  const now = usePlayerSelect(player, (s) => (s.playing ? r.clips.find((c) => s.t >= c.start && s.t < c.end)?.i ?? 0 : 0));
   return (
     <div className="relative h-7">
       {r.clips.map((c) => {
@@ -33,7 +35,7 @@ export function EarChips({ r, player }: { r: LabResult; player: PlayerApi }) {
         return (
           <div key={c.i} className="absolute top-0 px-0.5" style={{ left: `${(c.start / dur) * 100}%`, width: `${((c.end - c.start) / dur) * 100}%` }}>
             <button type="button" onClick={() => { player.seek(c.start); player.play(); }} title={`Клип ${c.i}, ${fmtS(c.start)}–${fmtS(c.end)}: ${c.note}. Нажмите — послушать`}
-              className={`block w-full truncate rounded-[6px] border px-1.5 text-center text-[11px] leading-[24px] transition-shadow ${ch.cls} ${now === c.i && player.playing ? 'shadow-[0_0_0_2px_rgb(var(--rgb-primary)/.35)]' : ''}`}>
+              className={`block w-full truncate rounded-[6px] border px-1.5 text-center text-[11px] leading-[24px] transition-shadow ${ch.cls} ${now === c.i ? 'shadow-[0_0_0_2px_rgb(var(--rgb-primary)/.35)]' : ''}`}>
               <span className="sm:hidden">{ch.short}</span><span className="hidden sm:inline">{ch.text}</span>
             </button>
           </div>
@@ -43,7 +45,7 @@ export function EarChips({ r, player }: { r: LabResult; player: PlayerApi }) {
   );
 }
 
-export default function Timeline({ r, player }: { r: LabResult; player: PlayerApi }) {
+function Timeline({ r, player }: { r: LabResult; player: PlayerApi }) {
   const dur = r.duration_s;
   const x = (t: number) => (t / dur) * W;
   const y = (v: number) => H - 8 - v * (H - 16);
@@ -137,3 +139,5 @@ export default function Timeline({ r, player }: { r: LabResult; player: PlayerAp
     </div>
   );
 }
+
+export default memo(Timeline);

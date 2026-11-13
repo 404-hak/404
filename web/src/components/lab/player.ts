@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { LabResult } from '../../lab';
 
 /**
  * Проигрыватель лаборатории. Бегунков несколько (спектрограмма, липкая панель, ход по времени) —
  * все они двигаются напрямую через transform, без перерисовки React: каждый кадр только сдвиг.
- * Время для подписей обновляется в состоянии не чаще 10 раз в секунду.
+ * Сам объект проигрывателя не меняется: время и «играет ли» лежат в маленьком хранилище, и на них
+ * подписаны только те, кому они нужны (панель слушателя, подсветка текущего клипа). Поэтому, пока звук
+ * играет, спектрограмма, графики и вкладки разбора не перерисовываются. Время — не чаще 10 раз в секунду.
  */
+export interface PlayerSnap { t: number; playing: boolean; rate: number; loop: boolean }
+
 export interface PlayerApi {
   audio: React.RefObject<HTMLAudioElement>;
   /** callback-ref для бегунка: элемент, абсолютно стоящий в контейнере шириной во всю запись */
   bind: (el: HTMLElement | null) => void;
-  playing: boolean;
-  t: number;
-  rate: number;
-  loop: boolean;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -21,17 +21,22 @@ export interface PlayerApi {
   nudge: (dsec: number) => void;
   setRate: (r: number) => void;
   setLoop: (v: boolean) => void;
+  subscribe: (fn: () => void) => () => void;
+  snap: () => PlayerSnap;
 }
 
 export function usePlayer(duration: number, key: string): PlayerApi {
   const audio = useRef<HTMLAudioElement>(null);
   const heads = useRef(new Set<HTMLElement>());
-  const [playing, setPlaying] = useState(false);
-  const [t, setT] = useState(0);
-  const [rate, setRateS] = useState(1);
-  const [loop, setLoopS] = useState(false);
   const dur = useRef(duration);
   dur.current = duration;
+  const store = useRef<{ s: PlayerSnap; fns: Set<() => void> }>({ s: { t: 0, playing: false, rate: 1, loop: false }, fns: new Set() });
+  const set = useCallback((patch: Partial<PlayerSnap>) => {
+    const st = store.current, next = { ...st.s, ...patch };
+    if (next.t === st.s.t && next.playing === st.s.playing && next.rate === st.s.rate && next.loop === st.s.loop) return;
+    st.s = next;
+    st.fns.forEach((f) => f());
+  }, []);
 
   const paint = useCallback(() => {
     const a = audio.current;
@@ -46,27 +51,44 @@ export function usePlayer(duration: number, key: string): PlayerApi {
     }
   }, []);
 
-  const bind = useCallback((el: HTMLElement | null) => {
-    if (!el) return;
-    heads.current.add(el);
-    requestAnimationFrame(paint);
-  }, [paint]);
+  const api = useMemo<PlayerApi>(() => {
+    const play = () => { void audio.current?.play().catch(() => undefined); };
+    const seek = (sec: number) => {
+      const a = audio.current;
+      if (!a) return;
+      a.currentTime = Math.max(0, Math.min(dur.current, sec));
+      set({ t: a.currentTime });
+      paint();
+    };
+    return {
+      audio, play, seek,
+      bind: (el) => { if (el) { heads.current.add(el); requestAnimationFrame(paint); } },
+      pause: () => audio.current?.pause(),
+      toggle: () => { const a = audio.current; if (!a) return; if (a.paused) play(); else a.pause(); },
+      nudge: (d) => seek((audio.current?.currentTime ?? 0) + d),
+      setRate: (r) => { set({ rate: r }); const a = audio.current; if (a) { a.defaultPlaybackRate = r; a.playbackRate = r; } },
+      setLoop: (v) => { set({ loop: v }); if (audio.current) audio.current.loop = v; },
+      subscribe: (fn) => { store.current.fns.add(fn); return () => { store.current.fns.delete(fn); }; },
+      snap: () => store.current.s,
+    };
+  }, [paint, set]);
 
   useEffect(() => {
     const a = audio.current;
     if (!a) return;
+    const { rate, loop } = store.current.s;
     a.defaultPlaybackRate = rate;                 // новая запись (смена src) берёт скорость отсюда
     a.playbackRate = rate;
     a.loop = loop;
-    setT(0); setPlaying(false);
+    set({ t: 0, playing: false });
     let raf = 0, last = -1;
     const tick = () => {
       paint();
-      if (Math.abs(a.currentTime - last) > 0.1) { last = a.currentTime; setT(a.currentTime); }
+      if (Math.abs(a.currentTime - last) > 0.1) { last = a.currentTime; set({ t: a.currentTime }); }
       if (!a.paused) raf = requestAnimationFrame(tick);
     };
-    const on = () => { setPlaying(true); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); };
-    const off = () => { setPlaying(false); cancelAnimationFrame(raf); last = -1; tick(); };
+    const on = () => { set({ playing: true }); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); };
+    const off = () => { set({ playing: false }); cancelAnimationFrame(raf); last = -1; tick(); };
     const seeked = () => { last = -1; tick(); };
     a.addEventListener('play', on);
     a.addEventListener('pause', off);
@@ -82,24 +104,17 @@ export function usePlayer(duration: number, key: string): PlayerApi {
     };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return useMemo<PlayerApi>(() => {
-    const play = () => { void audio.current?.play().catch(() => undefined); };
-    const pause = () => audio.current?.pause();
-    const seek = (sec: number) => {
-      const a = audio.current;
-      if (!a) return;
-      a.currentTime = Math.max(0, Math.min(dur.current, sec));
-      setT(a.currentTime);
-      paint();
-    };
-    return {
-      audio, bind, playing, t, rate, loop, play, pause, seek,
-      toggle: () => { const a = audio.current; if (!a) return; if (a.paused) play(); else a.pause(); },
-      nudge: (d: number) => seek((audio.current?.currentTime ?? 0) + d),
-      setRate: (r: number) => { setRateS(r); const a = audio.current; if (a) { a.defaultPlaybackRate = r; a.playbackRate = r; } },
-      setLoop: (v: boolean) => { setLoopS(v); if (audio.current) audio.current.loop = v; },
-    };
-  }, [bind, paint, playing, t, rate, loop]);
+  return api;
+}
+
+/** Подписка на время и состояние проигрывателя — для тех, кому они нужны. */
+export function usePlayerState(p: PlayerApi): PlayerSnap {
+  return useSyncExternalStore(p.subscribe, p.snap);
+}
+
+/** Подписка на одно производное значение (например, номер текущего клипа): перерисовка — только когда оно меняется. */
+export function usePlayerSelect<T extends string | number | boolean>(p: PlayerApi, pick: (s: PlayerSnap) => T): T {
+  return useSyncExternalStore(p.subscribe, () => pick(p.snap()));
 }
 
 /** Что сеть слышит в секунду t: ближайшее окно хода по времени (4 с, шаг 0,5 с) и клип буя, в который попадает t. */

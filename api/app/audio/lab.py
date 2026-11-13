@@ -214,6 +214,7 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
     # ход вероятностей: окно 4 с, шаг 0,5 с
     starts = _windows(n, WIN, STEP)
     feats = np.array([dsp.event_features(x[s:s + WIN]) for s in starts])
+    by_start = dict(zip(starts, feats))          # клипы буя по 4 с — те же окна: признаки не считаем второй раз
     P = m.events.forward(feats)
     A = np.clip(m.bio.forward(feats)[:, 0], 0, 1)
     NOV = m.novelty(feats)
@@ -232,7 +233,7 @@ def analyze(m: Acoustic, x: np.ndarray, thresholds: dict[str, float], vessels: d
         seg = x[s:s + WIN]
         if len(seg) < sr * 2 and i > 0:
             break
-        f = dsp.event_features(seg)
+        f = by_start[s] if s in by_start else dsp.event_features(seg)     # тот же срез x[s:s + WIN]
         p = m.events.forward(f)[0]
         k = int(np.argmax(p))
         act = float(np.clip(m.bio.forward(f)[0, 0], 0, 1))

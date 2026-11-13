@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import type { PlayerApi } from './player';
 import type { LabResult } from '../../lab';
 import { fmtS } from '../../lab';
@@ -39,7 +39,7 @@ function bandPos(mel: number[], hz: number) {
   return 1;
 }
 
-export default function Scope({ r, player }: { r: LabResult; player: PlayerApi }) {
+function Scope({ r, player }: { r: LabResult; player: PlayerApi }) {
   const spec = useRef<HTMLCanvasElement>(null);
   const wave = useRef<HTMLCanvasElement>(null);
   const dur = r.duration_s;
@@ -104,7 +104,7 @@ export default function Scope({ r, player }: { r: LabResult; player: PlayerApi }
   const down = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { was: player.playing };
+    drag.current = { was: player.snap().playing };
     player.pause();
     player.seek(timeAt(e));
   };
@@ -162,3 +162,6 @@ export default function Scope({ r, player }: { r: LabResult; player: PlayerApi }
     </div>
   );
 }
+
+// пока играет звук, спектрограмма не перерисовывается: бегунок двигается сам, без React
+export default memo(Scope);

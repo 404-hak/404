@@ -6,7 +6,7 @@ import Scope from '../components/lab/Scope';
 import Timeline, { EarChips, earChip } from '../components/lab/Timeline';
 import { FeaturesDetail, ImpulseDetail, MotorDetail, NatureDetail } from '../components/lab/Details';
 import ModelCard from '../components/lab/ModelCard';
-import { nowAt, usePlayer, type PlayerApi } from '../components/lab/player';
+import { nowAt, usePlayer, usePlayerState, type PlayerApi } from '../components/lab/player';
 import { Card, Page } from './common';
 
 /**
@@ -325,7 +325,7 @@ function useBlobSrc(remote: string) {
 }
 
 function Listener({ r, player }: { r: LabResult; player: PlayerApi }) {
-  const { playing, t, rate, loop } = player;
+  const { playing, t, rate, loop } = usePlayerState(player);    // только панель живёт с временем
   const now = nowAt(r, t);
   const ch = earChip(now.clip);
   const dur = r.duration_s;
@@ -370,7 +370,10 @@ function Listener({ r, player }: { r: LabResult; player: PlayerApi }) {
             className={`grid h-7 w-7 place-items-center rounded-[7px] ${loop ? 'bg-white/[.1] text-primary' : 'text-muted hover:text-primary'}`}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6.5a4 4 0 0 1 7.2-2.4L11 5.5M11 2.5v3H8M11.5 7.5a4 4 0 0 1-7.2 2.4L3 8.5M3 11.5v-3h3" /></svg>
           </button>
-          <span className="ml-1 hidden font-mono text-[10px] text-muted lg:inline" title="Пробел — пауза, стрелки — на секунду назад и вперёд">␣ · ← →</span>
+          <span className="ml-2 hidden items-center gap-1 text-[10px] text-muted xl:flex" aria-hidden>
+            <kbd className="rounded-[4px] border border-line px-1.5 font-sans leading-[16px]">пробел</kbd>
+            <kbd className="rounded-[4px] border border-line px-1 font-sans leading-[16px]">←</kbd><kbd className="rounded-[4px] border border-line px-1 font-sans leading-[16px]">→</kbd>
+          </span>
         </div>
       </div>
     </div>

@@ -126,11 +126,21 @@ def frames(x: np.ndarray, n: int, hop: int) -> np.ndarray:
     return x[idx]
 
 
+@lru_cache(maxsize=1)
+def _hann() -> np.ndarray:
+    return np.hanning(N_FFT).astype(np.float32)
+
+
+def _logmel_frames(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Лог-мел и сами взвешенные кадры — их же берёт поиск тона голоса (не резать звук дважды)."""
+    f = frames(x, N_FFT, HOP) * _hann()
+    p = np.abs(np.fft.rfft(f, axis=1)) ** 2
+    return 10 * np.log10(p @ mel_bank().T + 1e-10), f
+
+
 def logmel(x: np.ndarray) -> np.ndarray:
     """Лог-мел спектрограмма, дБ: кадры × N_MELS (кадр 64 мс, шаг 16 мс)."""
-    f = frames(x, N_FFT, HOP) * np.hanning(N_FFT).astype(np.float32)
-    p = np.abs(np.fft.rfft(f, axis=1)) ** 2
-    return 10 * np.log10(p @ mel_bank().T + 1e-10)
+    return _logmel_frames(x)[0]
 
 
 def welch_db(x: np.ndarray) -> np.ndarray:
@@ -164,7 +174,7 @@ def _common(x: np.ndarray):
 def event_features(x: np.ndarray) -> np.ndarray:
     """Вектор признаков клипа для нейросети событий и оценки природы (не зависит от громкости записи)."""
     x = _common(x)
-    L = logmel(x)                                       # T × 64
+    L, fw = _logmel_frames(x)                           # T × 64 и кадры для тона голоса
     floor = np.percentile(L, 20, axis=0)                # шумовой пол по полосам
     R = L - floor
     mean, std, peak = R.mean(0), R.std(0), np.percentile(R, 98, axis=0)
@@ -192,19 +202,27 @@ def event_features(x: np.ndarray) -> np.ndarray:
     ms = np.abs(np.fft.rfft(env)) ** 2
     mfr = np.fft.rfftfreq(len(env), HOP / SR)
     mod = float(np.log10(ms[(mfr > 2) & (mfr < 25)].max() / (ms[(mfr > 0.3) & (mfr < 25)].mean() + 1e-9) + 1e-9))
-    scal = np.array([onset, crest, decay, harm, np.log(f0), low, flat, aci, bio_act, mod, *impulse(x), *voicing(x, L)], np.float32)
+    scal = np.array([onset, crest, decay, harm, np.log(f0), low, flat, aci, bio_act, mod, *impulse(x), *voicing(x, L, fw)], np.float32)
     return np.concatenate([mean, std, peak, shape, scal]).astype(np.float32)
 
 
-def voicing(x: np.ndarray, L: np.ndarray) -> tuple[float, float, float]:
+# автокорреляция кадра через БПФ: задержки тона голоса — до SR/75 = 213 отсчётов. Дополнения нулями до N_FFT + 256
+# хватает, чтобы все задержки до 256 считались точно (круговой «заворот» начинается дальше) — меньше работы,
+# чем полный размер 2·N_FFT, а числа те же
+ACF_N = N_FFT + 256
+
+
+def voicing(x: np.ndarray, L: np.ndarray, f: np.ndarray | None = None) -> tuple[float, float, float]:
     """Голос человека: (доля звонких кадров с основным тоном 75–400 Гц; «плавание» тона, полутоны;
     ритм слогов — доля модуляции 3–8 Гц в полосе речи 300–3000 Гц). Речь — тон гуляет и есть слоговой ритм;
     мотор — тон ровный; выстрел и шум — тона нет."""
-    f = frames(x, N_FFT, HOP) * np.hanning(N_FFT).astype(np.float32)
-    S = np.abs(np.fft.rfft(f, 2 * N_FFT, axis=1)) ** 2
-    ac = np.fft.irfft(S, axis=1)[:, : N_FFT]
-    ac = ac / (ac[:, :1] + 1e-12)
+    if f is None:
+        f = frames(x, N_FFT, HOP) * _hann()
     lo, hi = SR // 400, SR // 75
+    assert hi <= ACF_N - N_FFT
+    S = np.abs(np.fft.rfft(f, ACF_N, axis=1)) ** 2
+    ac = np.fft.irfft(S, ACF_N, axis=1)[:, :hi]
+    ac = ac / (ac[:, :1] + 1e-12)
     seg = ac[:, lo:hi]
     k = seg.argmax(1)
     peak = seg[np.arange(len(seg)), k]
