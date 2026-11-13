@@ -396,3 +396,6 @@ nav.md\:flex { padding-top: env(safe-area-inset-top); }
 .clip.is-compact .clip-time { min-width: 62px; font-size: 10.5px; }
 .clip audio { display: none; }
 @media (prefers-reduced-motion: reduce) { .clip-play i, .clip-bars span { animation: none !important; } }
+
+/* экономный режим (меню правой кнопки): бесконечные анимации и переходы стоят — бережёт батарею */
+html.eco *, html.eco *::before, html.eco *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }

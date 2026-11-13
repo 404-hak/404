@@ -3,3 +3,5 @@ dist/
 public/brand/
 .env.local
 .env.*.local
+test-results/
+playwright-report/

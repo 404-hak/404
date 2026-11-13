@@ -3,7 +3,7 @@ import type { Alert, Buoy, Forecast, State } from '../types';
 import { KIND_TITLE, coord, fmtDM, fmtHM, fmtTime, isToday, km, pct, plural, shortHash } from '../format';
 import { BUOY_STATUS, sectorCenter, type MapHandle, type Selection } from '../geo';
 import { api, useMe } from '../live';
-import { useTween } from '../motion';
+import { reducedMotion, useTween } from '../motion';
 import Moon from './Moon';
 import SatSnap from './SatSnap';
 import Clip from './Clip';
@@ -307,7 +307,7 @@ function TabWave({ x, w }: { x: number; w: number }) {
     const from = prev.current;
     prev.current = x;
     const el = path.current;
-    if (!el || from === null || from === x || !w || matchMedia('(prefers-reduced-motion: reduce)').matches) { el?.setAttribute('d', flat(w)); return; }
+    if (!el || from === null || from === x || !w || reducedMotion()) { el?.setAttribute('d', flat(w)); return; }
     const dir = Math.sign(x - from);
     const t0 = performance.now();
     let raf = 0;

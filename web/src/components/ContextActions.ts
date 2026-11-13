@@ -9,6 +9,7 @@ import { contextActions, copyText, pageActions, type MenuItem } from '../upkUi';
 import { NAV } from './Nav';
 import { currentTheme, setThemePref } from '../theme';
 import { floatCursorOn, setFloatCursor, sparkTransition } from '../upkMotion';
+import { ecoMode, setEcoMode } from '../motion';
 import { setSound, soundEnabled } from '../sound';
 import { showIntro } from '../introBus';
 
@@ -107,6 +108,7 @@ export function useContextActions({ state, route, go, map, select }: {
         },
         { label: on ? 'Выключить звук' : 'Включить звук', ic: on ? 'mute' : 'volume', action: () => setSound(!on) },
         { label: floatCursorOn() ? 'Обычный указатель' : 'Указатель-поплавок', ic: 'select', action: () => setFloatCursor(!floatCursorOn()) },
+        { label: ecoMode() ? 'Выключить экономный режим' : 'Экономный режим (батарея)', ic: 'pause', action: () => setEcoMode(!ecoMode()) },
         { label: 'Показать заставку', ic: 'intro', action: () => showIntro() },
         ...(currentMe().accounts ? [{ label: `Выйти · ${currentMe().name}`, ic: 'back', action: () => api.logout() }] : []),
       ];

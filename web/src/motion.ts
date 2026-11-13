@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
+/** «Экономный режим» из меню правой кнопки: море, дымка, поплавок и бесконечные анимации стоят — бережёт батарею */
+const ECO_KEY = '404-eco';
+export const ecoMode = () => { try { return localStorage.getItem(ECO_KEY) === '1'; } catch { return false; } };
+export function setEcoMode(on: boolean) {
+  try { localStorage.setItem(ECO_KEY, on ? '1' : '0'); } catch { /* только до перезагрузки */ }
+  location.reload();     // фоны и петли анимаций запускаются при старте — проще начать заново
+}
 export const reducedMotion = () =>
-  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  typeof window !== 'undefined' && (ecoMode() || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
 const easeOutCubic = (k: number) => 1 - (1 - k) ** 3;
 

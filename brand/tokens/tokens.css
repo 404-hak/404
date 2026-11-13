@@ -23,7 +23,7 @@
   --rgb-veil: 255 255 255;   /* светлая вуаль подсветок */
 
   /* шрифты */
-  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* форма */

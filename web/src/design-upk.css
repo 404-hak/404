@@ -20,7 +20,7 @@ html[data-design="upk"] .text-\[13px\] { font-size: 14px; }
 html[data-design="upk"] .text-\[14px\] { font-size: 15px; }
 
 /* подписи и служебные строки — Inter с ровными цифрами; моноширинный остаётся только у отпечатков (keep-mono) */
-html[data-design="upk"] .font-mono:not(.keep-mono) { font-family: Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+html[data-design="upk"] .font-mono:not(.keep-mono) { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
 /* метки: мелкие прописные с разрядкой */
 html[data-design="upk"] .cap { font-size: 12px; letter-spacing: .14em; }
 /* цифры — жирные и плотные, а не тонкие */

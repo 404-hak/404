@@ -48,6 +48,6 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoadsInWebContent: true   # сервер может быть и по http в локальной сети
+          # только HTTPS; по http — лишь сервер в своей сети (адрес .local или IP): ссылка доступа не уйдёт открытым текстом
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Приложению нужен доступ к серверу 404 в вашей сети.

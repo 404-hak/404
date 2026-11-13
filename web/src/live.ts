@@ -12,6 +12,7 @@ export function useLiveState() {
     let stopped = false;
     let retry: number | undefined;
     let attempts = 0;
+    let lastRaw = '';
     // пока заставка на экране, свежие снимки копятся (берём последний) и применяются, когда она ушла:
     // перерисовка дашборда под заставкой отнимала у неё кадры
     let held: State | null = null, first = true;
@@ -25,7 +26,8 @@ export function useLiveState() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       ws = new WebSocket(`${proto}://${location.host}/ws`);
       ws.onopen = () => { attempts = 0; setOnline(true); };
-      ws.onmessage = (e) => take(JSON.parse(e.data));
+      // сервер шлёт снимок каждые 5 с; если он не изменился — не перерисовываем дашборд
+      ws.onmessage = (e) => { if (e.data === lastRaw) return; lastRaw = e.data; take(JSON.parse(e.data)); };
       ws.onclose = () => {
         setOnline(false);
         // пауза растёт 1 → 2 → 4 … до 30 с: недоступный сервер не засыпается попытками

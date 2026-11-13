@@ -12,9 +12,10 @@
 import { flushSync } from 'react-dom';
 import { design } from './design';
 import { introPlaying } from './introBus';
+import { reducedMotion } from './motion';
 
 const ON = design === 'upk';
-const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduced = () => reducedMotion();
 const fineMouse = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 /** Круги на воде из точки: несколько эллипсов расходятся и тают (вода видна чуть сверху — круги сплюснуты) */

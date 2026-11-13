@@ -10,7 +10,7 @@ import type { MapHandle } from './geo';
 import { useRoute, type Route } from './route';
 import { sound } from './sound';
 import { haptic } from './native';
-import { useSurfaces } from './motion';
+import { reducedMotion, useSurfaces } from './motion';
 import Intro from './components/Intro';
 
 // разделы грузятся по требованию (основной файл сайта легче на треть), а в тишине после запуска — заранее,
@@ -35,7 +35,7 @@ import { INTRO_EVENT, appSettled } from './introBus';
 function introWanted() {
   try {
     if (new URLSearchParams(location.search).has('intro')) return true;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    if (reducedMotion()) return false;
     return sessionStorage.getItem('404-intro') !== 'seen';
   } catch {
     return true;

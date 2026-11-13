@@ -12,9 +12,10 @@
  */
 import { design } from './design';
 import { ripples, floatState } from './upkMotion';
+import { reducedMotion } from './motion';
 
 const ON = design === 'upk';
-const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduced = () => reducedMotion();
 const fineMouse = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 const toward = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
