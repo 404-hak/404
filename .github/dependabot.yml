@@ -1,19 +1,19 @@
-# Раз в неделю — предложения обновить зависимости (docs/audit/08-infrastructure.md, I6).
-# Крупные версии (React 19, Tailwind 4 и т. п.) не предлагаются: их обновляют отдельной задачей с проверкой.
-# Исправления безопасности приходят всегда, даже вне расписания.
+# Плановые предложения обновить зависимости выключены (open-pull-requests-limit: 0): в репозитории
+# одна ветка main, обновления делаются вручную отдельной задачей с проверкой.
+# Чтобы включить снова — вернуть лимит (например, 5). Крупные версии (React 19, Tailwind 4 и т. п.) не предлагаются.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /api
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /web
     schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
@@ -23,3 +23,4 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    open-pull-requests-limit: 0
