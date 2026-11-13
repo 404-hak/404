@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, type RefObject } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import type { PlayerApi } from './player';
 import type { LabResult } from '../../lab';
 import { fmtS } from '../../lab';
 
 /**
  * «Экран» лаборатории: лог-мел спектрограмма (то, что видит сеть) и волна.
  * Поверх — где в звуке что лежит (для сценариев), границы клипов буя по 4 с, полоса природы,
- * самый резкий удар и бегущая позиция воспроизведения. Клик — перемотка.
+ * самый резкий удар и бегущая позиция воспроизведения. Клик — слушать с этого места,
+ * протянуть с зажатой кнопкой — перемотка «на слух» (звук идёт с того места, где отпустили).
  */
 
 // ночное море → бирюза → шалфей → янтарь → белый: тихое тёмное, громкое светлое
@@ -37,7 +39,7 @@ function bandPos(mel: number[], hz: number) {
   return 1;
 }
 
-export default function Scope({ r, audio, head }: { r: LabResult; audio: RefObject<HTMLAudioElement>; head: RefObject<HTMLDivElement> }) {
+export default function Scope({ r, player }: { r: LabResult; player: PlayerApi }) {
   const spec = useRef<HTMLCanvasElement>(null);
   const wave = useRef<HTMLCanvasElement>(null);
   const dur = r.duration_s;
@@ -93,25 +95,39 @@ export default function Scope({ r, audio, head }: { r: LabResult; audio: RefObje
   }, [dur]);
   const bio = [bandPos(r.spec.mel_hz, r.nature.band_hz[0]), bandPos(r.spec.mel_hz, r.nature.band_hz[1])];
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+  // перемотка: нажал — позиция, протянул — бегунок едет за пальцем, отпустил — слушаем отсюда
+  const drag = useRef<{ was: boolean } | null>(null);
+  const timeAt = (e: React.PointerEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
-    const a = audio.current;
-    if (!a) return;
-    a.currentTime = Math.max(0, Math.min(dur, ((e.clientX - box.left) / box.width) * dur));
-    if (a.paused) void a.play();
+    return Math.max(0, Math.min(dur, ((e.clientX - box.left) / box.width) * dur));
+  };
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { was: player.playing };
+    player.pause();
+    player.seek(timeAt(e));
+  };
+  const move = (e: React.PointerEvent<HTMLDivElement>) => { if (drag.current) player.seek(timeAt(e)); };
+  const up = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    player.seek(timeAt(e));
+    player.play();
   };
   const at = (t: number) => `${(t / dur) * 100}%`;
 
   return (
     <div className="grid grid-cols-[46px_1fr] gap-x-2">
       {/* шкала частот */}
-      <div className="relative h-[230px] font-mono text-[10px] text-muted">
+      <div className="relative h-[170px] font-mono text-[10px] text-muted md:h-[230px]">
         {HZ_TICKS.map((h) => (
           <span key={h} className="absolute right-0 whitespace-nowrap" style={{ bottom: `${bandPos(r.spec.mel_hz, h) * 100}%`, transform: 'translateY(50%)' }}>{hzLabel(h)}</span>
         ))}
       </div>
-      <div className="relative cursor-crosshair select-none" onClick={seek} title="Нажмите — послушать с этого места">
-        <div className="relative h-[230px] overflow-hidden rounded-t-[10px] bg-[#060d1a]">
+      <div className="relative cursor-crosshair touch-none select-none" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+        title="Нажмите — слушать с этого места; протяните — перемотка">
+        <div className="relative h-[170px] overflow-hidden rounded-t-[10px] bg-[#060d1a] md:h-[230px]">
           <canvas ref={spec} className="absolute inset-0 h-full w-full" aria-label="Спектрограмма: время по горизонтали, частота по вертикали, яркость — громкость" />
           {/* полоса природы */}
           <div className="pointer-events-none absolute inset-x-0 border-y border-dashed border-[#A9C59A]/45" style={{ bottom: `${bio[0] * 100}%`, top: `${(1 - bio[1]) * 100}%` }}>
@@ -130,12 +146,14 @@ export default function Scope({ r, audio, head }: { r: LabResult; audio: RefObje
             <span className="absolute -left-[5px] bottom-0 text-[10px] leading-none text-[#FF8A7A]">▲</span>
           </div>
         </div>
-        <div className="relative h-[70px] rounded-b-[10px] border border-t-0 border-line bg-bg/60">
+        <div className="relative h-[56px] rounded-b-[10px] border border-t-0 border-line bg-bg/60 md:h-[70px]">
           <canvas ref={wave} className="absolute inset-0 h-full w-full text-primary/70" aria-label="Волна звука" />
           {r.clips.slice(1).map((c) => <div key={c.i} className="pointer-events-none absolute inset-y-0 border-l border-dashed border-line" style={{ left: at(c.start) }} />)}
         </div>
         {/* позиция воспроизведения — двигается напрямую, без перерисовки React */}
-        <div ref={head} className="pointer-events-none absolute inset-y-0 left-0 w-px bg-white shadow-[0_0_8px_rgba(255,255,255,.8)] will-change-transform" style={{ opacity: 0 }} />
+        <div ref={player.bind} className="pointer-events-none absolute inset-y-0 left-0 w-px bg-white shadow-[0_0_8px_rgba(255,255,255,.8)] will-change-transform" style={{ opacity: 0 }}>
+          <span className="absolute -left-[5px] -top-[5px] h-[11px] w-[11px] rounded-full bg-white" />
+        </div>
       </div>
       <div />
       <div className="relative mt-1 h-4 font-mono text-[10px] text-muted">

@@ -1,27 +1,49 @@
 import type { LabClip, LabResult } from '../../lab';
+import type { PlayerApi } from './player';
 import { ALERT_RU, EVENT_RU, VOICE, fmtS, num, pct0 } from '../../lab';
 
 /**
  * Ход по времени: вероятности мотора и выстрела (окно 4 с, шаг 0,5 с), живость природы,
- * пороги тревоги, обычная живость буя и порог тишины (40 % обычной). Под графиком —
- * решения уха буя по клипам, как их присылает буй: здесь видно «два клипа подряд» и тишину.
+ * пороги тревоги, обычная живость буя и порог тишины (40 % обычной). По графику бежит позиция
+ * звука, клик — слушать с этого места. Решения уха буя по клипам — EarChips (стоят под спектрограммой).
  */
 
 const W = 1000, H = 190;
 
-function chip(c: LabClip) {
-  if (c.alert) return { text: `Тревога: ${ALERT_RU[c.alert]}`, cls: 'border-alert bg-alert text-bg font-semibold' };
-  if (c.event === 'voice') return { text: 'голоса · не тревога', cls: 'border-[#7FB2E5]/70 text-[#7FB2E5]' };
-  if (c.note.includes('непривычный')) return { text: 'непривычный звук', cls: 'border-dashed border-warn/70 text-warn' };
-  if (c.note.includes('подтверждения')) return { text: 'мотор? ждём 2-й клип', cls: 'border-warn text-warn' };
-  if (c.note.includes('продолжение')) return { text: `${c.event === 'shot' ? 'выстрел' : 'мотор'} · та же тревога`, cls: 'border-warn/60 text-warn' };
-  if (c.note.includes('ниже порога')) return { text: 'похоже, но ниже порога', cls: 'border-line text-muted' };
-  if (c.note.includes('тишина продолжается')) return { text: 'тишина длится', cls: 'border-primary/60 text-primary' };
-  if (c.note.includes('тише обычного')) return { text: `тише обычного · ${c.quiet}/3`, cls: 'border-primary/50 text-primary' };
-  return { text: 'фон', cls: 'border-line text-muted' };
+export function earChip(c: LabClip): { text: string; short: string; cls: string } {
+  if (c.alert) return { text: `Тревога: ${ALERT_RU[c.alert]}`, short: 'тревога', cls: 'border-alert bg-alert text-bg font-semibold' };
+  if (c.event === 'voice') return { text: 'голоса · не тревога', short: 'голоса', cls: 'border-[#7FB2E5]/70 text-[#7FB2E5]' };
+  if (c.note.includes('непривычный')) return { text: 'непривычный звук', short: 'непривычно', cls: 'border-dashed border-warn/70 text-warn' };
+  if (c.note.includes('подтверждения')) return { text: 'мотор? ждём 2-й клип', short: 'ждём 2-й', cls: 'border-warn text-warn' };
+  if (c.note.includes('продолжение')) return { text: `${c.event === 'shot' ? 'выстрел' : 'мотор'} · та же тревога`, short: 'та же', cls: 'border-warn/60 text-warn' };
+  if (c.note.includes('ниже порога')) return { text: 'похоже, но ниже порога', short: 'ниже порога', cls: 'border-line text-muted' };
+  if (c.note.includes('тишина продолжается')) return { text: 'тишина длится', short: 'тишина', cls: 'border-primary/60 text-primary' };
+  if (c.note.includes('тише обычного')) return { text: `тише обычного · ${c.quiet}/3`, short: `тише ${c.quiet}/3`, cls: 'border-primary/50 text-primary' };
+  return { text: 'фон', short: 'фон', cls: 'border-line text-muted' };
 }
 
-export default function Timeline({ r }: { r: LabResult }) {
+/** Решения уха буя клип за клипом — на той же оси времени, что звук; клик — слушать этот клип. */
+export function EarChips({ r, player }: { r: LabResult; player: PlayerApi }) {
+  const dur = r.duration_s;
+  const now = r.clips.find((c) => player.t >= c.start && player.t < c.end)?.i;
+  return (
+    <div className="relative h-7">
+      {r.clips.map((c) => {
+        const ch = earChip(c);
+        return (
+          <div key={c.i} className="absolute top-0 px-0.5" style={{ left: `${(c.start / dur) * 100}%`, width: `${((c.end - c.start) / dur) * 100}%` }}>
+            <button type="button" onClick={() => { player.seek(c.start); player.play(); }} title={`Клип ${c.i}, ${fmtS(c.start)}–${fmtS(c.end)}: ${c.note}. Нажмите — послушать`}
+              className={`block w-full truncate rounded-[6px] border px-1.5 text-center text-[11px] leading-[24px] transition-shadow ${ch.cls} ${now === c.i && player.playing ? 'shadow-[0_0_0_2px_rgb(var(--rgb-primary)/.35)]' : ''}`}>
+              <span className="sm:hidden">{ch.short}</span><span className="hidden sm:inline">{ch.text}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Timeline({ r, player }: { r: LabResult; player: PlayerApi }) {
   const dur = r.duration_s;
   const x = (t: number) => (t / dur) * W;
   const y = (v: number) => H - 8 - v * (H - 16);
@@ -43,8 +65,10 @@ export default function Timeline({ r }: { r: LabResult }) {
         <span className="flex items-center gap-1.5"><i className="w-4 border-t border-dashed border-primary/70" />обычная живость и порог тишины</span>
         <span className="flex items-center gap-1.5"><i className="w-4 border-t border-dashed border-warn/70" />пороги тревоги</span>
       </div>
-      <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[190px] w-full overflow-visible" role="img"
+      <div className="relative cursor-crosshair" title="Нажмите — слушать с этого места"
+        onClick={(e) => { const b = e.currentTarget.getBoundingClientRect(); player.seek(((e.clientX - b.left) / b.width) * dur); player.play(); }}>
+        <div ref={player.bind} className="pointer-events-none absolute -inset-y-1 left-0 z-10 w-px bg-primary/80 will-change-transform" style={{ opacity: 0 }} />
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-[150px] w-full overflow-visible md:h-[190px]" role="img"
           aria-label="Вероятности мотора и выстрела и живость природы по времени">
           {[0, 0.5, 1].map((v) => <line key={v} x1={0} x2={W} y1={y(v)} y2={y(v)} style={{ stroke: 'rgb(var(--rgb-primary) / .08)' }} vectorEffect="non-scaling-stroke" />)}
           {r.clips.slice(1).map((c) => <line key={c.i} x1={x(c.start)} x2={x(c.start)} y1={0} y2={H} strokeDasharray="3 4" style={{ stroke: 'rgb(var(--rgb-primary) / .14)' }} vectorEffect="non-scaling-stroke" />)}
@@ -69,21 +93,13 @@ export default function Timeline({ r }: { r: LabResult }) {
           <span key={v} className="pointer-events-none absolute right-full mr-1.5 -translate-y-1/2 font-mono text-[10px] text-muted" style={{ top: `${((y(v / 100)) / H) * 100}%` }}>{v}</span>
         ))}
         {lines.map(([k, name, v]) => (
-          <span key={k} className={`pointer-events-none absolute right-0 -translate-y-full pb-0.5 font-mono text-[10px] ${k === 'shot' ? 'text-alert' : 'text-warn'}`} style={{ top: `${(y(v) / H) * 100}%` }}>
+          // пороги близко друг к другу — подпись нижнего уходит под его линию, чтобы не налезать
+          <span key={k} className={`pointer-events-none absolute right-0 font-mono text-[10px] ${k === 'shot' ? 'text-alert' : 'text-warn'} ${
+            k === 'motor' && r.thresholds.shot >= r.thresholds.motor && r.thresholds.shot - r.thresholds.motor < 0.12 ? 'pt-0.5' : '-translate-y-full pb-0.5'}`}
+            style={{ top: `${(y(v) / H) * 100}%` }}>
             порог: {name} {num(v * 100, 1)} %
           </span>
         ))}
-      </div>
-      {/* решения уха буя по клипам */}
-      <div className="relative mt-2 h-7">
-        {r.clips.map((c) => {
-          const ch = chip(c);
-          return (
-            <div key={c.i} className="absolute top-0 px-0.5" style={{ left: `${(c.start / dur) * 100}%`, width: `${((c.end - c.start) / dur) * 100}%` }}>
-              <div title={`Клип ${c.i}: ${c.note}`} className={`truncate rounded-[6px] border px-1.5 text-center text-[11px] leading-[24px] ${ch.cls}`}>{ch.text}</div>
-            </div>
-          );
-        })}
       </div>
       <div className="mt-1 flex justify-between font-mono text-[10px] text-muted"><span>0:00</span><span>{fmtS(dur)}</span></div>
 
