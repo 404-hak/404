@@ -21,7 +21,7 @@ jobs:
       # приоритет: поле при ручном запуске → переменная репозитория SERVER_URL (Settings → Variables)
       SERVER_URL: ${{ github.event.inputs.server_url || vars.SERVER_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: XcodeGen
         run: brew install xcodegen
